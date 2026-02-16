@@ -5,24 +5,23 @@ echo "========================================"
 echo "AI Ecosystem - EC2 Provisioning Script"
 echo "========================================"
 
-export DEBIAN_FRONTEND=noninteractive
-
-echo "[1/10] Updating system..."
-apt-get update -y
-apt-get upgrade -y
-apt-get install -y curl wget git gnupg2 lsb-release ca-certificates unzip
+echo "[1/10] Updating system and installing dependencies..."
+yum update -y
+yum install -y git curl unzip
 
 echo "[2/10] Installing Docker..."
 if ! command -v docker &> /dev/null; then
-    curl -fsSL https://get.docker.com | sh
-    usermod -aG docker ubuntu
+    yum install -y docker
     systemctl enable docker
     systemctl start docker
+    usermod -aG docker ec2-user
 fi
 
-echo "[3/10] Installing Docker Compose plugin..."
+echo "[3/10] Installing Docker Compose..."
 if ! command -v docker compose &> /dev/null; then
-    apt-get install -y docker-compose-plugin
+    curl -SL "https://github.com/docker/compose/releases/download/v2.24.0/docker-compose-linux-x86_64" -o /usr/local/bin/docker-compose
+    chmod +x /usr/local/bin/docker-compose
+    ln -s /usr/local/bin/docker-compose /usr/bin/docker-compose
 fi
 
 echo "[4/10] Configuring Swap (2GB)..."
@@ -55,6 +54,7 @@ systemctl restart docker
 
 echo "[7/10] Installing AWS CLI..."
 if ! command -v aws &> /dev/null; then
+    cd /tmp
     curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
     unzip -q awscliv2.zip
     ./aws/install

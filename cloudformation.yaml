@@ -11,10 +11,9 @@ Parameters:
       - t3.small
     Description: EC2 instance type (t2.micro for Free Tier)
 
-  LatestAmiId:
-    Type: 'AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>'
-    Default: '/aws/service/canonical/ubuntu/server/22.04/stable/current/amd64/hvm/ebs-gp3/ami-id'
-    Description: AMI ID from SSM Parameter
+  AmiId:
+    Type: AWS::EC2::Image::Id
+    Description: AMI ID for the EC2 instance (Ubuntu 22.04 LTS - get from EC2 Console)
 
   KeyName:
     Type: AWS::EC2::KeyPair::KeyName
@@ -172,7 +171,7 @@ Resources:
     Properties:
       InstanceType: !Ref InstanceType
       KeyName: !Ref KeyName
-      ImageId: !Ref LatestAmiId
+      ImageId: !Ref AmiId
       IamInstanceProfile: !Ref EC2InstanceProfile
       NetworkInterfaces:
         - GroupSet:
