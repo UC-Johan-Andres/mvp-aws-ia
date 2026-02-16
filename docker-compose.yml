@@ -84,6 +84,8 @@ services:
       - "traefik.enable=true"
       - "traefik.http.routers.chatwoot.rule=PathPrefix(`/chatwoot`)"
       - "traefik.http.routers.chatwoot.entrypoints=web"
+      - "traefik.http.middlewares.chatwoot.stripprefix.prefixes=/chatwoot"
+      - "traefik.http.routers.chatwoot.middlewares=chatwoot"
       - "traefik.http.services.chatwoot.loadbalancer.server.port=3000"
     networks:
       - ai_stack
@@ -121,6 +123,8 @@ services:
       - "traefik.enable=true"
       - "traefik.http.routers.n8n.rule=PathPrefix(`/n8n`)"
       - "traefik.http.routers.n8n.entrypoints=web"
+      - "traefik.http.middlewares.n8n.stripprefix.prefixes=/n8n"
+      - "traefik.http.routers.n8n.middlewares=n8n"
       - "traefik.http.services.n8n.loadbalancer.server.port=5678"
     networks:
       - ai_stack
@@ -139,6 +143,8 @@ services:
       - "traefik.enable=true"
       - "traefik.http.routers.librechat.rule=PathPrefix(`/librechat`)"
       - "traefik.http.routers.librechat.entrypoints=web"
+      - "traefik.http.middlewares.librechat.stripprefix.prefixes=/librechat"
+      - "traefik.http.routers.librechat.middlewares=librechat"
       - "traefik.http.services.librechat.loadbalancer.server.port=3080"
     volumes:
       - librechat-images:/app/client/public/images
@@ -168,6 +174,8 @@ services:
       - "traefik.enable=true"
       - "traefik.http.routers.bridge.rule=PathPrefix(`/bridge`)"
       - "traefik.http.routers.bridge.entrypoints=web"
+      - "traefik.http.middlewares.bridge.stripprefix.prefixes=/bridge"
+      - "traefik.http.routers.bridge.middlewares=bridge"
       - "traefik.http.services.bridge.loadbalancer.server.port=5000"
     networks:
       - ai_stack
