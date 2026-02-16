@@ -215,4 +215,4 @@ Outputs:
 
   SSHCommand:
     Description: Command to SSH into the instance
-    Value: !Sub 'ssh -i ${KeyName}.pem ubuntu@${EC2Instance.PublicDnsName}'
+    Value: !Sub 'ssh -i ${KeyName}.pem ec2-user@${EC2Instance.PublicDnsName}'

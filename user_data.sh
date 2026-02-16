@@ -17,22 +17,43 @@ if ! command -v docker &> /dev/null; then
     sudo usermod -aG docker ec2-user
 fi
 
-echo "[3/10] Installing Docker Compose..."
-if ! command -v docker compose &> /dev/null && ! command -v docker-compose &> /dev/null; then
-    sudo yum install -y docker-compose-plugin || true
-    if ! command -v docker compose &> /dev/null; then
-        sudo curl -SL "https://github.com/docker/compose/releases/download/v2.28.2/docker-compose-linux-x86_64" -o /usr/local/bin/docker-compose
-        sudo chmod +x /usr/local/bin/docker-compose
+# Configure Docker data directory on larger volume if available
+echo "[2.5/10] Configuring Docker storage..."
+if lsblk /dev/nvme1n1 &> /dev/null; then
+    echo "Additional volume detected"
+    if ! mountpoint -q /var/lib/docker 2>/dev/null; then
+        sudo mkfs.xfs -f /dev/nvme1n1 2>/dev/null || true
+        sudo mkdir -p /var/lib/docker
+        sudo mount /dev/nvme1n1 /var/lib/docker
+        echo "/dev/nvme1n1 /var/lib/docker xfs defaults 0 0" | sudo tee -a /etc/fstab
     fi
 fi
 
-if ! command -v docker compose &> /dev/null; then
-    sudo ln -sf /usr/local/bin/docker-compose /usr/bin/docker-compose 2>/dev/null || true
+# Restart Docker to apply changes
+sudo systemctl restart docker
+
+echo "[3/10] Installing Docker Compose..."
+# Install Docker Compose plugin (recommended for Amazon Linux 2023)
+sudo yum install -y docker-compose-plugin 2>/dev/null || true
+
+# Check if docker compose command works
+if ! docker compose version &> /dev/null; then
+    # Install standalone docker-compose as fallback
+    sudo curl -SL "https://github.com/docker/compose/releases/download/v2.28.2/docker-compose-linux-x86_64" -o /usr/local/bin/docker-compose
+    sudo chmod +x /usr/local/bin/docker-compose
+    sudo ln -sf /usr/local/bin/docker-compose /usr/bin/docker-compose
 fi
 
-echo "[4/10] Configuring Swap (2GB)..."
+# Verify docker compose works
+if docker compose version &> /dev/null; then
+    echo "Docker Compose installed: $(docker compose version)"
+else
+    echo "WARNING: Docker Compose may not be installed correctly"
+fi
+
+echo "[4/10] Configuring Swap (4GB)..."
 if ! swapon --show | grep -q /swapfile; then
-    sudo fallocate -l 2G /swapfile || sudo dd if=/dev/zero of=/swapfile bs=1M count=2048
+    sudo fallocate -l 4G /swapfile || sudo dd if=/dev/zero of=/swapfile bs=1M count=4096
     sudo chmod 600 /swapfile
     sudo mkswap /swapfile
     sudo swapon /swapfile
@@ -40,7 +61,7 @@ if ! swapon --show | grep -q /swapfile; then
 fi
 
 echo "[5/10] Tuning swap parameters..."
-echo 'vm.swappiness=10' | sudo tee -a /etc/sysctl.conf
+echo 'vm.swappiness=80' | sudo tee -a /etc/sysctl.conf
 echo 'vm.vfs_cache_pressure=50' | sudo tee -a /etc/sysctl.conf
 sudo sysctl -p
 
@@ -146,18 +167,22 @@ MONGO_DB=LibreChat
 EOF
 
 echo "[10/10] Starting services..."
-sudo docker compose up -d --build
+cd /opt/mvp-aws-ia/new
+sudo docker-compose up -d --build
 
 echo "========================================"
 echo "Provisioning complete!"
 echo "========================================"
 echo ""
-echo "Services available at:"
-echo "  - Chatwoot:  http://chatwoot.local"
-echo "  - n8n:       http://n8n.local"
-echo "  - LibreChat: http://librechat.local"
-echo "  - Bridge:    http://bridge.local"
-echo "  - Traefik:   http://localhost:8080"
+echo "Docker storage info:"
+sudo docker system df
 echo ""
-echo "To check status: docker compose ps"
-echo "To view logs: docker compose logs -f"
+echo "Services available at:"
+echo "  - Chatwoot:  http://<EC2-PUBLICO-DNS>/chatwoot"
+echo "  - n8n:       http://<EC2-PUBLICO-DNS>/n8n"
+echo "  - LibreChat: http://<EC2-PUBLICO-DNS>/librechat"
+echo "  - Bridge:    http://<EC2-PUBLICO-DNS>/bridge"
+echo "  - Traefik:   http://<EC2-PUBLICO-DNS>:8080"
+echo ""
+echo "To check status: sudo docker compose ps"
+echo "To view logs: sudo docker compose logs -f"

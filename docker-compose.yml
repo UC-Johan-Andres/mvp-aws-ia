@@ -7,17 +7,23 @@ services:
   # =======================
 
   postgres:
-    image: pgvector/pgvector:pg15
+    image: postgres:15-alpine
     container_name: postgres
     environment:
       POSTGRES_USER: chatwoot
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-chatwoot_secure_pass_2024}
       POSTGRES_DB: chatwoot
+    command: >
+      postgres
+      -c shared_buffers=64MB
+      -c work_mem=4MB
+      -c maintenance_work_mem=16MB
+      -c effective_cache_size=128MB
     volumes:
       - postgres_data:/var/lib/postgresql/data
     networks:
       - ai_stack
-    mem_limit: 128m
+    mem_limit: 96m
     shm_size: 32m
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U chatwoot"]
@@ -29,12 +35,12 @@ services:
   redis:
     image: redis:7
     container_name: redis
-    command: redis-server --requirepass ${REDIS_PASSWORD:-redis_secure_pass_2024} --appendonly yes --maxmemory 64mb --maxmemory-policy allkeys-lru --save "" --appendfsync never
+    command: redis-server --requirepass ${REDIS_PASSWORD:-redis_secure_pass_2024} --maxmemory 32mb --maxmemory-policy allkeys-lru --save "" --appendfsync never
     volumes:
       - redis_data:/data
     networks:
       - ai_stack
-    mem_limit: 64m
+    mem_limit: 32m
     healthcheck:
       test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-redis_secure_pass_2024}", "ping"]
       interval: 10s
@@ -44,12 +50,12 @@ services:
   mongo:
     image: mongo:7
     container_name: mongo
-    command: mongod --wiredTigerCacheSizeGB 0.5 --quiet
+    command: mongod --wiredTigerCacheSizeGB 0.1 --quiet
     volumes:
       - mongo_data:/data/db
     networks:
       - ai_stack
-    mem_limit: 192m
+    mem_limit: 160m
     healthcheck:
       test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
       interval: 10s
@@ -76,12 +82,12 @@ services:
         exec bundle exec rails s -p 3000 -b 0.0.0.0
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.chatwoot.rule=Host(`chatwoot.local`)"
+      - "traefik.http.routers.chatwoot.rule=PathPrefix(`/chatwoot`)"
       - "traefik.http.routers.chatwoot.entrypoints=web"
       - "traefik.http.services.chatwoot.loadbalancer.server.port=3000"
     networks:
       - ai_stack
-    mem_limit: 448m
+    mem_limit: 256m
     depends_on:
       postgres:
         condition: service_healthy
@@ -96,7 +102,7 @@ services:
     command: bundle exec sidekiq -C config/sidekiq.yml -c 2
     networks:
       - ai_stack
-    mem_limit: 320m
+    mem_limit: 160m
     depends_on:
       postgres:
         condition: service_healthy
@@ -113,7 +119,7 @@ services:
       - n8n_data:/home/node/.n8n
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.n8n.rule=Host(`n8n.local`)"
+      - "traefik.http.routers.n8n.rule=PathPrefix(`/n8n`)"
       - "traefik.http.routers.n8n.entrypoints=web"
       - "traefik.http.services.n8n.loadbalancer.server.port=5678"
     networks:
@@ -131,7 +137,8 @@ services:
     restart: unless-stopped
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.librechat.rule=Host(`librechat.local`)"
+      - "traefik.http.routers.librechat.rule=PathPrefix(`/librechat`)"
+      - "traefik.http.routers.librechat.entrypoints=web"
       - "traefik.http.services.librechat.loadbalancer.server.port=3080"
     volumes:
       - librechat-images:/app/client/public/images
@@ -140,7 +147,7 @@ services:
       - ./librechat.yaml:/app/librechat.yaml:Z
     networks:
       - ai_stack
-    mem_limit: 384m
+    mem_limit: 256m
     depends_on:
       mongo:
         condition: service_healthy
@@ -159,7 +166,8 @@ services:
     restart: unless-stopped
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.bridge.rule=Host(`bridge.local`)"
+      - "traefik.http.routers.bridge.rule=PathPrefix(`/bridge`)"
+      - "traefik.http.routers.bridge.entrypoints=web"
       - "traefik.http.services.bridge.loadbalancer.server.port=5000"
     networks:
       - ai_stack
