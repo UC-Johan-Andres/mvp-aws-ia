@@ -17,27 +17,45 @@ services:
       - postgres_data:/var/lib/postgresql/data
     networks:
       - ai_stack
-    mem_limit: 256m
-    shm_size: 64m
+    mem_limit: 128m
+    shm_size: 32m
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U chatwoot"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
 
   redis:
     image: redis:7
     container_name: redis
-    command: redis-server --appendonly yes --maxmemory 128mb --maxmemory-policy allkeys-lru
+    command: redis-server --appendonly yes --maxmemory 64mb --maxmemory-policy allkeys-lru --save "" --appendfsync never
     volumes:
       - redis_data:/data
     networks:
       - ai_stack
-    mem_limit: 128m
+    mem_limit: 64m
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
 
   mongo:
     image: mongo:7
     container_name: mongo
+    command: mongod --wiredTigerCacheSizeGB 0.5 --quiet
     volumes:
       - mongo_data:/data/db
     networks:
       - ai_stack
-    mem_limit: 256m
+    mem_limit: 192m
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
 
   # =======================
   # APLICACIONES
@@ -63,23 +81,27 @@ services:
       - "traefik.http.services.chatwoot.loadbalancer.server.port=3000"
     networks:
       - ai_stack
-    mem_limit: 512m
+    mem_limit: 448m
     depends_on:
-      - postgres
-      - redis
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
 
   chatwoot_sidekiq:
     image: chatwoot/chatwoot:latest
     container_name: chatwoot_sidekiq
     env_file:
       - .env.chatwoot
-    command: bundle exec sidekiq -C config/sidekiq.yml -c 3
+    command: bundle exec sidekiq -C config/sidekiq.yml -c 2
     networks:
       - ai_stack
-    mem_limit: 384m
+    mem_limit: 320m
     depends_on:
-      - postgres
-      - redis
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
 
   n8n:
     image: docker.n8n.io/n8nio/n8n
@@ -96,9 +118,10 @@ services:
       - "traefik.http.services.n8n.loadbalancer.server.port=5678"
     networks:
       - ai_stack
-    mem_limit: 384m
+    mem_limit: 256m
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
 
   librechat:
     image: ghcr.io/danny-avila/librechat:latest
@@ -117,9 +140,10 @@ services:
       - ./librechat.yaml:/app/librechat.yaml:Z
     networks:
       - ai_stack
-    mem_limit: 512m
+    mem_limit: 384m
     depends_on:
-      - mongo
+      mongo:
+        condition: service_healthy
 
   # =======================
   # BRIDGE (Deepnote Connector)
@@ -139,10 +163,12 @@ services:
       - "traefik.http.services.bridge.loadbalancer.server.port=5000"
     networks:
       - ai_stack
-    mem_limit: 256m
+    mem_limit: 128m
     depends_on:
-      - postgres
-      - mongo
+      postgres:
+        condition: service_healthy
+      mongo:
+        condition: service_healthy
 
   # =======================
   # REVERSE PROXY
@@ -155,7 +181,6 @@ services:
       - "--api.dashboard=true"
       - "--api.insecure=true"
       - "--providers.docker=true"
-      - "--providers.docker.endpoint=tcp://host.containers.internal:2375"
       - "--providers.docker.exposedbydefault=false"
       - "--entrypoints.web.address=:80"
       - "--entrypoints.traefik.address=:8080"
