@@ -109,8 +109,18 @@ if [ -d "new" ]; then
     cd new
 fi
 
-# Get EC2 public DNS
-EC2_DNS=$(curl -s http://169.254.169.254/latest/meta-data/public-hostname)
+# Get EC2 public DNS using IMDSv2 (requires token)
+echo "Obtaining EC2 metadata..."
+TOKEN=$(curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 300" 2>/dev/null)
+EC2_DNS=$(curl -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/public-hostname 2>/dev/null)
+
+# Fallback if still empty (for development/testing)
+if [ -z "$EC2_DNS" ]; then
+    echo "WARNING: Could not obtain EC2 DNS from metadata, using placeholder"
+    EC2_DNS="localhost"
+fi
+
+echo "EC2 DNS: ${EC2_DNS}"
 
 echo "[9/10] Downloading parameters from AWS Parameter Store..."
 OPENROUTER_KEY=$(aws ssm get-parameter --name "/ai-ecosystem/openrouter-key" --with-decryption --query "Parameter.Value" --output text 2>/dev/null || echo "")
