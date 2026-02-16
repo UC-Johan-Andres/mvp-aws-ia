@@ -35,7 +35,7 @@ services:
   redis:
     image: redis:7
     container_name: redis
-    command: redis-server --requirepass ${REDIS_PASSWORD:-redis_secure_pass_2024} --maxmemory 32mb --maxmemory-policy allkeys-lru --save "" --appendfsync never
+    command: redis-server --requirepass ${REDIS_PASSWORD:-redis_secure_pass_2024} --maxmemory 32mb --maxmemory-policy allkeys-lru --save "" --appendfsync no
     volumes:
       - redis_data:/data
     networks:
@@ -50,12 +50,12 @@ services:
   mongo:
     image: mongo:7
     container_name: mongo
-    command: mongod --wiredTigerCacheSizeGB 0.1 --quiet
+    command: mongod --wiredTigerCacheSizeGB 0.25 --quiet
     volumes:
       - mongo_data:/data/db
     networks:
       - ai_stack
-    mem_limit: 160m
+    mem_limit: 256m
     healthcheck:
       test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
       interval: 10s

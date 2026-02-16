@@ -5,6 +5,11 @@ echo "========================================"
 echo "AI Ecosystem - EC2 Provisioning Script"
 echo "========================================"
 
+# Expand root partition to use all available disk space
+echo "[0/10] Expanding disk partition..."
+sudo growpart /dev/nvme0n1 1 2>/dev/null || true
+sudo xfs_growfs / 2>/dev/null || true
+
 echo "[1/10] Updating system and installing dependencies..."
 sudo yum update -y
 sudo yum install -y git curl unzip
@@ -105,6 +110,9 @@ if [ -d "new" ]; then
     cd new
 fi
 
+# Get EC2 public DNS
+EC2_DNS=$(curl -s http://169.254.169.254/latest/meta-data/public-hostname)
+
 echo "[9/10] Downloading parameters from AWS Parameter Store..."
 OPENROUTER_KEY=$(aws ssm get-parameter --name "/ai-ecosystem/openrouter-key" --with-decryption --query "Parameter.Value" --output text 2>/dev/null || echo "")
 CHATWOOT_SECRET=$(aws ssm get-parameter --name "/ai-ecosystem/chatwoot-secret" --with-decryption --query "Parameter.Value" --output text 2>/dev/null || echo "")
@@ -145,12 +153,14 @@ DB_POSTGRESDB_PORT=5432
 DB_POSTGRESDB_DATABASE=n8n
 DB_POSTGRESDB_USER=n8n
 DB_POSTGRESDB_PASSWORD=${N8N_PASSWORD}
-N8N_HOST=n8n.local
+N8N_HOST=${EC2_DNS}
 N8N_PORT=5678
 N8N_PROTOCOL=http
 NODE_ENV=production
 GENERIC_TIMEZONE=America/Bogota
 N8N_SECURE_COOKIE=false
+N8N_IGNORE_CORS=true
+WEBHOOK_URL=http://${EC2_DNS}/n8n/
 EOF
 
 sudo mkdir -p bridge
@@ -166,6 +176,15 @@ MONGO_PORT=27017
 MONGO_DB=LibreChat
 EOF
 
+# Wait for PostgreSQL to be ready and create n8n user
+echo "Waiting for PostgreSQL to be ready..."
+until sudo docker exec postgres pg_isready -U chatwoot &> /dev/null; do
+    sleep 2
+done
+echo "Creating n8n user and database..."
+sudo docker exec postgres psql -U chatwoot -d chatwoot -c "CREATE USER n8n WITH PASSWORD '${N8N_PASSWORD}';" 2>/dev/null || true
+sudo docker exec postgres psql -U chatwoot -d chatwoot -c "CREATE DATABASE n8n OWNER n8n;" 2>/dev/null || true
+
 echo "[10/10] Starting services..."
 #cd /opt/mvp-aws-ia/new
 sudo docker-compose up -d --build
@@ -178,11 +197,11 @@ echo "Docker storage info:"
 sudo docker system df
 echo ""
 echo "Services available at:"
-echo "  - Chatwoot:  http://<EC2-PUBLICO-DNS>/chatwoot"
-echo "  - n8n:       http://<EC2-PUBLICO-DNS>/n8n"
-echo "  - LibreChat: http://<EC2-PUBLICO-DNS>/librechat"
-echo "  - Bridge:    http://<EC2-PUBLICO-DNS>/bridge"
-echo "  - Traefik:   http://<EC2-PUBLICO-DNS>:8080"
+echo "  - Chatwoot:  http://${EC2_DNS}/chatwoot"
+echo "  - n8n:       http://${EC2_DNS}/n8n"
+echo "  - LibreChat: http://${EC2_DNS}/librechat"
+echo "  - Bridge:    http://${EC2_DNS}/bridge"
+echo "  - Traefik:   http://${EC2_DNS}:8080"
 echo ""
 echo "To check status: sudo docker compose ps"
 echo "To view logs: sudo docker compose logs -f"
