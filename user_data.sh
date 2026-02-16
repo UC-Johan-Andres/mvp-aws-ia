@@ -37,7 +37,7 @@ echo "[3/10] Installing Docker Compose..."
 sudo yum install -y docker-compose-plugin 2>/dev/null || true
 
 # Check if docker compose command works
-if ! docker compose version &> /dev/null; then
+if ! docker-compose version &> /dev/null; then
     # Install standalone docker-compose as fallback
     sudo curl -SL "https://github.com/docker/compose/releases/download/v2.28.2/docker-compose-linux-x86_64" -o /usr/local/bin/docker-compose
     sudo chmod +x /usr/local/bin/docker-compose
@@ -167,7 +167,7 @@ MONGO_DB=LibreChat
 EOF
 
 echo "[10/10] Starting services..."
-cd /opt/mvp-aws-ia/new
+#cd /opt/mvp-aws-ia/new
 sudo docker-compose up -d --build
 
 echo "========================================"
