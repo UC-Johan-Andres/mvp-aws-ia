@@ -41,17 +41,16 @@ echo "[3/10] Installing Docker Compose..."
 # Install Docker Compose plugin (recommended for Amazon Linux 2023)
 sudo yum install -y docker-compose-plugin 2>/dev/null || true
 
-# Check if docker compose command works
+# Check if docker-compose command works
 if ! docker-compose version &> /dev/null; then
     # Install standalone docker-compose as fallback
-    sudo curl -SL "https://github.com/docker/compose/releases/download/v2.28.2/docker-compose-linux-x86_64" -o /usr/local/bin/docker-compose
+    sudo curl -SL "https://github.com/docker/compose/releases/download/v2.24.0/docker-compose-linux-x86_64" -o /usr/local/bin/docker-compose
     sudo chmod +x /usr/local/bin/docker-compose
-    sudo ln -sf /usr/local/bin/docker-compose /usr/bin/docker-compose
 fi
 
-# Verify docker compose works
-if docker compose version &> /dev/null; then
-    echo "Docker Compose installed: $(docker compose version)"
+# Verify docker-compose works
+if docker-compose version &> /dev/null; then
+    echo "Docker Compose installed: $(docker-compose version)"
 else
     echo "WARNING: Docker Compose may not be installed correctly"
 fi
@@ -143,7 +142,9 @@ POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
 POSTGRES_DATABASE=chatwoot
 REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379
 SECRET_KEY_BASE=${CHATWOOT_SECRET}
-FRONTEND_URL=http://chatwoot.local
+FRONTEND_URL=http://${EC2_DNS}/chatwoot
+WEB_CONCURRENCY=1
+RAILS_MAX_THREADS=3
 EOF
 
 cat > .env.n8n << EOF
@@ -176,17 +177,31 @@ MONGO_PORT=27017
 MONGO_DB=LibreChat
 EOF
 
-# Wait for PostgreSQL to be ready and create n8n user
+echo "[10/10] Starting services..."
+
+# Step 1: Start only databases first
+echo "Starting databases (postgres, redis, mongo)..."
+sudo docker-compose up -d postgres redis mongo
+
+# Step 2: Wait for PostgreSQL to be ready
 echo "Waiting for PostgreSQL to be ready..."
 until sudo docker exec postgres pg_isready -U chatwoot &> /dev/null; do
     sleep 2
 done
+
+# Step 3: Create n8n user and database
 echo "Creating n8n user and database..."
 sudo docker exec postgres psql -U chatwoot -d chatwoot -c "CREATE USER n8n WITH PASSWORD '${N8N_PASSWORD}';" 2>/dev/null || true
 sudo docker exec postgres psql -U chatwoot -d chatwoot -c "CREATE DATABASE n8n OWNER n8n;" 2>/dev/null || true
 
-echo "[10/10] Starting services..."
-#cd /opt/mvp-aws-ia/new
+# Step 4: Wait for MongoDB to be ready
+echo "Waiting for MongoDB to be ready..."
+until sudo docker exec mongo mongosh --eval "db.adminCommand('ping')" &> /dev/null; do
+    sleep 2
+done
+
+# Step 5: Start all remaining services
+echo "Starting all services..."
 sudo docker-compose up -d --build
 
 echo "========================================"
@@ -203,5 +218,5 @@ echo "  - LibreChat: http://${EC2_DNS}/librechat"
 echo "  - Bridge:    http://${EC2_DNS}/bridge"
 echo "  - Traefik:   http://${EC2_DNS}:8080"
 echo ""
-echo "To check status: sudo docker compose ps"
-echo "To view logs: sudo docker compose logs -f"
+echo "To check status: sudo docker-compose ps"
+echo "To view logs: sudo docker-compose logs -f"
