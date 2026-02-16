@@ -1,3 +1,8 @@
 .env.chatwoot
 .env.librechat
 .env.n8n
+bridge/.env
+*.pem
+*.key
+*.log
+docker-compose.override.yml
