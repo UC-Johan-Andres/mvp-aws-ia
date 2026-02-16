@@ -1,0 +1,14 @@
+[project]
+name = "ai-ecosystem-bridge"
+version = "1.0.0"
+description = "Bridge API for Deepnote to connect to AI Ecosystem databases"
+requires-python = ">=3.11"
+dependencies = [
+    "flask>=3.0.0",
+    "psycopg2-binary>=2.9.9",
+    "pymongo>=4.6.0",
+    "gunicorn>=21.2.0",
+]
+
+[project.optional-dependencies]
+dev = []

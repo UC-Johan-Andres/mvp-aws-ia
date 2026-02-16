@@ -1,0 +1,182 @@
+version: "3.9"
+
+services:
+
+  # =======================
+  # BASE DE DATOS
+  # =======================
+
+  postgres:
+    image: pgvector/pgvector:pg15
+    container_name: postgres
+    environment:
+      POSTGRES_USER: chatwoot
+      POSTGRES_PASSWORD: chatwoot
+      POSTGRES_DB: chatwoot
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - ai_stack
+    mem_limit: 256m
+    shm_size: 64m
+
+  redis:
+    image: redis:7
+    container_name: redis
+    command: redis-server --appendonly yes --maxmemory 128mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data:/data
+    networks:
+      - ai_stack
+    mem_limit: 128m
+
+  mongo:
+    image: mongo:7
+    container_name: mongo
+    volumes:
+      - mongo_data:/data/db
+    networks:
+      - ai_stack
+    mem_limit: 256m
+
+  # =======================
+  # APLICACIONES
+
+  chatwoot:
+    image: chatwoot/chatwoot:latest
+    container_name: chatwoot
+    env_file:
+      - .env.chatwoot
+    command:
+      - sh
+      - -ec
+      - |
+        until pg_isready -h postgres -p 5432 -U chatwoot; do
+          sleep 2
+        done
+        bundle exec rails db:chatwoot_prepare
+        exec bundle exec rails s -p 3000 -b 0.0.0.0
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.chatwoot.rule=Host(`chatwoot.local`)"
+      - "traefik.http.routers.chatwoot.entrypoints=web"
+      - "traefik.http.services.chatwoot.loadbalancer.server.port=3000"
+    networks:
+      - ai_stack
+    mem_limit: 512m
+    depends_on:
+      - postgres
+      - redis
+
+  chatwoot_sidekiq:
+    image: chatwoot/chatwoot:latest
+    container_name: chatwoot_sidekiq
+    env_file:
+      - .env.chatwoot
+    command: bundle exec sidekiq -C config/sidekiq.yml -c 3
+    networks:
+      - ai_stack
+    mem_limit: 384m
+    depends_on:
+      - postgres
+      - redis
+
+  n8n:
+    image: docker.n8n.io/n8nio/n8n
+    container_name: n8n
+    env_file:
+      - .env.n8n
+    restart: always
+    volumes:
+      - n8n_data:/home/node/.n8n
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.n8n.rule=Host(`n8n.local`)"
+      - "traefik.http.routers.n8n.entrypoints=web"
+      - "traefik.http.services.n8n.loadbalancer.server.port=5678"
+    networks:
+      - ai_stack
+    mem_limit: 384m
+    depends_on:
+      - postgres
+
+  librechat:
+    image: ghcr.io/danny-avila/librechat:latest
+    container_name: librechat
+    env_file:
+      - .env.librechat
+    restart: unless-stopped
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.librechat.rule=Host(`librechat.local`)"
+      - "traefik.http.services.librechat.loadbalancer.server.port=3080"
+    volumes:
+      - librechat-images:/app/client/public/images
+      - librechat-logs:/app/api/logs
+      - librechat-data:/app/api/data
+      - ./librechat.yaml:/app/librechat.yaml:Z
+    networks:
+      - ai_stack
+    mem_limit: 512m
+    depends_on:
+      - mongo
+
+  # =======================
+  # BRIDGE (Deepnote Connector)
+  # =======================
+
+  bridge:
+    build:
+      context: ./bridge
+      dockerfile: Dockerfile
+    container_name: bridge
+    env_file:
+      - ./bridge/.env
+    restart: unless-stopped
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.bridge.rule=Host(`bridge.local`)"
+      - "traefik.http.services.bridge.loadbalancer.server.port=5000"
+    networks:
+      - ai_stack
+    mem_limit: 256m
+    depends_on:
+      - postgres
+      - mongo
+
+  # =======================
+  # REVERSE PROXY
+  # =======================
+
+  traefik:
+    image: traefik:v3.0
+    container_name: traefik
+    command:
+      - "--api.dashboard=true"
+      - "--api.insecure=true"
+      - "--providers.docker=true"
+      - "--providers.docker.endpoint=tcp://host.containers.internal:2375"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.traefik.address=:8080"
+    ports:
+      - "80:80"
+      - "8080:8080"
+    networks:
+      - ai_stack
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+
+networks:
+  ai_stack:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  redis_data:
+  mongo_data:
+  n8n_data:
+  librechat-images:
+  librechat-logs:
+  librechat-data:

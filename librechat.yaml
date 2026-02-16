@@ -1,0 +1,18 @@
+version: 1.3.3
+
+endpoints:
+  custom:
+      - name: "OpenRouter"
+      # For `apiKey` and `baseURL`, you can use environment variables that you define.
+      # recommended environment variables:
+        apiKey: "${OPENROUTER_KEY}" # NOT OPENROUTER_API_KEY
+        baseURL: "https://openrouter.ai/api/v1"
+        models:
+          default: ["z-ai/glm-4.5-air:free"]
+          fetch: true
+        titleConvo: true
+        titleModel: "z-ai/glm-4.5-air:free"
+        # Recommended: Drop the stop parameter from the request as Openrouter models use a variety of stop tokens.
+        dropParams: ["stop"]
+        modelDisplayLabel: "OpenRouter"
+

@@ -1,0 +1,25 @@
+version: "3.9"
+
+services:
+  bridge:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: bridge
+    env_file:
+      - .env
+    restart: unless-stopped
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.bridge.rule=Host(`bridge.local`)"
+      - "traefik.http.services.bridge.loadbalancer.server.port=5000"
+    networks:
+      - ai_stack
+    mem_limit: 256m
+    depends_on:
+      - postgres
+      - mongo
+
+networks:
+  ai_stack:
+    external: true
