@@ -6,41 +6,47 @@ echo "AI Ecosystem - EC2 Provisioning Script"
 echo "========================================"
 
 echo "[1/10] Updating system and installing dependencies..."
-yum update -y
-yum install -y git curl unzip
+sudo yum update -y
+sudo yum install -y git curl unzip
 
 echo "[2/10] Installing Docker..."
 if ! command -v docker &> /dev/null; then
-    yum install -y docker
-    systemctl enable docker
-    systemctl start docker
-    usermod -aG docker ec2-user
+    sudo yum install -y docker
+    sudo systemctl enable docker
+    sudo systemctl start docker
+    sudo usermod -aG docker ec2-user
 fi
 
 echo "[3/10] Installing Docker Compose..."
+if ! command -v docker compose &> /dev/null && ! command -v docker-compose &> /dev/null; then
+    sudo yum install -y docker-compose-plugin || true
+    if ! command -v docker compose &> /dev/null; then
+        sudo curl -SL "https://github.com/docker/compose/releases/download/v2.28.2/docker-compose-linux-x86_64" -o /usr/local/bin/docker-compose
+        sudo chmod +x /usr/local/bin/docker-compose
+    fi
+fi
+
 if ! command -v docker compose &> /dev/null; then
-    curl -SL "https://github.com/docker/compose/releases/download/v2.24.0/docker-compose-linux-x86_64" -o /usr/local/bin/docker-compose
-    chmod +x /usr/local/bin/docker-compose
-    ln -s /usr/local/bin/docker-compose /usr/bin/docker-compose
+    sudo ln -sf /usr/local/bin/docker-compose /usr/bin/docker-compose 2>/dev/null || true
 fi
 
 echo "[4/10] Configuring Swap (2GB)..."
 if ! swapon --show | grep -q /swapfile; then
-    fallocate -l 2G /swapfile || dd if=/dev/zero of=/swapfile bs=1M count=2048
-    chmod 600 /swapfile
-    mkswap /swapfile
-    swapon /swapfile
-    echo '/swapfile none swap sw 0 0' | tee -a /etc/fstab
+    sudo fallocate -l 2G /swapfile || sudo dd if=/dev/zero of=/swapfile bs=1M count=2048
+    sudo chmod 600 /swapfile
+    sudo mkswap /swapfile
+    sudo swapon /swapfile
+    echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
 fi
 
 echo "[5/10] Tuning swap parameters..."
-echo 'vm.swappiness=10' | tee -a /etc/sysctl.conf
-echo 'vm.vfs_cache_pressure=50' | tee -a /etc/sysctl.conf
-sysctl -p
+echo 'vm.swappiness=10' | sudo tee -a /etc/sysctl.conf
+echo 'vm.vfs_cache_pressure=50' | sudo tee -a /etc/sysctl.conf
+sudo sysctl -p
 
 echo "[6/10] Configuring Docker daemon..."
-mkdir -p /etc/docker
-cat > /etc/docker/daemon.json << 'EOF'
+sudo mkdir -p /etc/docker
+sudo cat > /etc/docker/daemon.json << 'EOF'
 {
   "log-driver": "json-file",
   "log-opts": {
@@ -50,30 +56,33 @@ cat > /etc/docker/daemon.json << 'EOF'
   "storage-driver": "overlay2"
 }
 EOF
-systemctl restart docker
+sudo systemctl restart docker
 
 echo "[7/10] Installing AWS CLI..."
 if ! command -v aws &> /dev/null; then
     cd /tmp
     curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
     unzip -q awscliv2.zip
-    ./aws/install
+    sudo ./aws/install
     rm -rf awscliv2.zip aws
 fi
 
 echo "[8/10] Cloning repository..."
-mkdir -p /opt
+sudo mkdir -p /opt
 cd /opt
 
 if [ -d "mvp-aws-ia" ]; then
     cd mvp-aws-ia
-    git pull
+    sudo git pull
 else
-    git clone https://github.com/UC-Johan-Andres/mvp-aws-ia.git
+    sudo git clone https://github.com/UC-Johan-Andres/mvp-aws-ia.git
     cd mvp-aws-ia
 fi
 
-cd new
+# Go to new directory if it exists, otherwise stay in root
+if [ -d "new" ]; then
+    cd new
+fi
 
 echo "[9/10] Downloading parameters from AWS Parameter Store..."
 OPENROUTER_KEY=$(aws ssm get-parameter --name "/ai-ecosystem/openrouter-key" --with-decryption --query "Parameter.Value" --output text 2>/dev/null || echo "")
@@ -97,7 +106,7 @@ ALLOW_REGISTRATION=true
 OPENROUTER_KEY=${OPENROUTER_KEY}
 EOF
 
-cat > .env.chatwoot << EOF
+sudo cat > .env.chatwoot << EOF
 RAILS_ENV=production
 POSTGRES_HOST=postgres
 POSTGRES_USERNAME=chatwoot
@@ -123,8 +132,8 @@ GENERIC_TIMEZONE=America/Bogota
 N8N_SECURE_COOKIE=false
 EOF
 
-mkdir -p bridge
-cat > bridge/.env << EOF
+sudo mkdir -p bridge
+sudo cat > bridge/.env << EOF
 BRIDGE_API_KEY=${BRIDGE_API_KEY}
 POSTGRES_HOST=postgres
 POSTGRES_PORT=5432
@@ -137,7 +146,7 @@ MONGO_DB=LibreChat
 EOF
 
 echo "[10/10] Starting services..."
-docker compose up -d --build
+sudo docker compose up -d --build
 
 echo "========================================"
 echo "Provisioning complete!"
