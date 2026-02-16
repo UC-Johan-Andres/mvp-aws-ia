@@ -11,6 +11,11 @@ Parameters:
       - t3.small
     Description: EC2 instance type (t2.micro for Free Tier)
 
+  LatestAmiId:
+    Type: 'AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>'
+    Default: '/aws/service/canonical/ubuntu/server/22.04/stable/current/amd64/hvm/ebs-gp3/ami-id'
+    Description: AMI ID from SSM Parameter
+
   KeyName:
     Type: AWS::EC2::KeyPair::KeyName
     Description: Name of an existing EC2 KeyPair to enable SSH access
@@ -19,19 +24,6 @@ Parameters:
     Type: String
     Default: 0.0.0.0/0
     Description: IP range for SSH access (use your IP for security)
-
-Mappings:
-  RegionMap:
-    us-east-1:
-      AMI: ami-0c55b159cbfafe1f0
-    us-east-2:
-      AMI: ami-0cfb4a74e1bfcad62
-    us-west-1:
-      AMI: ami-0a6e35640c7a9f1b1
-    us-west-2:
-      AMI: ami-0a6be2d243fb5b5b6
-    sa-east-1:
-      AMI: ami-0b8134dedc5b094a3
 
 Resources:
 
@@ -180,7 +172,7 @@ Resources:
     Properties:
       InstanceType: !Ref InstanceType
       KeyName: !Ref KeyName
-      ImageId: !FindInMap [RegionMap, !Ref 'AWS::Region', AMI]
+      ImageId: !Ref LatestAmiId
       IamInstanceProfile: !Ref EC2InstanceProfile
       NetworkInterfaces:
         - GroupSet:
