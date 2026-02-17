@@ -166,15 +166,15 @@ DB_POSTGRESDB_PORT=5432
 DB_POSTGRESDB_DATABASE=n8n
 DB_POSTGRESDB_USER=n8n
 DB_POSTGRESDB_PASSWORD=${N8N_PASSWORD}
-N8N_HOST=sandboxai.duckdns.org
+N8N_HOST=n8n-sandboxai.duckdns.org
 N8N_PORT=5678
 N8N_PROTOCOL=http
-N8N_EDITOR_BASE_URL=https://sandboxai.duckdns.org/n8n
+N8N_EDITOR_BASE_URL=https://n8n-sandboxai.duckdns.org
 NODE_ENV=production
 GENERIC_TIMEZONE=America/Bogota
 N8N_SECURE_COOKIE=false
 N8N_IGNORE_CORS=true
-WEBHOOK_URL=https://sandboxai.duckdns.org/n8n/
+WEBHOOK_URL=https://n8n-sandboxai.duckdns.org/
 EOF
 
 sudo mkdir -p bridge
