@@ -71,6 +71,11 @@ services:
     container_name: chatwoot
     env_file:
       - .env.chatwoot
+    environment:
+      - MALLOC_ARENA_MAX=2
+      - RUBY_GC_HEAP_INIT_SLOTS=100000
+      - RUBY_GC_HEAP_FREE_SLOTS_MIN_RATIO=0.2
+      - RUBY_GC_HEAP_FREE_SLOTS_MAX_RATIO=0.4
     command:
       - sh
       - -ec
@@ -89,7 +94,7 @@ services:
       - "traefik.http.services.chatwoot.loadbalancer.server.port=3000"
     networks:
       - ai_stack
-    mem_limit: 256m
+    mem_limit: 400m
     depends_on:
       postgres:
         condition: service_healthy
@@ -101,10 +106,12 @@ services:
     container_name: chatwoot_sidekiq
     env_file:
       - .env.chatwoot
+    environment:
+      - MALLOC_ARENA_MAX=2
     command: bundle exec sidekiq -C config/sidekiq.yml -c 2
     networks:
       - ai_stack
-    mem_limit: 160m
+    mem_limit: 300m
     depends_on:
       postgres:
         condition: service_healthy
