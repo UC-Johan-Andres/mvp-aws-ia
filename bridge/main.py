@@ -3,6 +3,7 @@ from flask import Flask, jsonify, request
 import psycopg2
 from pymongo import MongoClient
 from bson.json_util import dumps
+from markupsafe import Markup
 
 app = Flask(__name__)
 
@@ -18,6 +19,8 @@ MONGO_CONFIG = {
     "host": os.getenv("MONGO_HOST", "mongo"),
     "port": int(os.getenv("MONGO_PORT", "27017")),
     "database": os.getenv("MONGO_DB", "LibreChat"),
+    "username": os.getenv("MONGO_ROOT_USERNAME", ""),
+    "password": os.getenv("MONGO_ROOT_PASSWORD", ""),
 }
 
 API_KEY = os.getenv("BRIDGE_API_KEY", "deepnote-api-key-change-me")
@@ -36,8 +39,107 @@ def get_postgres_connection():
 
 
 def get_mongo_client():
-    """Create MongoDB client"""
-    return MongoClient(MONGO_CONFIG["host"], MONGO_CONFIG["port"])
+    """Create MongoDB client with authentication"""
+    username = MONGO_CONFIG["username"]
+    password = MONGO_CONFIG["password"]
+    host = MONGO_CONFIG["host"]
+    port = MONGO_CONFIG["port"]
+    database = MONGO_CONFIG["database"]
+
+    if username and password:
+        uri = f"mongodb://{username}:{password}@{host}:{port}/{database}?authSource=admin"
+    else:
+        uri = f"mongodb://{host}:{port}/{database}"
+
+    return MongoClient(uri)
+
+
+DOCS_HTML = """<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bridge API - Documentation</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 900px; margin: 40px auto; padding: 20px; background: #f8f9fa; color: #333; }
+        h1 { color: #2c3e50; border-bottom: 2px solid #3498db; padding-bottom: 10px; }
+        h2 { color: #2c3e50; margin-top: 30px; }
+        p.desc { color: #555; font-size: 1.1em; }
+        table { width: 100%; border-collapse: collapse; margin: 20px 0; background: white; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+        th, td { padding: 12px 15px; text-align: left; border-bottom: 1px solid #e0e0e0; }
+        th { background: #3498db; color: white; }
+        tr:hover { background: #f5f5f5; }
+        code { background: #e8e8e8; padding: 2px 6px; border-radius: 3px; font-size: 0.9em; }
+        pre { background: #2c3e50; color: #ecf0f1; padding: 15px; border-radius: 5px; overflow-x: auto; }
+        .method { display: inline-block; padding: 2px 8px; border-radius: 3px; color: white; font-weight: bold; font-size: 0.85em; }
+        .get { background: #27ae60; }
+        .auth-yes { color: #e74c3c; font-weight: bold; }
+        .auth-no { color: #27ae60; }
+    </style>
+</head>
+<body>
+    <h1>Bridge API</h1>
+    <p class="desc">Connector service for the AI Ecosystem. Provides unified read access to Chatwoot (PostgreSQL) and LibreChat (MongoDB) data.</p>
+
+    <h2>Endpoints</h2>
+    <table>
+        <tr>
+            <th>Method</th>
+            <th>Endpoint</th>
+            <th>Parameters</th>
+            <th>Auth</th>
+        </tr>
+        <tr>
+            <td><span class="method get">GET</span></td>
+            <td><code>/health</code></td>
+            <td>-</td>
+            <td class="auth-no">No</td>
+        </tr>
+        <tr>
+            <td><span class="method get">GET</span></td>
+            <td><code>/chatwoot/conversations</code></td>
+            <td><code>limit</code> (default 50), <code>offset</code> (default 0)</td>
+            <td class="auth-yes">X-API-Key</td>
+        </tr>
+        <tr>
+            <td><span class="method get">GET</span></td>
+            <td><code>/chatwoot/messages/&lt;conversation_id&gt;</code></td>
+            <td><code>limit</code> (default 100)</td>
+            <td class="auth-yes">X-API-Key</td>
+        </tr>
+        <tr>
+            <td><span class="method get">GET</span></td>
+            <td><code>/librechat/conversations</code></td>
+            <td><code>limit</code> (default 50), <code>skip</code> (default 0)</td>
+            <td class="auth-yes">X-API-Key</td>
+        </tr>
+        <tr>
+            <td><span class="method get">GET</span></td>
+            <td><code>/librechat/messages/&lt;conversation_id&gt;</code></td>
+            <td><code>limit</code> (default 100)</td>
+            <td class="auth-yes">X-API-Key</td>
+        </tr>
+        <tr>
+            <td><span class="method get">GET</span></td>
+            <td><code>/librechat/users</code></td>
+            <td>-</td>
+            <td class="auth-yes">X-API-Key</td>
+        </tr>
+    </table>
+
+    <h2>Authentication</h2>
+    <p>Protected endpoints require the <code>X-API-Key</code> header with a valid API key.</p>
+
+    <h2>Example</h2>
+    <pre>curl -H "X-API-Key: YOUR_API_KEY" https://sandboxai.duckdns.org/bridge/chatwoot/conversations?limit=10</pre>
+</body>
+</html>"""
+
+
+@app.route("/", methods=["GET"])
+def docs():
+    """API documentation page"""
+    return DOCS_HTML
 
 
 @app.route("/health", methods=["GET"])

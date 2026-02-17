@@ -148,17 +148,15 @@ N8N_BASIC_AUTH_PASSWORD=$(aws ssm get-parameter --name "/ai-ecosystem/n8n-basic-
 MONGO_ROOT_USERNAME=$(aws ssm get-parameter --name "/ai-ecosystem/mongo-root-username" --query "Parameter.Value" --output text 2>/dev/null || echo "librechat")
 MONGO_ROOT_PASSWORD=$(aws ssm get-parameter --name "/ai-ecosystem/mongo-root-password" --with-decryption --query "Parameter.Value" --output text 2>/dev/null || echo "")
 
-# Generate random passwords if not provided in SSM
-if [ -z "$N8N_ENCRYPTION_KEY" ]; then
-    N8N_ENCRYPTION_KEY=$(openssl rand -hex 32)
-fi
+# N8N_ENCRYPTION_KEY: only use SSM value if provided, otherwise let n8n generate its own
+N8N_ENCRYPTION_KEY_FROM_SSM="$N8N_ENCRYPTION_KEY"
 
 if [ -z "$N8N_BASIC_AUTH_PASSWORD" ]; then
     N8N_BASIC_AUTH_PASSWORD="N8nSecure2024!"
 fi
 
 if [ -z "$MONGO_ROOT_PASSWORD" ]; then
-    MONGO_ROOT_PASSWORD="MongoPass2024!"
+    MONGO_ROOT_PASSWORD="mongo_secure_pass_2024"
 fi
 
 cat > .env.librechat << EOF
@@ -184,7 +182,7 @@ POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
 POSTGRES_DATABASE=chatwoot
 REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379
 SECRET_KEY_BASE=${CHATWOOT_SECRET}
-FRONTEND_URL=https://sandboxai.duckdns.org/chatwoot
+FRONTEND_URL=https://woot-sanboxai.duckdns.org
 WEB_CONCURRENCY=1
 RAILS_MAX_THREADS=1
 EOF
@@ -208,11 +206,15 @@ WEBHOOK_URL=https://n8n-sandboxai.duckdns.org/
 N8N_BASIC_AUTH_ACTIVE=true
 N8N_BASIC_AUTH_USER=${N8N_BASIC_AUTH_USER}
 N8N_BASIC_AUTH_PASSWORD=${N8N_BASIC_AUTH_PASSWORD}
-N8N_ENCRYPTION_KEY=${N8N_ENCRYPTION_KEY}
 EXECUTIONS_DATA_PRUNE=true
 EXECUTIONS_DATA_MAX_AGE=168
 NODE_OPTIONS=--max-old-space-size=256
 EOF
+
+# Only add N8N_ENCRYPTION_KEY if it came from SSM
+if [ -n "$N8N_ENCRYPTION_KEY_FROM_SSM" ]; then
+    echo "N8N_ENCRYPTION_KEY=${N8N_ENCRYPTION_KEY_FROM_SSM}" >> .env.n8n
+fi
 
 sudo mkdir -p bridge
 sudo cat > bridge/.env << EOF
@@ -225,13 +227,25 @@ POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
 MONGO_HOST=mongo
 MONGO_PORT=27017
 MONGO_DB=LibreChat
+MONGO_ROOT_USERNAME=${MONGO_ROOT_USERNAME}
+MONGO_ROOT_PASSWORD=${MONGO_ROOT_PASSWORD}
+EOF
+
+# Generate .env file for docker-compose variable interpolation
+echo "Generating .env for docker-compose..."
+cat > .env << EOF
+POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+REDIS_PASSWORD=${REDIS_PASSWORD}
+MONGO_ROOT_USERNAME=${MONGO_ROOT_USERNAME}
+MONGO_ROOT_PASSWORD=${MONGO_ROOT_PASSWORD}
+TIMEZONE=America/Bogota
 EOF
 
 echo "[10/10] Starting services..."
 
 # Step 1: Start only databases first
 echo "Starting databases (postgres, redis, mongo)..."
-sudo docker-compose up -d postgres redis mongo
+sudo docker-compose --env-file .env up -d postgres redis mongo
 
 # Step 2: Wait for PostgreSQL to be ready
 echo "Waiting for PostgreSQL to be ready..."
@@ -273,18 +287,37 @@ sudo certbot certonly --standalone --non-interactive --agree-tos --email admin@s
     --key-path /etc/letsencrypt/live/n8n-sandboxai.duckdns.org/privkey.pem \
     2>/dev/null || echo "Certificate for n8n-sandboxai.duckdns.org may already exist"
 
-# Copy certificates if they don't exist in separate folders
+# Generate certificate for woot-sanboxai.duckdns.org (Chatwoot subdomain)
+echo "Generating SSL for woot-sanboxai.duckdns.org..."
+sudo certbot certonly --standalone --non-interactive --agree-tos --email admin@sandboxai.duckdns.org \
+    -d woot-sanboxai.duckdns.org \
+    --cert-path /etc/letsencrypt/live/woot-sanboxai.duckdns.org/fullchain.pem \
+    --key-path /etc/letsencrypt/live/woot-sanboxai.duckdns.org/privkey.pem \
+    2>/dev/null || echo "Certificate for woot-sanboxai.duckdns.org may already exist"
+
+# Create certificate directories if they don't exist
 sudo mkdir -p /etc/letsencrypt/live/sandboxai.duckdns.org
 sudo mkdir -p /etc/letsencrypt/live/n8n-sandboxai.duckdns.org
+sudo mkdir -p /etc/letsencrypt/live/woot-sanboxai.duckdns.org
 
 # Restart nginx
 sudo docker-compose start nginx 2>/dev/null || true
 
 echo "SSL certificates generated successfully!"
 
-# Step 6: Start all remaining services
+# Step 6: Start chatwoot first for migrations
+echo "Starting Chatwoot for database preparation..."
+sudo docker-compose --env-file .env up -d chatwoot
+
+# Step 7: Wait for Chatwoot to be ready, then run migrations
+echo "Waiting for Chatwoot to start..."
+sleep 15
+echo "Running Chatwoot database migrations..."
+sudo docker exec chatwoot bundle exec rails db:chatwoot_prepare 2>/dev/null || echo "Chatwoot DB prepare completed (or already done)"
+
+# Step 8: Start all remaining services
 echo "Starting all services..."
-sudo docker-compose up -d --build
+sudo docker-compose --env-file .env up -d --build
 
 echo "========================================"
 echo "Provisioning complete!"
@@ -294,11 +327,11 @@ echo "Docker storage info:"
 sudo docker system df
 echo ""
 echo "Services available at:"
-echo "  - Chatwoot:  http://${EC2_DNS}/chatwoot"
-echo "  - n8n:       http://${EC2_DNS}/n8n"
-echo "  - LibreChat: http://${EC2_DNS}/librechat"
-echo "  - Bridge:    http://${EC2_DNS}/bridge"
-echo "  - Traefik:   http://${EC2_DNS}:8080"
+echo "  - Dashboard: https://sandboxai.duckdns.org/"
+echo "  - Chatwoot:  https://woot-sanboxai.duckdns.org/"
+echo "  - n8n:       https://n8n-sandboxai.duckdns.org/"
+echo "  - LibreChat: https://sandboxai.duckdns.org/librechat/"
+echo "  - Bridge:    https://sandboxai.duckdns.org/bridge/"
 echo ""
 echo "To check status: sudo docker-compose ps"
 echo "To view logs: sudo docker-compose logs -f"

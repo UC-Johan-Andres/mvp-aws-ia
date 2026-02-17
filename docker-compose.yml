@@ -86,8 +86,6 @@ services:
     environment:
       - TZ=${TIMEZONE:-America/Bogota}
       - RAILS_ENV=production
-      - SECRET_KEY_BASE
-      - FRONTEND_URL
       - DATABASE_URL=postgresql://chatwoot:${POSTGRES_PASSWORD:-chatwoot_secure_pass_2024}@postgres:5432/chatwoot
       - REDIS_URL=redis://:${REDIS_PASSWORD:-redis_secure_pass_2024}@redis:6379/0
       - RAILS_LOG_TO_STDOUT=true
@@ -116,7 +114,6 @@ services:
     environment:
       - TZ=${TIMEZONE:-America/Bogota}
       - RAILS_ENV=production
-      - SECRET_KEY_BASE
       - DATABASE_URL=postgresql://chatwoot:${POSTGRES_PASSWORD:-chatwoot_secure_pass_2024}@postgres:5432/chatwoot
       - REDIS_URL=redis://:${REDIS_PASSWORD:-redis_secure_pass_2024}@redis:6379/0
       - MALLOC_ARENA_MAX=2
@@ -156,13 +153,6 @@ services:
     env_file:
       - .env.librechat
     restart: unless-stopped
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.librechat.rule=PathPrefix(`/librechat`)"
-      - "traefik.http.routers.librechat.entrypoints=web"
-      - "traefik.http.middlewares.librechat.stripprefix.prefixes=/librechat"
-      - "traefik.http.routers.librechat.middlewares=librechat"
-      - "traefik.http.services.librechat.loadbalancer.server.port=3080"
     volumes:
       - librechat-images:/app/client/public/images
       - librechat-logs:/app/api/logs
@@ -187,13 +177,6 @@ services:
     env_file:
       - ./bridge/.env
     restart: unless-stopped
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.bridge.rule=PathPrefix(`/bridge`)"
-      - "traefik.http.routers.bridge.entrypoints=web"
-      - "traefik.http.middlewares.bridge.stripprefix.prefixes=/bridge"
-      - "traefik.http.routers.bridge.middlewares=bridge"
-      - "traefik.http.services.bridge.loadbalancer.server.port=5000"
     networks:
       - ai_stack
     mem_limit: 128m
