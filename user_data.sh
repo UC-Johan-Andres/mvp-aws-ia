@@ -92,6 +92,14 @@ if ! command -v aws &> /dev/null; then
     rm -rf awscliv2.zip aws
 fi
 
+echo "[7.5/10] Installing Certbot for SSL..."
+if ! command -v certbot &> /dev/null; then
+    sudo yum install -y certbot python3-certbot-nginx 2>/dev/null || true
+    if ! command -v certbot &> /dev/null; then
+        sudo pip3 install certbot certbot-nginx
+    fi
+fi
+
 echo "[8/10] Cloning repository..."
 sudo mkdir -p /opt
 cd /opt
@@ -133,10 +141,30 @@ JWT_SECRET=$(aws ssm get-parameter --name "/ai-ecosystem/jwt-secret" --with-decr
 JWT_REFRESH_SECRET=$(aws ssm get-parameter --name "/ai-ecosystem/jwt-refresh-secret" --with-decryption --query "Parameter.Value" --output text 2>/dev/null || echo "b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c")
 SESSION_SECRET=$(aws ssm get-parameter --name "/ai-ecosystem/session-secret" --with-decryption --query "Parameter.Value" --output text 2>/dev/null || echo "c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d")
 
+# New parameters for n8n and mongo
+N8N_ENCRYPTION_KEY=$(aws ssm get-parameter --name "/ai-ecosystem/n8n-encryption-key" --with-decryption --query "Parameter.Value" --output text 2>/dev/null || echo "")
+N8N_BASIC_AUTH_USER=$(aws ssm get-parameter --name "/ai-ecosystem/n8n-basic-auth-user" --query "Parameter.Value" --output text 2>/dev/null || echo "admin")
+N8N_BASIC_AUTH_PASSWORD=$(aws ssm get-parameter --name "/ai-ecosystem/n8n-basic-auth-password" --with-decryption --query "Parameter.Value" --output text 2>/dev/null || echo "")
+MONGO_ROOT_USERNAME=$(aws ssm get-parameter --name "/ai-ecosystem/mongo-root-username" --query "Parameter.Value" --output text 2>/dev/null || echo "librechat")
+MONGO_ROOT_PASSWORD=$(aws ssm get-parameter --name "/ai-ecosystem/mongo-root-password" --with-decryption --query "Parameter.Value" --output text 2>/dev/null || echo "")
+
+# Generate random passwords if not provided in SSM
+if [ -z "$N8N_ENCRYPTION_KEY" ]; then
+    N8N_ENCRYPTION_KEY=$(openssl rand -hex 32)
+fi
+
+if [ -z "$N8N_BASIC_AUTH_PASSWORD" ]; then
+    N8N_BASIC_AUTH_PASSWORD="N8nSecure2024!"
+fi
+
+if [ -z "$MONGO_ROOT_PASSWORD" ]; then
+    MONGO_ROOT_PASSWORD="MongoPass2024!"
+fi
+
 cat > .env.librechat << EOF
 HOST=0.0.0.0
 PORT=3080
-MONGO_URI=mongodb://mongo:27017/LibreChat
+MONGO_URI=mongodb://${MONGO_ROOT_USERNAME}:${MONGO_ROOT_PASSWORD}@mongo:27017/LibreChat?authSource=admin
 JWT_SECRET=${JWT_SECRET}
 JWT_REFRESH_SECRET=${JWT_REFRESH_SECRET}
 SESSION_SECRET=${SESSION_SECRET}
@@ -144,6 +172,8 @@ ALLOW_REGISTRATION=true
 OPENROUTER_KEY=${OPENROUTER_KEY}
 DOMAIN_CLIENT=https://sandboxai.duckdns.org/librechat
 DOMAIN_SERVER=https://sandboxai.duckdns.org/librechat
+MONGO_INITDB_ROOT_USERNAME=${MONGO_ROOT_USERNAME}
+MONGO_INITDB_ROOT_PASSWORD=${MONGO_ROOT_PASSWORD}
 EOF
 
 sudo cat > .env.chatwoot << EOF
@@ -175,6 +205,13 @@ GENERIC_TIMEZONE=America/Bogota
 N8N_SECURE_COOKIE=false
 N8N_IGNORE_CORS=true
 WEBHOOK_URL=https://n8n-sandboxai.duckdns.org/
+N8N_BASIC_AUTH_ACTIVE=true
+N8N_BASIC_AUTH_USER=${N8N_BASIC_AUTH_USER}
+N8N_BASIC_AUTH_PASSWORD=${N8N_BASIC_AUTH_PASSWORD}
+N8N_ENCRYPTION_KEY=${N8N_ENCRYPTION_KEY}
+EXECUTIONS_DATA_PRUNE=true
+EXECUTIONS_DATA_MAX_AGE=168
+NODE_OPTIONS=--max-old-space-size=256
 EOF
 
 sudo mkdir -p bridge
@@ -213,7 +250,39 @@ until sudo docker exec mongo mongosh --eval "db.adminCommand('ping')" &> /dev/nu
     sleep 2
 done
 
-# Step 5: Start all remaining services
+# Step 5: Generate SSL certificates for both domains
+echo "[5/10] Generating SSL certificates..."
+sudo mkdir -p /etc/letsencrypt
+
+# Stop nginx temporarily to use ports 80
+sudo docker-compose stop nginx 2>/dev/null || true
+
+# Generate certificate for sandboxai.duckdns.org (covers chatwoot and librechat)
+echo "Generating SSL for sandboxai.duckdns.org..."
+sudo certbot certonly --standalone --non-interactive --agree-tos --email admin@sandboxai.duckdns.org \
+    -d sandboxai.duckdns.org \
+    --cert-path /etc/letsencrypt/live/sandboxai.duckdns.org/fullchain.pem \
+    --key-path /etc/letsencrypt/live/sandboxai.duckdns.org/privkey.pem \
+    2>/dev/null || echo "Certificate for sandboxai.duckdns.org may already exist"
+
+# Generate certificate for n8n-sandboxai.duckdns.org
+echo "Generating SSL for n8n-sandboxai.duckdns.org..."
+sudo certbot certonly --standalone --non-interactive --agree-tos --email admin@sandboxai.duckdns.org \
+    -d n8n-sandboxai.duckdns.org \
+    --cert-path /etc/letsencrypt/live/n8n-sandboxai.duckdns.org/fullchain.pem \
+    --key-path /etc/letsencrypt/live/n8n-sandboxai.duckdns.org/privkey.pem \
+    2>/dev/null || echo "Certificate for n8n-sandboxai.duckdns.org may already exist"
+
+# Copy certificates if they don't exist in separate folders
+sudo mkdir -p /etc/letsencrypt/live/sandboxai.duckdns.org
+sudo mkdir -p /etc/letsencrypt/live/n8n-sandboxai.duckdns.org
+
+# Restart nginx
+sudo docker-compose start nginx 2>/dev/null || true
+
+echo "SSL certificates generated successfully!"
+
+# Step 6: Start all remaining services
 echo "Starting all services..."
 sudo docker-compose up -d --build
 
