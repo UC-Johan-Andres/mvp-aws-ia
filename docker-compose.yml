@@ -120,13 +120,8 @@ services:
     restart: always
     volumes:
       - n8n_data:/home/node/.n8n
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.n8n.rule=PathPrefix(`/n8n`)"
-      - "traefik.http.routers.n8n.entrypoints=web"
-      - "traefik.http.middlewares.n8n.stripprefix.prefixes=/n8n"
-      - "traefik.http.routers.n8n.middlewares=n8n"
-      - "traefik.http.services.n8n.loadbalancer.server.port=5678"
+    ports:
+      - "5678:5678"
     networks:
       - ai_stack
     mem_limit: 256m
