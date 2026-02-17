@@ -86,13 +86,6 @@ services:
         done
         bundle exec rails db:chatwoot_prepare
         exec bundle exec rails s -p 3000 -b 0.0.0.0 --workers 0
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.chatwoot.rule=PathPrefix(`/chatwoot`)"
-      - "traefik.http.routers.chatwoot.entrypoints=web"
-      - "traefik.http.middlewares.chatwoot.stripprefix.prefixes=/chatwoot"
-      - "traefik.http.routers.chatwoot.middlewares=chatwoot"
-      - "traefik.http.services.chatwoot.loadbalancer.server.port=3000"
     networks:
       - ai_stack
     mem_limit: 400m
@@ -195,27 +188,25 @@ services:
         condition: service_healthy
 
   # =======================
-  # REVERSE PROXY
+  # REVERSE PROXY - Nginx
   # =======================
 
-  traefik:
-    image: traefik:v3.0
-    container_name: traefik
-    command:
-      - "--api.dashboard=true"
-      - "--api.insecure=true"
-      - "--providers.docker=true"
-      - "--providers.docker.exposedbydefault=false"
-      - "--entrypoints.web.address=:80"
-      - "--entrypoints.traefik.address=:8080"
+  nginx:
+    image: nginx:1.25-alpine
+    container_name: nginx
     ports:
       - "80:80"
-      - "8080:8080"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./index.html:/usr/share/nginx/html/index.html:ro
+    depends_on:
+      - chatwoot
+      - n8n
+      - librechat
+      - bridge
     networks:
       - ai_stack
     restart: unless-stopped
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
 
 networks:
   ai_stack:
