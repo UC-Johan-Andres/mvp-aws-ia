@@ -57,7 +57,7 @@ services:
       MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USERNAME:-librechat}
       MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD:-mongo_secure_pass_2024}
       TZ: ${TIMEZONE:-America/Bogota}
-    command: mongod --wiredTigerCacheSizeGB 0.1 --quiet --logpath /dev/null
+    command: mongod --wiredTigerCacheSizeGB 0.25 --quiet --logpath /dev/null
     volumes:
       - mongo_data:/data/db
     networks:
