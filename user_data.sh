@@ -142,8 +142,8 @@ JWT_REFRESH_SECRET=${JWT_REFRESH_SECRET}
 SESSION_SECRET=${SESSION_SECRET}
 ALLOW_REGISTRATION=true
 OPENROUTER_KEY=${OPENROUTER_KEY}
-DOMAIN_CLIENT=http://${EC2_DNS}/librechat
-DOMAIN_SERVER=http://${EC2_DNS}/librechat
+DOMAIN_CLIENT=https://sandboxai.duckdns.org/librechat
+DOMAIN_SERVER=https://sandboxai.duckdns.org/librechat
 EOF
 
 sudo cat > .env.chatwoot << EOF
@@ -154,9 +154,9 @@ POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
 POSTGRES_DATABASE=chatwoot
 REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379
 SECRET_KEY_BASE=${CHATWOOT_SECRET}
-FRONTEND_URL=http://${EC2_DNS}/chatwoot
+FRONTEND_URL=https://sandboxai.duckdns.org/chatwoot
 WEB_CONCURRENCY=1
-RAILS_MAX_THREADS=3
+RAILS_MAX_THREADS=1
 EOF
 
 cat > .env.n8n << EOF
@@ -166,14 +166,15 @@ DB_POSTGRESDB_PORT=5432
 DB_POSTGRESDB_DATABASE=n8n
 DB_POSTGRESDB_USER=n8n
 DB_POSTGRESDB_PASSWORD=${N8N_PASSWORD}
-N8N_HOST=${EC2_DNS}
+N8N_HOST=sandboxai.duckdns.org
 N8N_PORT=5678
 N8N_PROTOCOL=http
+N8N_EDITOR_BASE_URL=https://sandboxai.duckdns.org/n8n
 NODE_ENV=production
 GENERIC_TIMEZONE=America/Bogota
 N8N_SECURE_COOKIE=false
 N8N_IGNORE_CORS=true
-WEBHOOK_URL=http://${EC2_DNS}:5678/
+WEBHOOK_URL=https://sandboxai.duckdns.org/n8n/
 EOF
 
 sudo mkdir -p bridge
