@@ -200,7 +200,7 @@ services:
     volumes:
       - ./nginx.conf:/etc/nginx/nginx.conf:ro
       - ./index.html:/usr/share/nginx/html/index.html:ro
-      - nginx-ssl:/etc/letsencrypt
+      - /etc/letsencrypt:/etc/letsencrypt:ro
     depends_on:
       - chatwoot
       - n8n
@@ -222,4 +222,3 @@ volumes:
   librechat-images:
   librechat-logs:
   librechat-data:
-  nginx-ssl:
