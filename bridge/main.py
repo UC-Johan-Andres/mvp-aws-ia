@@ -61,20 +61,20 @@ DOCS_HTML = """<!DOCTYPE html>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Bridge API - Documentation</title>
     <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 900px; margin: 40px auto; padding: 20px; background: #f8f9fa; color: #333; }
-        h1 { color: #2c3e50; border-bottom: 2px solid #3498db; padding-bottom: 10px; }
-        h2 { color: #2c3e50; margin-top: 30px; }
-        p.desc { color: #555; font-size: 1.1em; }
-        table { width: 100%; border-collapse: collapse; margin: 20px 0; background: white; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
-        th, td { padding: 12px 15px; text-align: left; border-bottom: 1px solid #e0e0e0; }
-        th { background: #3498db; color: white; }
-        tr:hover { background: #f5f5f5; }
-        code { background: #e8e8e8; padding: 2px 6px; border-radius: 3px; font-size: 0.9em; }
-        pre { background: #2c3e50; color: #ecf0f1; padding: 15px; border-radius: 5px; overflow-x: auto; }
-        .method { display: inline-block; padding: 2px 8px; border-radius: 3px; color: white; font-weight: bold; font-size: 0.85em; }
-        .get { background: #27ae60; }
-        .auth-yes { color: #e74c3c; font-weight: bold; }
-        .auth-no { color: #27ae60; }
+        body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 900px; margin: 40px auto; padding: 20px; background: #f8f9fa; color: #333; }}
+        h1 {{ color: #2c3e50; border-bottom: 2px solid #3498db; padding-bottom: 10px; }}
+        h2 {{ color: #2c3e50; margin-top: 30px; }}
+        p.desc {{ color: #555; font-size: 1.1em; }}
+        table {{ width: 100%; border-collapse: collapse; margin: 20px 0; background: white; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }}
+        th, td {{ padding: 12px 15px; text-align: left; border-bottom: 1px solid #e0e0e0; }}
+        th {{ background: #3498db; color: white; }}
+        tr:hover {{ background: #f5f5f5; }}
+        code {{ background: #e8e8e8; padding: 2px 6px; border-radius: 3px; font-size: 0.9em; }}
+        pre {{ background: #2c3e50; color: #ecf0f1; padding: 15px; border-radius: 5px; overflow-x: auto; }}
+        .method {{ display: inline-block; padding: 2px 8px; border-radius: 3px; color: white; font-weight: bold; font-size: 0.85em; }}
+        .get {{ background: #27ae60; }}
+        .auth-yes {{ color: #e74c3c; font-weight: bold; }}
+        .auth-no {{ color: #27ae60; }}
     </style>
 </head>
 <body>
