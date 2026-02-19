@@ -122,6 +122,10 @@ Resources:
           ToPort: 443
           CidrIp: 0.0.0.0/0
         - IpProtocol: tcp
+          FromPort: 3000
+          ToPort: 3000
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
           FromPort: 8080
           ToPort: 8080
           CidrIp: !Ref SSHLocation
@@ -186,8 +190,8 @@ Resources:
           cd /opt
           git clone https://github.com/UC-Johan-Andres/mvp-aws-ia.git
           cd mvp-aws-ia
-          chmod +x new/user_data.sh
-          bash new/user_data.sh
+          chmod +x user_data.sh
+          bash user_data.sh
       Tags:
         - Key: Name
           Value: !Sub AI-Ecosystem-EC2
