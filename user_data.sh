@@ -12,26 +12,26 @@ sudo xfs_growfs / 2>/dev/null || true
 
 echo "[1/10] Updating system and installing dependencies..."
 sudo yum update -y
-sudo yum install -y git curl unzip
+sudo yum install -y git unzip
 
 echo "[2/10] Installing Docker..."
-if ! command -v docker &> /dev/null; then
-    sudo yum install -y docker
-    sudo systemctl enable docker
-    sudo systemctl start docker
-    sudo usermod -aG docker ec2-user
+if ! command -v docker &>/dev/null; then
+  sudo yum install -y docker
+  sudo systemctl enable docker
+  sudo systemctl start docker
+  sudo usermod -aG docker ec2-user
 fi
 
 # Configure Docker data directory on larger volume if available
 echo "[2.5/10] Configuring Docker storage..."
-if lsblk /dev/nvme1n1 &> /dev/null; then
-    echo "Additional volume detected"
-    if ! mountpoint -q /var/lib/docker 2>/dev/null; then
-        sudo mkfs.xfs -f /dev/nvme1n1 2>/dev/null || true
-        sudo mkdir -p /var/lib/docker
-        sudo mount /dev/nvme1n1 /var/lib/docker
-        echo "/dev/nvme1n1 /var/lib/docker xfs defaults 0 0" | sudo tee -a /etc/fstab
-    fi
+if lsblk /dev/nvme1n1 &>/dev/null; then
+  echo "Additional volume detected"
+  if ! mountpoint -q /var/lib/docker 2>/dev/null; then
+    sudo mkfs.xfs -f /dev/nvme1n1 2>/dev/null || true
+    sudo mkdir -p /var/lib/docker
+    sudo mount /dev/nvme1n1 /var/lib/docker
+    echo "/dev/nvme1n1 /var/lib/docker xfs defaults 0 0" | sudo tee -a /etc/fstab
+  fi
 fi
 
 # Restart Docker to apply changes
@@ -42,26 +42,26 @@ echo "[3/10] Installing Docker Compose..."
 sudo yum install -y docker-compose-plugin 2>/dev/null || true
 
 # Check if docker-compose command works
-if ! docker-compose version &> /dev/null; then
-    # Install standalone docker-compose as fallback
-    sudo curl -SL "https://github.com/docker/compose/releases/download/v2.24.0/docker-compose-linux-x86_64" -o /usr/local/bin/docker-compose
-    sudo chmod +x /usr/local/bin/docker-compose
+if ! docker-compose version &>/dev/null; then
+  # Install standalone docker-compose as fallback
+  sudo curl -SL "https://github.com/docker/compose/releases/download/v2.24.0/docker-compose-linux-x86_64" -o /usr/local/bin/docker-compose
+  sudo chmod +x /usr/local/bin/docker-compose
 fi
 
 # Verify docker-compose works
-if docker-compose version &> /dev/null; then
-    echo "Docker Compose installed: $(docker-compose version)"
+if docker-compose version &>/dev/null; then
+  echo "Docker Compose installed: $(docker-compose version)"
 else
-    echo "WARNING: Docker Compose may not be installed correctly"
+  echo "WARNING: Docker Compose may not be installed correctly"
 fi
 
 echo "[4/10] Configuring Swap (4GB)..."
 if ! swapon --show | grep -q /swapfile; then
-    sudo fallocate -l 4G /swapfile || sudo dd if=/dev/zero of=/swapfile bs=1M count=4096
-    sudo chmod 600 /swapfile
-    sudo mkswap /swapfile
-    sudo swapon /swapfile
-    echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
+  sudo fallocate -l 4G /swapfile || sudo dd if=/dev/zero of=/swapfile bs=1M count=4096
+  sudo chmod 600 /swapfile
+  sudo mkswap /swapfile
+  sudo swapon /swapfile
+  echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
 fi
 
 echo "[5/10] Tuning swap parameters..."
@@ -71,7 +71,7 @@ sudo sysctl -p
 
 echo "[6/10] Configuring Docker daemon..."
 sudo mkdir -p /etc/docker
-sudo cat > /etc/docker/daemon.json << 'EOF'
+sudo cat >/etc/docker/daemon.json <<'EOF'
 {
   "log-driver": "json-file",
   "log-opts": {
@@ -84,12 +84,12 @@ EOF
 sudo systemctl restart docker
 
 echo "[7/10] Installing AWS CLI..."
-if ! command -v aws &> /dev/null; then
-    cd /tmp
-    curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
-    unzip -q awscliv2.zip
-    sudo ./aws/install
-    rm -rf awscliv2.zip aws
+if ! command -v aws &>/dev/null; then
+  cd /tmp
+  curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+  unzip -q awscliv2.zip
+  sudo ./aws/install
+  rm -rf awscliv2.zip aws
 fi
 
 echo "[8/10] Cloning repository..."
@@ -97,13 +97,12 @@ sudo mkdir -p /opt
 cd /opt
 
 if [ -d "mvp-aws-ia" ]; then
-    cd mvp-aws-ia
-    sudo git pull
+  cd mvp-aws-ia
+  sudo git pull
 else
-    sudo git clone https://github.com/UC-Johan-Andres/mvp-aws-ia.git
-    cd mvp-aws-ia
+  sudo git clone https://github.com/UC-Johan-Andres/mvp-aws-ia.git
+  cd mvp-aws-ia
 fi
-
 
 # Get EC2 public IP using IMDSv2 (requires token)
 echo "Obtaining EC2 metadata..."
@@ -112,8 +111,8 @@ PUBLIC_IP=$(curl -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/la
 
 # Fallback if still empty (for development/testing)
 if [ -z "$PUBLIC_IP" ]; then
-    echo "WARNING: Could not obtain EC2 public IP from metadata, using localhost"
-    PUBLIC_IP="localhost"
+  echo "WARNING: Could not obtain EC2 public IP from metadata, using localhost"
+  PUBLIC_IP="localhost"
 fi
 
 echo "Public IP: ${PUBLIC_IP}"
@@ -145,14 +144,14 @@ MONGO_ROOT_PASSWORD=$(aws ssm get-parameter --name "/ai-ecosystem/mongo-root-pas
 N8N_ENCRYPTION_KEY_FROM_SSM="$N8N_ENCRYPTION_KEY"
 
 if [ -z "$N8N_BASIC_AUTH_PASSWORD" ]; then
-    N8N_BASIC_AUTH_PASSWORD="N8nSecure2024!"
+  N8N_BASIC_AUTH_PASSWORD="N8nSecure2024!"
 fi
 
 if [ -z "$MONGO_ROOT_PASSWORD" ]; then
-    MONGO_ROOT_PASSWORD="mongo_secure_pass_2024"
+  MONGO_ROOT_PASSWORD="mongo_secure_pass_2024"
 fi
 
-cat > .env.librechat << EOF
+cat >.env.librechat <<EOF
 HOST=0.0.0.0
 PORT=3080
 MONGO_URI=mongodb://${MONGO_ROOT_USERNAME}:${MONGO_ROOT_PASSWORD}@mongo:27017/LibreChat?authSource=admin
@@ -167,7 +166,7 @@ MONGO_INITDB_ROOT_USERNAME=${MONGO_ROOT_USERNAME}
 MONGO_INITDB_ROOT_PASSWORD=${MONGO_ROOT_PASSWORD}
 EOF
 
-sudo cat > .env.chatwoot << EOF
+sudo cat >.env.chatwoot <<EOF
 RAILS_ENV=production
 POSTGRES_HOST=postgres
 POSTGRES_USERNAME=chatwoot
@@ -180,7 +179,7 @@ WEB_CONCURRENCY=1
 RAILS_MAX_THREADS=1
 EOF
 
-cat > .env.n8n << EOF
+cat >.env.n8n <<EOF
 DB_TYPE=postgresdb
 DB_POSTGRESDB_HOST=postgres
 DB_POSTGRESDB_PORT=5432
@@ -206,11 +205,11 @@ EOF
 
 # Only add N8N_ENCRYPTION_KEY if it came from SSM
 if [ -n "$N8N_ENCRYPTION_KEY_FROM_SSM" ]; then
-    echo "N8N_ENCRYPTION_KEY=${N8N_ENCRYPTION_KEY_FROM_SSM}" >> .env.n8n
+  echo "N8N_ENCRYPTION_KEY=${N8N_ENCRYPTION_KEY_FROM_SSM}" >>.env.n8n
 fi
 
 sudo mkdir -p bridge
-sudo cat > bridge/.env << EOF
+sudo cat >bridge/.env <<EOF
 BRIDGE_API_KEY=${BRIDGE_API_KEY}
 POSTGRES_HOST=postgres
 POSTGRES_PORT=5432
@@ -226,7 +225,7 @@ EOF
 
 # Generate .env file for docker-compose variable interpolation
 echo "Generating .env for docker-compose..."
-cat > .env << EOF
+cat >.env <<EOF
 POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
 REDIS_PASSWORD=${REDIS_PASSWORD}
 MONGO_ROOT_USERNAME=${MONGO_ROOT_USERNAME}
@@ -242,8 +241,8 @@ sudo docker-compose --env-file .env up -d postgres redis mongo
 
 # Step 2: Wait for PostgreSQL to be ready
 echo "Waiting for PostgreSQL to be ready..."
-until sudo docker exec postgres pg_isready -U chatwoot &> /dev/null; do
-    sleep 2
+until sudo docker exec postgres pg_isready -U chatwoot &>/dev/null; do
+  sleep 2
 done
 
 # Step 3: Create n8n user and database
@@ -253,8 +252,8 @@ sudo docker exec postgres psql -U chatwoot -d chatwoot -c "CREATE DATABASE n8n O
 
 # Step 4: Wait for MongoDB to be ready
 echo "Waiting for MongoDB to be ready..."
-until sudo docker exec mongo mongosh --eval "db.adminCommand('ping')" &> /dev/null; do
-    sleep 2
+until sudo docker exec mongo mongosh --eval "db.adminCommand('ping')" &>/dev/null; do
+  sleep 2
 done
 
 # Step 5: Start chatwoot first for migrations
