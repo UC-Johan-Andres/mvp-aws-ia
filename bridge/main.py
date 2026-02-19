@@ -131,7 +131,7 @@ DOCS_HTML = """<!DOCTYPE html>
     <p>Protected endpoints require the <code>X-API-Key</code> header with a valid API key.</p>
 
     <h2>Example</h2>
-    <pre>curl -H "X-API-Key: YOUR_API_KEY" https://sandboxai.duckdns.org/bridge/chatwoot/conversations?limit=10</pre>
+    <pre>curl -H "X-API-Key: YOUR_API_KEY" {base_url}bridge/chatwoot/conversations?limit=10</pre>
 </body>
 </html>"""
 
@@ -139,7 +139,7 @@ DOCS_HTML = """<!DOCTYPE html>
 @app.route("/", methods=["GET"])
 def docs():
     """API documentation page"""
-    return DOCS_HTML
+    return DOCS_HTML.format(base_url=request.host_url)
 
 
 @app.route("/health", methods=["GET"])

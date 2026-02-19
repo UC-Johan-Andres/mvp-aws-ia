@@ -92,14 +92,6 @@ if ! command -v aws &> /dev/null; then
     rm -rf awscliv2.zip aws
 fi
 
-echo "[7.5/10] Installing Certbot for SSL..."
-if ! command -v certbot &> /dev/null; then
-    sudo yum install -y certbot python3-certbot-nginx 2>/dev/null || true
-    if ! command -v certbot &> /dev/null; then
-        sudo pip3 install certbot certbot-nginx
-    fi
-fi
-
 echo "[8/10] Cloning repository..."
 sudo mkdir -p /opt
 cd /opt
@@ -117,18 +109,18 @@ if [ -d "new" ]; then
     cd new
 fi
 
-# Get EC2 public DNS using IMDSv2 (requires token)
+# Get EC2 public IP using IMDSv2 (requires token)
 echo "Obtaining EC2 metadata..."
 TOKEN=$(curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 300" 2>/dev/null)
-EC2_DNS=$(curl -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/public-hostname 2>/dev/null)
+PUBLIC_IP=$(curl -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/public-ipv4 2>/dev/null)
 
 # Fallback if still empty (for development/testing)
-if [ -z "$EC2_DNS" ]; then
-    echo "WARNING: Could not obtain EC2 DNS from metadata, using placeholder"
-    EC2_DNS="localhost"
+if [ -z "$PUBLIC_IP" ]; then
+    echo "WARNING: Could not obtain EC2 public IP from metadata, using localhost"
+    PUBLIC_IP="localhost"
 fi
 
-echo "EC2 DNS: ${EC2_DNS}"
+echo "Public IP: ${PUBLIC_IP}"
 
 echo "[9/10] Downloading parameters from AWS Parameter Store..."
 OPENROUTER_KEY=$(aws ssm get-parameter --name "/ai-ecosystem/openrouter-key" --with-decryption --query "Parameter.Value" --output text 2>/dev/null || echo "")
@@ -168,8 +160,8 @@ JWT_REFRESH_SECRET=${JWT_REFRESH_SECRET}
 SESSION_SECRET=${SESSION_SECRET}
 ALLOW_REGISTRATION=true
 OPENROUTER_KEY=${OPENROUTER_KEY}
-DOMAIN_CLIENT=https://sandboxai.duckdns.org/librechat
-DOMAIN_SERVER=https://sandboxai.duckdns.org/librechat
+DOMAIN_CLIENT=http://${PUBLIC_IP}/librechat
+DOMAIN_SERVER=http://${PUBLIC_IP}/librechat
 MONGO_INITDB_ROOT_USERNAME=${MONGO_ROOT_USERNAME}
 MONGO_INITDB_ROOT_PASSWORD=${MONGO_ROOT_PASSWORD}
 EOF
@@ -182,7 +174,7 @@ POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
 POSTGRES_DATABASE=chatwoot
 REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379
 SECRET_KEY_BASE=${CHATWOOT_SECRET}
-FRONTEND_URL=https://woot-sanboxai.duckdns.org
+FRONTEND_URL=http://${PUBLIC_IP}/chatwoot
 WEB_CONCURRENCY=1
 RAILS_MAX_THREADS=1
 EOF
@@ -194,15 +186,16 @@ DB_POSTGRESDB_PORT=5432
 DB_POSTGRESDB_DATABASE=n8n
 DB_POSTGRESDB_USER=n8n
 DB_POSTGRESDB_PASSWORD=${N8N_PASSWORD}
-N8N_HOST=n8n-sandboxai.duckdns.org
+N8N_HOST=${PUBLIC_IP}
 N8N_PORT=5678
 N8N_PROTOCOL=http
-N8N_EDITOR_BASE_URL=https://n8n-sandboxai.duckdns.org
+N8N_PATH=/n8n/
+N8N_EDITOR_BASE_URL=http://${PUBLIC_IP}/n8n
 NODE_ENV=production
 GENERIC_TIMEZONE=America/Bogota
 N8N_SECURE_COOKIE=false
 N8N_IGNORE_CORS=true
-WEBHOOK_URL=https://n8n-sandboxai.duckdns.org/
+WEBHOOK_URL=http://${PUBLIC_IP}/n8n/
 N8N_BASIC_AUTH_ACTIVE=true
 N8N_BASIC_AUTH_USER=${N8N_BASIC_AUTH_USER}
 N8N_BASIC_AUTH_PASSWORD=${N8N_BASIC_AUTH_PASSWORD}
@@ -264,48 +257,7 @@ until sudo docker exec mongo mongosh --eval "db.adminCommand('ping')" &> /dev/nu
     sleep 2
 done
 
-# Step 5: Generate SSL certificates for both domains
-echo "[5/10] Generating SSL certificates..."
-sudo mkdir -p /etc/letsencrypt
-
-# Stop nginx temporarily to use ports 80
-sudo docker-compose stop nginx 2>/dev/null || true
-
-# Generate certificate for sandboxai.duckdns.org (covers chatwoot and librechat)
-echo "Generating SSL for sandboxai.duckdns.org..."
-sudo certbot certonly --standalone --non-interactive --agree-tos --email admin@sandboxai.duckdns.org \
-    -d sandboxai.duckdns.org \
-    --cert-path /etc/letsencrypt/live/sandboxai.duckdns.org/fullchain.pem \
-    --key-path /etc/letsencrypt/live/sandboxai.duckdns.org/privkey.pem \
-    2>/dev/null || echo "Certificate for sandboxai.duckdns.org may already exist"
-
-# Generate certificate for n8n-sandboxai.duckdns.org
-echo "Generating SSL for n8n-sandboxai.duckdns.org..."
-sudo certbot certonly --standalone --non-interactive --agree-tos --email admin@sandboxai.duckdns.org \
-    -d n8n-sandboxai.duckdns.org \
-    --cert-path /etc/letsencrypt/live/n8n-sandboxai.duckdns.org/fullchain.pem \
-    --key-path /etc/letsencrypt/live/n8n-sandboxai.duckdns.org/privkey.pem \
-    2>/dev/null || echo "Certificate for n8n-sandboxai.duckdns.org may already exist"
-
-# Generate certificate for woot-sanboxai.duckdns.org (Chatwoot subdomain)
-echo "Generating SSL for woot-sanboxai.duckdns.org..."
-sudo certbot certonly --standalone --non-interactive --agree-tos --email admin@sandboxai.duckdns.org \
-    -d woot-sanboxai.duckdns.org \
-    --cert-path /etc/letsencrypt/live/woot-sanboxai.duckdns.org/fullchain.pem \
-    --key-path /etc/letsencrypt/live/woot-sanboxai.duckdns.org/privkey.pem \
-    2>/dev/null || echo "Certificate for woot-sanboxai.duckdns.org may already exist"
-
-# Create certificate directories if they don't exist
-sudo mkdir -p /etc/letsencrypt/live/sandboxai.duckdns.org
-sudo mkdir -p /etc/letsencrypt/live/n8n-sandboxai.duckdns.org
-sudo mkdir -p /etc/letsencrypt/live/woot-sanboxai.duckdns.org
-
-# Restart nginx
-sudo docker-compose start nginx 2>/dev/null || true
-
-echo "SSL certificates generated successfully!"
-
-# Step 6: Start chatwoot first for migrations
+# Step 5: Start chatwoot first for migrations
 echo "Starting Chatwoot for database preparation..."
 sudo docker-compose --env-file .env up -d chatwoot
 
@@ -327,11 +279,10 @@ echo "Docker storage info:"
 sudo docker system df
 echo ""
 echo "Services available at:"
-echo "  - Dashboard: https://sandboxai.duckdns.org/"
-echo "  - Chatwoot:  https://woot-sanboxai.duckdns.org/"
-echo "  - n8n:       https://n8n-sandboxai.duckdns.org/"
-echo "  - LibreChat: https://sandboxai.duckdns.org/librechat/"
-echo "  - Bridge:    https://sandboxai.duckdns.org/bridge/"
+echo "  - n8n:       http://${PUBLIC_IP}/n8n/"
+echo "  - LibreChat: http://${PUBLIC_IP}/librechat/"
+echo "  - Chatwoot:  http://${PUBLIC_IP}/chatwoot/"
+echo "  - Bridge:    http://${PUBLIC_IP}/bridge/"
 echo ""
 echo "To check status: sudo docker-compose ps"
 echo "To view logs: sudo docker-compose logs -f"
