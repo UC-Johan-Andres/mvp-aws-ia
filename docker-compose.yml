@@ -168,25 +168,23 @@ services:
         condition: service_healthy
 
   # =======================
-  # BRIDGE (Deepnote Connector)
+  # JUPYTERLAB
   # =======================
 
-  bridge:
+  jupyterlab:
     build:
-      context: ./bridge
+      context: ./jupyterlab
       dockerfile: Dockerfile
-    container_name: bridge
-    env_file:
-      - ./bridge/.env
+    container_name: jupyterlab
+    environment:
+      - JUPYTER_TOKEN=${JUPYTER_TOKEN:-changeme_jupyter_2024}
+      - TZ=${TIMEZONE:-America/Bogota}
     restart: unless-stopped
+    volumes:
+      - jupyter_notebooks:/home/jovyan/work
     networks:
       - ai_stack
-    mem_limit: 128m
-    depends_on:
-      postgres:
-        condition: service_healthy
-      mongo:
-        condition: service_healthy
+    mem_limit: 300m
 
   # =======================
   # REVERSE PROXY - Nginx
@@ -204,7 +202,7 @@ services:
       - chatwoot
       - n8n
       - librechat
-      - bridge
+      - jupyterlab
     networks:
       - ai_stack
     restart: unless-stopped
@@ -221,3 +219,4 @@ volumes:
   librechat-images:
   librechat-logs:
   librechat-data:
+  jupyter_notebooks:
