@@ -15,9 +15,12 @@ RUN useradd -m -s /bin/bash marimo_user && \
     mkdir -p /home/marimo_user/notebooks && \
     chown -R marimo_user:marimo_user /home/marimo_user
 
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
 USER marimo_user
 WORKDIR /home/marimo_user/notebooks
 
 EXPOSE 8080
 
-CMD ["marimo", "edit", "--no-token", "-p", "8080", "--host", "0.0.0.0"]
+ENTRYPOINT ["/entrypoint.sh"]

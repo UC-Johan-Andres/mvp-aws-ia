@@ -178,6 +178,7 @@ services:
     container_name: marimo
     environment:
       - TZ=${TIMEZONE:-America/Bogota}
+      - OPENROUTER_KEY=${OPENROUTER_KEY}
     restart: unless-stopped
     volumes:
       - marimo_notebooks:/home/marimo_user/notebooks

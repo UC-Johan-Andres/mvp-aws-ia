@@ -118,7 +118,7 @@ fi
 echo "Public IP: ${PUBLIC_IP}"
 
 # Domain configuration (customize if DNS is pointing to this server)
-CHATWOOT_DOMAIN="chatwoot.soylideria.com"
+CHATWOOT_DOMAIN="chatwoottest.soylideria.com"
 N8N_DOMAIN="n8ntest.soylideria.com"
 LIBRECHAT_DOMAIN="chat.soylideria.com"
 
@@ -230,6 +230,7 @@ POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
 REDIS_PASSWORD=${REDIS_PASSWORD}
 MONGO_ROOT_USERNAME=${MONGO_ROOT_USERNAME}
 MONGO_ROOT_PASSWORD=${MONGO_ROOT_PASSWORD}
+OPENROUTER_KEY=${OPENROUTER_KEY}
 TIMEZONE=America/Bogota
 EOF
 
