@@ -6,3 +6,4 @@ bridge/.env
 *.key
 *.log
 docker-compose.override.yml
+CLAUDE.md

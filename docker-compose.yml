@@ -168,20 +168,19 @@ services:
         condition: service_healthy
 
   # =======================
-  # JUPYTERLAB
+  # MARIMO
   # =======================
 
-  jupyterlab:
+  marimo:
     build:
-      context: ./jupyterlab
+      context: ./marimo
       dockerfile: Dockerfile
-    container_name: jupyterlab
+    container_name: marimo
     environment:
-      - JUPYTER_TOKEN=${JUPYTER_TOKEN:-changeme_jupyter_2024}
       - TZ=${TIMEZONE:-America/Bogota}
     restart: unless-stopped
     volumes:
-      - jupyter_notebooks:/home/jovyan/work
+      - marimo_notebooks:/home/marimo_user/notebooks
     networks:
       - ai_stack
     mem_limit: 300m
@@ -202,7 +201,7 @@ services:
       - chatwoot
       - n8n
       - librechat
-      - jupyterlab
+      - marimo
     networks:
       - ai_stack
     restart: unless-stopped
@@ -219,4 +218,4 @@ volumes:
   librechat-images:
   librechat-logs:
   librechat-data:
-  jupyter_notebooks:
+  marimo_notebooks:
