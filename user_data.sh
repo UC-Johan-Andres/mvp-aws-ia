@@ -234,6 +234,10 @@ OPENROUTER_KEY=${OPENROUTER_KEY}
 TIMEZONE=America/Bogota
 EOF
 
+echo "[9.5/10] Building bolt.diy..."
+chmod +x setup-bolt.sh
+bash setup-bolt.sh
+
 echo "[10/10] Starting services..."
 
 # Step 1: Start only databases first

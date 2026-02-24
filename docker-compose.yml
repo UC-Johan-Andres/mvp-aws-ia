@@ -187,6 +187,23 @@ services:
     mem_limit: 300m
 
   # =======================
+  # BOLT.DIY
+  # =======================
+
+  bolt:
+    image: bolt-ai:production
+    container_name: bolt
+    env_file:
+      - ./bolt.diy/.env.local
+    environment:
+      - NODE_ENV=production
+      - RUNNING_IN_DOCKER=true
+    restart: unless-stopped
+    networks:
+      - ai_stack
+    mem_limit: 512m
+
+  # =======================
   # REVERSE PROXY - Nginx
   # =======================
 
@@ -203,6 +220,7 @@ services:
       - n8n
       - librechat
       - marimo
+      - bolt
     networks:
       - ai_stack
     restart: unless-stopped
