@@ -1,4 +1,7 @@
-FROM ghcr.io/marimo-team/marimo:latest-data
+FROM python:3.11-slim
+
+COPY --from=ghcr.io/astral-sh/uv:0.4.20 /uv /bin/uv
+ENV UV_SYSTEM_PYTHON=1
 
 USER root
 
@@ -6,8 +9,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libpq-dev \
     && rm -rf /var/lib/apt/lists/*
 
-RUN pip install --no-cache-dir \
+RUN uv pip install --no-cache \
+    "marimo" \
     "websockets<14" \
+    pandas \
     psycopg2-binary \
     pymongo \
     sqlalchemy
