@@ -7,3 +7,4 @@ bridge/.env
 *.log
 docker-compose.override.yml
 CLAUDE.md
+bolt.diy/

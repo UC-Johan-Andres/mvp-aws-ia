@@ -55,7 +55,7 @@ else
   echo "WARNING: Docker Compose may not be installed correctly"
 fi
 
-echo "[4/10] Configuring Swap (4GB)..."
+echo "[4/10] Configuring Swap (6GB)..."
 if ! swapon --show | grep -q /swapfile; then
   sudo fallocate -l 6G /swapfile || sudo dd if=/dev/zero of=/swapfile bs=1M count=6144
   sudo chmod 600 /swapfile
@@ -234,9 +234,17 @@ OPENROUTER_KEY=${OPENROUTER_KEY}
 TIMEZONE=America/Bogota
 EOF
 
-echo "[9.5/10] Building bolt.diy..."
-chmod +x setup-bolt.sh
-bash setup-bolt.sh
+echo "[9.5/10] Setting up bolt.diy..."
+sudo mkdir -p bolt.diy
+cat > bolt.diy/.env.local << BOLTENV
+OPEN_ROUTER_API_KEY=${OPENROUTER_KEY}
+VITE_LOG_LEVEL=debug
+DEFAULT_NUM_CTX=32768
+BOLTENV
+echo "Pulling bolt.diy prebuilt image..."
+sudo docker pull ghcr.io/stackblitz-labs/bolt.diy:latest
+sudo docker tag ghcr.io/stackblitz-labs/bolt.diy:latest bolt-ai:production
+echo "bolt.diy image ready."
 
 echo "[10/10] Starting services..."
 
@@ -283,10 +291,11 @@ echo "Docker storage info:"
 sudo docker system df
 echo ""
 echo "Services available at:"
-echo "  - n8n:       http://${PUBLIC_IP}/n8n/"
-echo "  - LibreChat: http://${PUBLIC_IP}/librechat/"
-echo "  - Chatwoot:  http://${PUBLIC_IP}/chatwoot/"
-echo "  - Bridge:    http://${PUBLIC_IP}/bridge/"
+echo "  - n8n:       http://n8ntest.soylideria.com"
+echo "  - LibreChat: http://chat.soylideria.com"
+echo "  - Chatwoot:  http://chatwoottest.soylideria.com"
+echo "  - Marimo:    http://marimo.soylideria.com"
+echo "  - Bolt:      http://bolttest.soylideria.com"
 echo ""
 echo "To check status: sudo docker-compose ps"
 echo "To view logs: sudo docker-compose logs -f"
