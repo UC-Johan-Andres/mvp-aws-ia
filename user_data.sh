@@ -57,7 +57,7 @@ fi
 
 echo "[4/10] Configuring Swap (4GB)..."
 if ! swapon --show | grep -q /swapfile; then
-  sudo fallocate -l 4G /swapfile || sudo dd if=/dev/zero of=/swapfile bs=1M count=4096
+  sudo fallocate -l 6G /swapfile || sudo dd if=/dev/zero of=/swapfile bs=1M count=6144
   sudo chmod 600 /swapfile
   sudo mkswap /swapfile
   sudo swapon /swapfile
