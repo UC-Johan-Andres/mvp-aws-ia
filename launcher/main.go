@@ -12,7 +12,6 @@ import (
 
 const (
 	maxServices = 2
-	projectDir  = "/project"
 	port        = ":8090"
 )
 
@@ -180,36 +179,25 @@ func findOldest(running []string) string {
 	return oldest
 }
 
-func runCompose(args ...string) error {
-	cmd := exec.Command("docker-compose", args...)
-	cmd.Dir = projectDir
-	if err := cmd.Run(); err != nil {
-		// Fallback: docker compose plugin
-		fullArgs := append([]string{"compose"}, args...)
-		cmd = exec.Command("docker", fullArgs...)
-		cmd.Dir = projectDir
-		return cmd.Run()
-	}
-	return nil
-}
-
 func startService(service string) {
-	args := []string{"--env-file", ".env", "up", "-d", service}
+	targets := []string{service}
 	if extra, ok := companions[service]; ok {
-		args = append(args, extra...)
+		targets = append(targets, extra...)
 	}
-	if err := runCompose(args...); err != nil {
-		log.Printf("Error iniciando %s: %v", service, err)
+	args := append([]string{"start"}, targets...)
+	if out, err := exec.Command("docker", args...).CombinedOutput(); err != nil {
+		log.Printf("Error iniciando %s: %v\n%s", service, err, out)
 	}
 }
 
 func stopService(service string) {
-	args := []string{"--env-file", ".env", "stop", service}
+	targets := []string{service}
 	if extra, ok := companions[service]; ok {
-		args = append(args, extra...)
+		targets = append(targets, extra...)
 	}
-	if err := runCompose(args...); err != nil {
-		log.Printf("Error deteniendo %s: %v", service, err)
+	args := append([]string{"stop"}, targets...)
+	if out, err := exec.Command("docker", args...).CombinedOutput(); err != nil {
+		log.Printf("Error deteniendo %s: %v\n%s", service, err, out)
 	}
 }
 

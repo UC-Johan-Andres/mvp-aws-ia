@@ -216,7 +216,6 @@ services:
     container_name: launcher
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-      - .:/project:ro
     networks:
       - ai_stack
     mem_limit: 32m

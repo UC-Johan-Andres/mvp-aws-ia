@@ -281,6 +281,9 @@ sudo docker-compose --env-file .env stop chatwoot
 echo "Building custom images (launcher, marimo)..."
 sudo docker-compose --env-file .env build launcher marimo
 
+echo "Pre-creating on-demand containers (stopped)..."
+sudo docker-compose --env-file .env up --no-start n8n librechat marimo bolt
+
 echo "Starting core services (postgres, redis, mongo, launcher, nginx)..."
 sudo docker-compose --env-file .env up -d launcher
 sudo docker-compose --env-file .env up -d postgres redis mongo nginx
