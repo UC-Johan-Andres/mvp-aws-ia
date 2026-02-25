@@ -139,6 +139,7 @@ N8N_BASIC_AUTH_USER=$(aws ssm get-parameter --name "/ai-ecosystem/n8n-basic-auth
 N8N_BASIC_AUTH_PASSWORD=$(aws ssm get-parameter --name "/ai-ecosystem/n8n-basic-auth-password" --with-decryption --query "Parameter.Value" --output text 2>/dev/null || echo "")
 MONGO_ROOT_USERNAME=$(aws ssm get-parameter --name "/ai-ecosystem/mongo-root-username" --query "Parameter.Value" --output text 2>/dev/null || echo "librechat")
 MONGO_ROOT_PASSWORD=$(aws ssm get-parameter --name "/ai-ecosystem/mongo-root-password" --with-decryption --query "Parameter.Value" --output text 2>/dev/null || echo "")
+GITHUB_API_TOKEN=$(aws ssm get-parameter --name "/ai-ecosystem/github-api" --with-decryption --query "Parameter.Value" --output text 2>/dev/null || echo "")
 
 # N8N_ENCRYPTION_KEY: only use SSM value if provided, otherwise let n8n generate its own
 N8N_ENCRYPTION_KEY_FROM_SSM="$N8N_ENCRYPTION_KEY"
@@ -238,6 +239,7 @@ echo "[9.5/10] Setting up bolt.diy..."
 sudo mkdir -p bolt.diy
 cat > bolt.diy/.env.local << BOLTENV
 OPEN_ROUTER_API_KEY=${OPENROUTER_KEY}
+GITHUB_ACCESS_TOKEN=${GITHUB_API_TOKEN}
 VITE_LOG_LEVEL=debug
 DEFAULT_NUM_CTX=32768
 BOLTENV
