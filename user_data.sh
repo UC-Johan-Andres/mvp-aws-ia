@@ -269,19 +269,22 @@ until sudo docker exec mongo mongosh --eval "db.adminCommand('ping')" &>/dev/nul
   sleep 2
 done
 
-# Step 5: Start chatwoot first for migrations
+# Step 5: Start chatwoot for migrations only
 echo "Starting Chatwoot for database preparation..."
 sudo docker-compose --env-file .env up -d chatwoot
-
-# Step 7: Wait for Chatwoot to be ready, then run migrations
-echo "Waiting for Chatwoot to start..."
 sleep 15
 echo "Running Chatwoot database migrations..."
 sudo docker exec chatwoot bundle exec rails db:chatwoot_prepare 2>/dev/null || echo "Chatwoot DB prepare completed (or already done)"
+sudo docker-compose --env-file .env stop chatwoot
 
-# Step 8: Start all remaining services
-echo "Starting all services..."
-sudo docker-compose --env-file .env up -d --build
+# Step 8: Build custom images and start core services
+echo "Building custom images (launcher, marimo)..."
+sudo docker-compose --env-file .env build launcher marimo
+
+echo "Starting core services (postgres, redis, mongo, launcher, nginx)..."
+sudo docker-compose --env-file .env up -d launcher
+sudo docker-compose --env-file .env up -d postgres redis mongo nginx
+echo "App services available on demand via browser or ./start.sh"
 
 echo "========================================"
 echo "Provisioning complete!"

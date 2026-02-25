@@ -102,6 +102,7 @@ services:
     networks:
       - ai_stack
     mem_limit: 400m
+    restart: "no"
     depends_on:
       postgres:
         condition: service_healthy
@@ -123,6 +124,7 @@ services:
     networks:
       - ai_stack
     mem_limit: 300m
+    restart: "no"
     depends_on:
       postgres:
         condition: service_healthy
@@ -137,7 +139,7 @@ services:
     environment:
       - TZ=${TIMEZONE:-America/Bogota}
       - NODE_OPTIONS=--max-old-space-size=256
-    restart: always
+    restart: "no"
     volumes:
       - n8n_data:/home/node/.n8n
     ports:
@@ -154,7 +156,7 @@ services:
     container_name: librechat
     env_file:
       - .env.librechat
-    restart: unless-stopped
+    restart: "no"
     volumes:
       - librechat-images:/app/client/public/images
       - librechat-logs:/app/api/logs
@@ -179,7 +181,7 @@ services:
     environment:
       - TZ=${TIMEZONE:-America/Bogota}
       - OPENROUTER_KEY=${OPENROUTER_KEY}
-    restart: unless-stopped
+    restart: "no"
     volumes:
       - marimo_notebooks:/home/marimo_user/notebooks
     networks:
@@ -198,10 +200,27 @@ services:
     environment:
       - NODE_ENV=production
       - RUNNING_IN_DOCKER=true
-    restart: unless-stopped
+    restart: "no"
     networks:
       - ai_stack
     mem_limit: 512m
+
+  # =======================
+  # LAUNCHER (on-demand service activator)
+  # =======================
+
+  launcher:
+    build:
+      context: ./launcher
+      dockerfile: Dockerfile
+    container_name: launcher
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - .:/project:ro
+    networks:
+      - ai_stack
+    mem_limit: 32m
+    restart: unless-stopped
 
   # =======================
   # REVERSE PROXY - Nginx
@@ -216,11 +235,10 @@ services:
       - ./nginx.conf:/etc/nginx/nginx.conf:ro
       - ./index.html:/usr/share/nginx/html/index.html:ro
     depends_on:
-      - chatwoot
-      - n8n
-      - librechat
-      - marimo
-      - bolt
+      - postgres
+      - redis
+      - mongo
+      - launcher
     networks:
       - ai_stack
     restart: unless-stopped
