@@ -139,6 +139,7 @@ services:
     environment:
       - TZ=${TIMEZONE:-America/Bogota}
       - NODE_OPTIONS=--max-old-space-size=256
+      - N8N_TRUST_PROXY=true
     restart: "no"
     volumes:
       - n8n_data:/home/node/.n8n
