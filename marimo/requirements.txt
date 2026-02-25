@@ -1,0 +1,5 @@
+marimo
+pandas
+psycopg2-binary
+pymongo
+sqlalchemy

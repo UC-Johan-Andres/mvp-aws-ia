@@ -1,32 +1,29 @@
+# syntax=docker/dockerfile:1.4
+
 FROM python:3.11-slim
 
 COPY --from=ghcr.io/astral-sh/uv:0.4.20 /uv /bin/uv
 ENV UV_SYSTEM_PYTHON=1
+ENV PYTHONUNBUFFERED=1
 
-USER root
+WORKDIR /app
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    libpq-dev \
-    && rm -rf /var/lib/apt/lists/*
+COPY --link requirements.txt .
+RUN uv pip install --no-cache -r requirements.txt
 
-RUN uv pip install --no-cache \
-    "marimo" \
-    "websockets<14" \
-    pandas \
-    psycopg2-binary \
-    pymongo \
-    sqlalchemy
+COPY --link entrypoint.sh .
+RUN chmod +x entrypoint.sh
 
-RUN useradd -m -s /bin/bash marimo_user && \
+RUN useradd -m marimo_user && \
     mkdir -p /home/marimo_user/notebooks && \
     chown -R marimo_user:marimo_user /home/marimo_user
-
-COPY entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
 
 USER marimo_user
 WORKDIR /home/marimo_user/notebooks
 
 EXPOSE 8080
 
-ENTRYPOINT ["/entrypoint.sh"]
+HEALTHCHECK --interval=30s --timeout=3s --start-period=10s \
+  CMD curl -f http://localhost:8080/health || exit 1
+
+ENTRYPOINT ["/app/entrypoint.sh"]
