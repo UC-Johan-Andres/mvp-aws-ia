@@ -1,4 +1,4 @@
-marimo
+marimo>=0.20.2
 pandas
 psycopg2-binary
 pymongo

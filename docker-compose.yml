@@ -97,8 +97,6 @@ services:
       - RUBY_GC_HEAP_FREE_SLOTS_MAX_RATIO=0.4
     entrypoint: docker/entrypoints/rails.sh
     command: ["bundle", "exec", "rails", "s", "-p", "3000", "-b", "0.0.0.0"]
-    ports:
-      - "3000:3000"
     networks:
       - ai_stack
     mem_limit: 400m
@@ -142,8 +140,6 @@ services:
     restart: "no"
     volumes:
       - n8n_data:/home/node/.n8n
-    ports:
-      - "5678:5678"
     networks:
       - ai_stack
     mem_limit: 300m
