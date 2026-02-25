@@ -161,8 +161,8 @@ JWT_REFRESH_SECRET=${JWT_REFRESH_SECRET}
 SESSION_SECRET=${SESSION_SECRET}
 ALLOW_REGISTRATION=true
 OPENROUTER_KEY=${OPENROUTER_KEY}
-DOMAIN_CLIENT=http://${LIBRECHAT_DOMAIN}
-DOMAIN_SERVER=http://${LIBRECHAT_DOMAIN}
+DOMAIN_CLIENT=https://${LIBRECHAT_DOMAIN}
+DOMAIN_SERVER=https://${LIBRECHAT_DOMAIN}
 MONGO_INITDB_ROOT_USERNAME=${MONGO_ROOT_USERNAME}
 MONGO_INITDB_ROOT_PASSWORD=${MONGO_ROOT_PASSWORD}
 EOF
@@ -175,7 +175,7 @@ POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
 POSTGRES_DATABASE=chatwoot
 REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379
 SECRET_KEY_BASE=${CHATWOOT_SECRET}
-FRONTEND_URL=http://${CHATWOOT_DOMAIN}
+FRONTEND_URL=https://${CHATWOOT_DOMAIN}
 WEB_CONCURRENCY=1
 RAILS_MAX_THREADS=1
 EOF
@@ -189,13 +189,13 @@ DB_POSTGRESDB_USER=n8n
 DB_POSTGRESDB_PASSWORD=${N8N_PASSWORD}
 N8N_HOST=${N8N_DOMAIN}
 N8N_PORT=5678
-N8N_PROTOCOL=http
-N8N_EDITOR_BASE_URL=http://${N8N_DOMAIN}
+N8N_PROTOCOL=https
+N8N_EDITOR_BASE_URL=https://${N8N_DOMAIN}
 NODE_ENV=production
 GENERIC_TIMEZONE=America/Bogota
-N8N_SECURE_COOKIE=false
+N8N_SECURE_COOKIE=true
 N8N_IGNORE_CORS=true
-WEBHOOK_URL=http://${N8N_DOMAIN}/
+WEBHOOK_URL=https://${N8N_DOMAIN}/
 N8N_BASIC_AUTH_ACTIVE=true
 N8N_BASIC_AUTH_USER=${N8N_BASIC_AUTH_USER}
 N8N_BASIC_AUTH_PASSWORD=${N8N_BASIC_AUTH_PASSWORD}
@@ -286,9 +286,60 @@ sudo docker-compose --env-file .env build launcher marimo
 echo "Pre-creating on-demand containers (stopped)..."
 sudo docker-compose --env-file .env up --no-start n8n librechat marimo bolt
 
-echo "Starting core services (postgres, redis, mongo, launcher, nginx)..."
+echo "Starting core services (postgres, redis, mongo, launcher)..."
 sudo docker-compose --env-file .env up -d launcher
-sudo docker-compose --env-file .env up -d postgres redis mongo nginx
+sudo docker-compose --env-file .env up -d postgres redis mongo
+
+# ======================
+# SSL Bootstrap con Let's Encrypt
+# Requiere que los dominios apunten a esta instancia y el puerto 80 esté accesible
+# ======================
+LETSENCRYPT_EMAIL="admin@soylideria.com"  # Cambiar si es necesario
+CERT_DIR="/etc/letsencrypt/live/n8ntest.soylideria.com"
+
+echo "[10.5/10] Setting up SSL certificates..."
+sudo mkdir -p /var/www/certbot
+sudo mkdir -p "${CERT_DIR}"
+
+# Crear cert autofirmado placeholder para que nginx pueda arrancar
+if [ ! -f "${CERT_DIR}/fullchain.pem" ]; then
+  echo "Generating placeholder self-signed cert..."
+  sudo openssl req -x509 -nodes -newkey rsa:2048 -days 1 \
+    -keyout "${CERT_DIR}/privkey.pem" \
+    -out "${CERT_DIR}/fullchain.pem" \
+    -subj '/CN=localhost' 2>/dev/null
+fi
+
+# Arrancar nginx con cert placeholder (para servir el ACME challenge)
+echo "Starting nginx with placeholder cert..."
+sudo docker-compose --env-file .env up -d nginx
+sleep 5
+
+# Solicitar certificados reales a Let's Encrypt
+echo "Requesting Let's Encrypt certificates..."
+sudo docker run --rm \
+  -v /etc/letsencrypt:/etc/letsencrypt \
+  -v /var/www/certbot:/var/www/certbot \
+  certbot/certbot:latest certonly \
+  --webroot -w /var/www/certbot \
+  -d n8ntest.soylideria.com \
+  -d chatwoottest.soylideria.com \
+  -d chat.soylideria.com \
+  -d marimo.soylideria.com \
+  -d bolttest.soylideria.com \
+  --email "${LETSENCRYPT_EMAIL}" \
+  --agree-tos \
+  --no-eff-email \
+  --non-interactive \
+  2>&1 | tail -5 \
+  && sudo docker exec nginx nginx -s reload \
+  && echo "SSL certificates obtained successfully!" \
+  || echo "WARNING: Let's Encrypt request failed. Running with self-signed cert (HTTPS will show browser warning)."
+
+# Cron para renovación automática cada 12 horas
+echo "Setting up certbot renewal cron..."
+(sudo crontab -l 2>/dev/null; echo "0 0,12 * * * docker run --rm -v /etc/letsencrypt:/etc/letsencrypt -v /var/www/certbot:/var/www/certbot certbot/certbot:latest renew --quiet 2>/dev/null && docker exec nginx nginx -s reload 2>/dev/null") | sudo crontab -
+
 echo "App services available on demand via browser or ./start.sh"
 
 echo "========================================"
@@ -299,11 +350,12 @@ echo "Docker storage info:"
 sudo docker system df
 echo ""
 echo "Services available at:"
-echo "  - n8n:       http://n8ntest.soylideria.com"
-echo "  - LibreChat: http://chat.soylideria.com"
-echo "  - Chatwoot:  http://chatwoottest.soylideria.com"
-echo "  - Marimo:    http://marimo.soylideria.com"
-echo "  - Bolt:      http://bolttest.soylideria.com"
+echo "  - n8n:       https://n8ntest.soylideria.com"
+echo "  - LibreChat: https://chat.soylideria.com"
+echo "  - Chatwoot:  https://chatwoottest.soylideria.com"
+echo "  - Marimo:    https://marimo.soylideria.com"
+echo "  - Bolt:      https://bolttest.soylideria.com"
 echo ""
+echo "NOTE: Puerto 443 debe estar abierto en el Security Group de AWS"
 echo "To check status: sudo docker-compose ps"
 echo "To view logs: sudo docker-compose logs -f"
