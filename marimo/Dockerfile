@@ -14,12 +14,9 @@ RUN uv pip install --no-cache -r requirements.txt
 COPY --link entrypoint.sh .
 RUN chmod +x entrypoint.sh
 
-RUN useradd -m marimo_user && \
-    mkdir -p /home/marimo_user/notebooks && \
-    chown -R marimo_user:marimo_user /home/marimo_user
+RUN mkdir -p /root/notebooks
 
-USER marimo_user
-WORKDIR /home/marimo_user/notebooks
+WORKDIR /root/notebooks
 
 EXPOSE 8080
 

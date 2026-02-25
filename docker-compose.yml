@@ -179,7 +179,7 @@ services:
       - OPENROUTER_KEY=${OPENROUTER_KEY}
     restart: "no"
     volumes:
-      - marimo_notebooks:/home/marimo_user/notebooks
+      - marimo_notebooks:/root/notebooks
     networks:
       - ai_stack
     mem_limit: 300m

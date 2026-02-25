@@ -1,8 +1,8 @@
 #!/bin/bash
 
-mkdir -p /home/marimo_user/.config/marimo
+mkdir -p /root/.config/marimo
 
-cat > /home/marimo_user/.config/marimo/marimo.toml << TOML
+cat > /root/.config/marimo/marimo.toml << TOML
 [ai.models]
 chat_model = "openrouter/z-ai/glm-4.5-air:free"
 edit_model = "openrouter/z-ai/glm-4.5-air:free"
