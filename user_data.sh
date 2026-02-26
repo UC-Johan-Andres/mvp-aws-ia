@@ -316,9 +316,37 @@ sudo docker run --rm \
   && echo "SSL certificates obtained successfully!" \
   || echo "WARNING: Let's Encrypt request failed. Running with self-signed cert (HTTPS will show browser warning)."
 
-# Cron para renovación automática cada 12 horas
-echo "Setting up certbot renewal cron..."
-(sudo crontab -l 2>/dev/null; echo "0 0,12 * * * docker run --rm -v /etc/letsencrypt:/etc/letsencrypt -v /var/www/certbot:/var/www/certbot certbot/certbot:latest renew --quiet 2>/dev/null && docker exec nginx nginx -s reload 2>/dev/null") | sudo crontab -
+# Renovación automática de certificados cada 12 horas via systemd timer
+echo "Setting up certbot renewal timer..."
+sudo tee /etc/systemd/system/certbot-renew.service > /dev/null <<'EOF'
+[Unit]
+Description=Certbot renewal
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/docker run --rm \
+  -v /etc/letsencrypt:/etc/letsencrypt \
+  -v /var/www/certbot:/var/www/certbot \
+  certbot/certbot:latest renew --quiet
+ExecStartPost=/usr/bin/docker exec nginx nginx -s reload
+EOF
+
+sudo tee /etc/systemd/system/certbot-renew.timer > /dev/null <<'EOF'
+[Unit]
+Description=Run certbot renewal twice daily
+
+[Timer]
+OnCalendar=*-*-* 00,12:00:00
+RandomizedDelaySec=1h
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+EOF
+
+sudo systemctl daemon-reload
+sudo systemctl enable --now certbot-renew.timer
+echo "Certbot renewal timer active: $(sudo systemctl status certbot-renew.timer --no-pager -l | grep Active)"
 
 echo "App services available on demand via browser or ./start.sh"
 
