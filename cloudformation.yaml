@@ -12,9 +12,9 @@ Parameters:
     Description: EC2 instance type (t4g.small recommended — 2 GB RAM, Graviton2 ARM)
 
   AmiId:
-    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
-    Default: /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-arm64
-    Description: AMI ID for the EC2 instance (resolves latest Amazon Linux 2023 ARM64 for the current region)
+    Type: String
+    Default: ami-0bea3ccc607167c10
+    Description: AMI ID para Amazon Linux 2023 ARM64 (us-east-1). Cambiar si se despliega en otra región.
 
   KeyName:
     Type: AWS::EC2::KeyPair::KeyName
