@@ -193,11 +193,11 @@ services:
       context: ./bolt
     image: bolt-ai:production
     container_name: bolt
-    env_file:
-      - ./bolt.diy/.env.local  # creado por user_data.sh paso 9.5
     environment:
       - NODE_ENV=production
       - RUNNING_IN_DOCKER=true
+    volumes:
+      - ./bolt.diy/.env.local:/app/.env.local:ro
     restart: "no"
     networks:
       - ai_stack
