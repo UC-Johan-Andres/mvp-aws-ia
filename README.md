@@ -182,15 +182,10 @@ scp bolt.tar ec2-user@<IP_EC2>:/home/ec2-user/bolt.tar
 │   ├── main.go               # Activador on-demand con LRU (Go)
 │   ├── Dockerfile            # Multi-stage: golang:1.22-alpine → alpine:3.19
 │   └── go.mod
-├── marimo/
-│   ├── Dockerfile            # python:3.14-slim + uv
-│   ├── entrypoint.sh         # Genera marimo.toml con OpenRouter y lanza el servidor
-│   └── requirements.txt      # marimo, pandas, psycopg2-binary, pymongo, sqlalchemy
-└── bridge/                   # Componente opcional — no activo en el stack principal
-    ├── main.py               # Flask API: datos de Chatwoot (PG) y LibreChat (Mongo)
-    ├── Dockerfile
-    ├── docker-compose.yml
-    └── pyproject.toml
+└── marimo/
+    ├── Dockerfile            # python:3.14-slim + uv
+    ├── entrypoint.sh         # Genera marimo.toml con OpenRouter y lanza el servidor
+    └── requirements.txt      # marimo, pandas, psycopg2-binary, pymongo, sqlalchemy
 ```
 
 ---
@@ -289,4 +284,4 @@ sudo docker system df
 
 ## Known issues
 
-- **Race condition en el Launcher**: requests simultáneos pueden duplicar operaciones de start/stop. Pendiente agregar mutex global sobre el bloque de evicción.
+Ninguno conocido actualmente.
