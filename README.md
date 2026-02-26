@@ -75,10 +75,51 @@ Usa `docker start` / `docker stop` directamente, sin docker-compose dentro del c
 ## Infraestructura AWS
 
 - **EC2**: t3.micro — 1 GB RAM, 1 vCPU (free tier)
-- **Disco**: EBS, expandido al arranque con `growpart` + `xfs_growfs`
+- **Disco**: EBS 27 GB gp3, expandido al arranque con `growpart` + `xfs_growfs`
 - **Swap**: 7 GB en `/swapfile`, `vm.swappiness=80`
 - **Secretos**: AWS Parameter Store (SSM) — ningún secreto en el repositorio
-- **Aprovisionamiento**: `user_data.sh` configura la instancia completa en el primer boot
+- **IP fija**: Elastic IP asociada automáticamente al crear el stack
+
+### Despliegue desde la consola de AWS
+
+**Prerequisitos antes de crear el stack:**
+
+1. Tener los parámetros SSM creados (ver sección más abajo)
+2. Tener un Key Pair de EC2 creado
+3. Tener una Elastic IP reservada y obtener su Allocation ID:
+   ```
+   EC2 → Red y seguridad → Direcciones IP elásticas
+   → Seleccionar la IP → copiar "ID de asignación" (eipalloc-xxxxxxxx)
+   ```
+
+**Crear el stack:**
+```
+CloudFormation → Crear stack → Cargar archivo de plantilla → cloudformation.yaml
+```
+
+Parámetros a completar:
+
+| Parámetro | Valor |
+|---|---|
+| `InstanceType` | `t3.micro` (default) |
+| `KeyName` | Nombre de tu Key Pair |
+| `SSHLocation` | Tu IP (`x.x.x.x/32`) o `0.0.0.0/0` |
+| `EIPAllocationId` | `eipalloc-xxxxxxxx` (Allocation ID de tu Elastic IP) |
+
+**Después de que el stack esté en `CREATE_COMPLETE`:**
+
+```bash
+# 1. Conectarse a la instancia
+ssh -i tu-key.pem ec2-user@<elastic-ip>
+
+# 2. Subir la imagen de bolt (desde tu máquina local)
+scp -i tu-key.pem bolt.tar ec2-user@<elastic-ip>:/home/ec2-user/bolt.tar
+
+# 3. Ejecutar el script de aprovisionamiento
+sudo bash /opt/mvp-aws-ia/user_data.sh
+```
+
+El script instala Docker, configura swap, descarga secretos de SSM, levanta los servicios y obtiene los certificados SSL. Tarda ~10 minutos.
 
 ### Parámetros SSM
 
