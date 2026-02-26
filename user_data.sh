@@ -41,11 +41,21 @@ echo "[3/10] Installing Docker Compose..."
 # Install Docker Compose plugin (recommended for Amazon Linux 2023)
 sudo yum install -y docker-compose-plugin 2>/dev/null || true
 
-# Check if docker-compose command works
+# Ensure 'docker-compose' (hyphen) command is available
 if ! docker-compose version &>/dev/null; then
-  # Install standalone docker-compose as fallback
-  sudo curl -SL "https://github.com/docker/compose/releases/download/v2.24.0/docker-compose-linux-x86_64" -o /usr/local/bin/docker-compose
-  sudo chmod +x /usr/local/bin/docker-compose
+  if docker compose version &>/dev/null; then
+    # Plugin disponible como 'docker compose' — crear shim para compatibilidad
+    sudo tee /usr/local/bin/docker-compose > /dev/null <<'SHIM'
+#!/bin/sh
+exec docker compose "$@"
+SHIM
+    sudo chmod +x /usr/local/bin/docker-compose
+  else
+    # Descargar binario standalone para la arquitectura correcta (x86_64 o aarch64)
+    ARCH=$(uname -m)
+    sudo curl -SL "https://github.com/docker/compose/releases/download/v2.24.0/docker-compose-linux-${ARCH}" -o /usr/local/bin/docker-compose
+    sudo chmod +x /usr/local/bin/docker-compose
+  fi
 fi
 
 # Verify docker-compose works
