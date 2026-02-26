@@ -25,6 +25,10 @@ Parameters:
     Default: 0.0.0.0/0
     Description: IP range for SSH access (use your IP for security)
 
+  EIPAllocationId:
+    Type: String
+    Description: Allocation ID of the existing Elastic IP (eipalloc-xxxxxxxx) for 44.209.115.156
+
 Resources:
 
   VPC:
@@ -192,6 +196,12 @@ Resources:
         - Key: Name
           Value: !Sub AI-Ecosystem-EC2
 
+  EIPAssociation:
+    Type: AWS::EC2::EIPAssociation
+    Properties:
+      AllocationId: !Ref EIPAllocationId
+      InstanceId: !Ref EC2Instance
+
 Outputs:
   InstanceID:
     Description: EC2 Instance ID
@@ -214,5 +224,5 @@ Outputs:
     Value: !Ref PublicSubnet1
 
   SSHCommand:
-    Description: Command to SSH into the instance
-    Value: !Sub 'ssh -i ${KeyName}.pem ec2-user@${EC2Instance.PublicDnsName}'
+    Description: Command to SSH into the instance via Elastic IP
+    Value: !Sub 'ssh -i ${KeyName}.pem ec2-user@44.209.115.156'
