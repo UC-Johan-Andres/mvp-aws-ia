@@ -187,9 +187,7 @@ Resources:
           #!/bin/bash
           cd /opt
           git clone https://github.com/UC-Johan-Andres/mvp-aws-ia.git
-          cd mvp-aws-ia
-          chmod +x user_data.sh
-          bash user_data.sh
+          chmod +x /opt/mvp-aws-ia/user_data.sh
       Tags:
         - Key: Name
           Value: !Sub AI-Ecosystem-EC2
