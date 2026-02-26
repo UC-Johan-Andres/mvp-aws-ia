@@ -12,7 +12,7 @@ sudo xfs_growfs / 2>/dev/null || true
 
 echo "[1/10] Updating system and installing dependencies..."
 sudo yum update -y
-sudo yum install -y git unzip
+sudo yum install -y git unzip openssl
 
 echo "[2/10] Installing Docker..."
 if ! command -v docker &>/dev/null; then
@@ -96,7 +96,8 @@ sudo systemctl restart docker
 echo "[7/10] Installing AWS CLI..."
 if ! command -v aws &>/dev/null; then
   cd /tmp
-  curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+  ARCH=$(uname -m)  # x86_64 o aarch64
+  curl "https://awscli.amazonaws.com/awscli-exe-linux-${ARCH}.zip" -o "awscliv2.zip"
   unzip -q awscliv2.zip
   sudo ./aws/install
   rm -rf awscliv2.zip aws
@@ -235,7 +236,13 @@ sudo docker-compose --env-file .env up -d postgres redis mongo
 
 # Step 2: Wait for PostgreSQL to be ready
 echo "Waiting for PostgreSQL to be ready..."
+PG_RETRIES=0
 until sudo docker exec postgres pg_isready -U chatwoot &>/dev/null; do
+  PG_RETRIES=$((PG_RETRIES + 1))
+  if [ $PG_RETRIES -ge 30 ]; then
+    echo "ERROR: PostgreSQL did not become ready after 60 seconds. Aborting."
+    exit 1
+  fi
   sleep 2
 done
 
@@ -246,28 +253,42 @@ sudo docker exec postgres psql -U chatwoot -d chatwoot -c "CREATE DATABASE n8n O
 
 # Step 4: Wait for MongoDB to be ready
 echo "Waiting for MongoDB to be ready..."
+MONGO_RETRIES=0
 until sudo docker exec mongo mongosh --eval "db.adminCommand('ping')" &>/dev/null; do
+  MONGO_RETRIES=$((MONGO_RETRIES + 1))
+  if [ $MONGO_RETRIES -ge 30 ]; then
+    echo "ERROR: MongoDB did not become ready after 60 seconds. Aborting."
+    exit 1
+  fi
   sleep 2
 done
 
 # Step 5: Start chatwoot for migrations only
 echo "Starting Chatwoot for database preparation..."
 sudo docker-compose --env-file .env up -d chatwoot
-sleep 15
+echo "Waiting for Chatwoot to be ready for migrations..."
+CW_RETRIES=0
+until sudo docker exec chatwoot bundle exec rails runner "puts 'ok'" &>/dev/null; do
+  CW_RETRIES=$((CW_RETRIES + 1))
+  if [ $CW_RETRIES -ge 40 ]; then
+    echo "WARNING: Chatwoot did not become ready after 80 seconds, attempting migration anyway..."
+    break
+  fi
+  sleep 2
+done
 echo "Running Chatwoot database migrations..."
 sudo docker exec chatwoot bundle exec rails db:chatwoot_prepare 2>/dev/null || echo "Chatwoot DB prepare completed (or already done)"
 sudo docker-compose --env-file .env stop chatwoot
 
-# Step 8: Build custom images and start core services
+# Step 6: Build custom images and start core services
 echo "Building custom images (launcher, marimo)..."
 sudo docker-compose --env-file .env build launcher marimo
 
 echo "Pre-creating on-demand containers (stopped)..."
-sudo docker-compose --env-file .env up --no-start n8n librechat marimo bolt
+sudo docker-compose --env-file .env up --no-start n8n librechat chatwoot chatwoot_sidekiq marimo bolt
 
 echo "Starting core services (postgres, redis, mongo, launcher)..."
 sudo docker-compose --env-file .env up -d launcher
-sudo docker-compose --env-file .env up -d postgres redis mongo
 
 # ======================
 # SSL Bootstrap con Let's Encrypt
@@ -292,10 +313,21 @@ fi
 # Arrancar nginx con cert placeholder (para servir el ACME challenge)
 echo "Starting nginx with placeholder cert..."
 sudo docker-compose --env-file .env up -d nginx
-sleep 5
+
+# Esperar a que nginx esté listo antes de lanzar certbot
+NGINX_RETRIES=0
+until sudo docker exec nginx nginx -t &>/dev/null; do
+  NGINX_RETRIES=$((NGINX_RETRIES + 1))
+  if [ $NGINX_RETRIES -ge 15 ]; then
+    echo "WARNING: nginx no respondió en 30s, continuando de todas formas..."
+    break
+  fi
+  sleep 2
+done
 
 # Solicitar certificados reales a Let's Encrypt
 echo "Requesting Let's Encrypt certificates..."
+set +e
 sudo docker run --rm \
   -v /etc/letsencrypt:/etc/letsencrypt \
   -v /var/www/certbot:/var/www/certbot \
@@ -311,6 +343,7 @@ sudo docker run --rm \
   --no-eff-email \
   --non-interactive
 CERTBOT_EXIT=$?
+set -e
 
 # Certbot crea el cert como -0001 si el placeholder ya ocupa el nombre original.
 # Detectar y crear symlink para que nginx apunte al cert real.
