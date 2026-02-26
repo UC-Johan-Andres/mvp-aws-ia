@@ -310,11 +310,25 @@ sudo docker run --rm \
   --email "${LETSENCRYPT_EMAIL}" \
   --agree-tos \
   --no-eff-email \
-  --non-interactive \
-  2>&1 | tail -5 \
-  && sudo docker exec nginx nginx -s reload \
-  && echo "SSL certificates obtained successfully!" \
-  || echo "WARNING: Let's Encrypt request failed. Running with self-signed cert (HTTPS will show browser warning)."
+  --non-interactive
+CERTBOT_EXIT=$?
+
+# Certbot crea el cert como -0001 si el placeholder ya ocupa el nombre original.
+# Detectar y crear symlink para que nginx apunte al cert real.
+if [ -d "${CERT_DIR}-0001" ]; then
+  echo "Detected -0001 suffix, creating symlink..."
+  sudo rm -rf "${CERT_DIR}"
+  sudo ln -s "${CERT_DIR}-0001" "${CERT_DIR}"
+  # Limpiar renewal config roto del placeholder
+  sudo rm -f "/etc/letsencrypt/renewal/n8ntest.soylideria.com.conf"
+fi
+
+if [ $CERTBOT_EXIT -eq 0 ]; then
+  sudo docker exec nginx nginx -s reload
+  echo "SSL certificates obtained successfully!"
+else
+  echo "WARNING: Let's Encrypt request failed. Running with self-signed cert (HTTPS will show browser warning)."
+fi
 
 # Renovación automática de certificados cada 12 horas via systemd timer
 echo "Setting up certbot renewal timer..."
