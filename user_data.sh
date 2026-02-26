@@ -223,9 +223,8 @@ OPEN_ROUTER_API_KEY=${OPENROUTER_KEY}
 VITE_LOG_LEVEL=debug
 DEFAULT_NUM_CTX=32768
 BOLTENV
-echo "Loading bolt.diy image..."
-sudo docker pull ghcr.io/stackblitz-labs/bolt.diy:latest
-sudo docker tag ghcr.io/stackblitz-labs/bolt.diy:latest bolt-ai:production
+echo "Building bolt.diy image (installs wrangler on top of base image)..."
+sudo docker-compose --env-file .env build bolt
 echo "bolt.diy image ready."
 
 echo "[10/10] Starting services..."

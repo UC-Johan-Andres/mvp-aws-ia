@@ -196,7 +196,7 @@ El bootstrap SSL está incluido en `user_data.sh`:
 | `nginx` | `nginx:1.25-alpine` |
 | `launcher` | Build local — `./launcher/Dockerfile` (Go multi-stage) |
 | `marimo` | Build local — `./marimo/Dockerfile` (Python 3.14 + uv) |
-| `bolt` | `ghcr.io/stackblitz-labs/bolt.diy:latest` → taggeado como `bolt-ai:production` |
+| `bolt` | Build local — `./bolt/Dockerfile` (agrega wrangler a `ghcr.io/stackblitz-labs/bolt.diy:latest`) |
 
 ---
 

@@ -189,6 +189,8 @@ services:
   # =======================
 
   bolt:
+    build:
+      context: ./bolt
     image: bolt-ai:production
     container_name: bolt
     env_file:
