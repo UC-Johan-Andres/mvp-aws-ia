@@ -55,9 +55,9 @@ else
   echo "WARNING: Docker Compose may not be installed correctly"
 fi
 
-echo "[4/10] Configuring Swap (6GB)..."
+echo "[4/10] Configuring Swap (7GB)..."
 if ! swapon --show | grep -q /swapfile; then
-  sudo fallocate -l 6G /swapfile || sudo dd if=/dev/zero of=/swapfile bs=1M count=6144
+  sudo fallocate -l 7G /swapfile || sudo dd if=/dev/zero of=/swapfile bs=1M count=7168
   sudo chmod 600 /swapfile
   sudo mkswap /swapfile
   sudo swapon /swapfile
@@ -104,19 +104,6 @@ else
   cd mvp-aws-ia
 fi
 
-# Get EC2 public IP using IMDSv2 (requires token)
-echo "Obtaining EC2 metadata..."
-TOKEN=$(curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 300" 2>/dev/null)
-PUBLIC_IP=$(curl -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/public-ipv4 2>/dev/null)
-
-# Fallback if still empty (for development/testing)
-if [ -z "$PUBLIC_IP" ]; then
-  echo "WARNING: Could not obtain EC2 public IP from metadata, using localhost"
-  PUBLIC_IP="localhost"
-fi
-
-echo "Public IP: ${PUBLIC_IP}"
-
 # Domain configuration (customize if DNS is pointing to this server)
 CHATWOOT_DOMAIN="chatwoottest.soylideria.com"
 N8N_DOMAIN="n8ntest.soylideria.com"
@@ -125,7 +112,6 @@ LIBRECHAT_DOMAIN="chat.soylideria.com"
 echo "[9/10] Downloading parameters from AWS Parameter Store..."
 OPENROUTER_KEY=$(aws ssm get-parameter --name "/ai-ecosystem/openrouter-key" --with-decryption --query "Parameter.Value" --output text 2>/dev/null || echo "")
 CHATWOOT_SECRET=$(aws ssm get-parameter --name "/ai-ecosystem/chatwoot-secret" --with-decryption --query "Parameter.Value" --output text 2>/dev/null || echo "")
-BRIDGE_API_KEY=$(aws ssm get-parameter --name "/ai-ecosystem/bridge-api-key" --with-decryption --query "Parameter.Value" --output text 2>/dev/null || echo "")
 POSTGRES_PASSWORD=$(aws ssm get-parameter --name "/ai-ecosystem/postgres-password" --with-decryption --query "Parameter.Value" --output text 2>/dev/null || echo "chatwoot_secure_pass_2024")
 REDIS_PASSWORD=$(aws ssm get-parameter --name "/ai-ecosystem/redis-password" --with-decryption --query "Parameter.Value" --output text 2>/dev/null || echo "redis_secure_pass_2024")
 N8N_PASSWORD=$(aws ssm get-parameter --name "/ai-ecosystem/n8n-db-password" --with-decryption --query "Parameter.Value" --output text 2>/dev/null || echo "n8n_secure_pass_2024")
@@ -139,7 +125,6 @@ N8N_BASIC_AUTH_USER=$(aws ssm get-parameter --name "/ai-ecosystem/n8n-basic-auth
 N8N_BASIC_AUTH_PASSWORD=$(aws ssm get-parameter --name "/ai-ecosystem/n8n-basic-auth-password" --with-decryption --query "Parameter.Value" --output text 2>/dev/null || echo "")
 MONGO_ROOT_USERNAME=$(aws ssm get-parameter --name "/ai-ecosystem/mongo-root-username" --query "Parameter.Value" --output text 2>/dev/null || echo "librechat")
 MONGO_ROOT_PASSWORD=$(aws ssm get-parameter --name "/ai-ecosystem/mongo-root-password" --with-decryption --query "Parameter.Value" --output text 2>/dev/null || echo "")
-GITHUB_API_TOKEN=$(aws ssm get-parameter --name "/ai-ecosystem/github-api" --with-decryption --query "Parameter.Value" --output text 2>/dev/null || echo "")
 
 # N8N_ENCRYPTION_KEY: only use SSM value if provided, otherwise let n8n generate its own
 N8N_ENCRYPTION_KEY_FROM_SSM="$N8N_ENCRYPTION_KEY"
@@ -209,20 +194,6 @@ if [ -n "$N8N_ENCRYPTION_KEY_FROM_SSM" ]; then
   echo "N8N_ENCRYPTION_KEY=${N8N_ENCRYPTION_KEY_FROM_SSM}" >>.env.n8n
 fi
 
-sudo mkdir -p bridge
-sudo cat >bridge/.env <<EOF
-BRIDGE_API_KEY=${BRIDGE_API_KEY}
-POSTGRES_HOST=postgres
-POSTGRES_PORT=5432
-POSTGRES_DB=chatwoot
-POSTGRES_USER=chatwoot
-POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
-MONGO_HOST=mongo
-MONGO_PORT=27017
-MONGO_DB=LibreChat
-MONGO_ROOT_USERNAME=${MONGO_ROOT_USERNAME}
-MONGO_ROOT_PASSWORD=${MONGO_ROOT_PASSWORD}
-EOF
 
 # Generate .env file for docker-compose variable interpolation
 echo "Generating .env for docker-compose..."
@@ -239,13 +210,19 @@ echo "[9.5/10] Setting up bolt.diy..."
 sudo mkdir -p bolt.diy
 cat > bolt.diy/.env.local << BOLTENV
 OPEN_ROUTER_API_KEY=${OPENROUTER_KEY}
-GITHUB_ACCESS_TOKEN=${GITHUB_API_TOKEN}
 VITE_LOG_LEVEL=debug
 DEFAULT_NUM_CTX=32768
 BOLTENV
-echo "Pulling bolt.diy prebuilt image..."
-sudo docker pull ghcr.io/stackblitz-labs/bolt.diy:latest
-sudo docker tag ghcr.io/stackblitz-labs/bolt.diy:latest bolt-ai:production
+echo "Loading bolt.diy image..."
+# Primero intenta cargar imagen local (subida manualmente con scp antes del despliegue)
+if [ -f "/home/ec2-user/bolt.tar" ]; then
+  sudo docker load < /home/ec2-user/bolt.tar
+  echo "bolt.diy image loaded from local tar."
+else
+  echo "Local tar not found, pulling from registry..."
+  sudo docker pull ghcr.io/stackblitz-labs/bolt.diy:latest
+  sudo docker tag ghcr.io/stackblitz-labs/bolt.diy:latest bolt-ai:production
+fi
 echo "bolt.diy image ready."
 
 echo "[10/10] Starting services..."

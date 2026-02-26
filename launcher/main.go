@@ -122,19 +122,26 @@ func triggerStart(service string) {
 		return
 	}
 
-	// Si hay maxServices activos, apagar el más antiguo
+	// Si hay maxServices activos, determinar cuál apagar
+	var toEvict string
 	running := getRunningServices()
 	if len(running) >= maxServices {
-		oldest := findOldest(running)
-		mu.Unlock()
-		log.Printf("Límite alcanzado — deteniendo %s (más antiguo)", oldest)
-		stopService(oldest)
-		mu.Lock()
-		delete(active, oldest)
+		toEvict = findOldest(running)
+		// Eliminar del mapa ahora, con el lock tomado, para que ninguna otra
+		// goroutine seleccione el mismo servicio para evicción
+		delete(active, toEvict)
 	}
 
+	// Registrar el servicio como "iniciando" antes de soltar el mutex,
+	// para que goroutines concurrentes del mismo servicio salgan antes
 	active[service] = &serviceState{startedAt: time.Now(), starting: true}
 	mu.Unlock()
+
+	// Operaciones lentas fuera del lock
+	if toEvict != "" {
+		log.Printf("Límite alcanzado — deteniendo %s (más antiguo)", toEvict)
+		stopService(toEvict)
+	}
 
 	log.Printf("Iniciando %s...", service)
 	startService(service)
