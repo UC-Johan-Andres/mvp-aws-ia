@@ -12,9 +12,9 @@ Parameters:
     Description: EC2 instance type (t3.micro recommended for this stack)
 
   AmiId:
-    Type: AWS::EC2::Image::Id
-    Default: ami-0c1fe732b5494dc14
-    Description: AMI ID for the EC2 instance (Amazon Linux 2023)
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64
+    Description: AMI ID for the EC2 instance (resolves latest Amazon Linux 2023 for the current region)
 
   KeyName:
     Type: AWS::EC2::KeyPair::KeyName
@@ -121,14 +121,6 @@ Resources:
           FromPort: 443
           ToPort: 443
           CidrIp: 0.0.0.0/0
-        - IpProtocol: tcp
-          FromPort: 3000
-          ToPort: 3000
-          CidrIp: 0.0.0.0/0
-        - IpProtocol: tcp
-          FromPort: 8080
-          ToPort: 8080
-          CidrIp: !Ref SSHLocation
       Tags:
         - Key: Name
           Value: !Sub AI-Ecosystem-SG
