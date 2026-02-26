@@ -182,7 +182,7 @@ services:
       - marimo_notebooks:/root/notebooks
     networks:
       - ai_stack
-    mem_limit: 300m
+    mem_limit: 512m
 
   # =======================
   # BOLT.DIY

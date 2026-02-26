@@ -276,7 +276,7 @@ base_url = "https://openrouter.ai/api/v1/"
 | n8n | 300 MB | On-demand |
 | LibreChat | 256 MB | On-demand |
 | Chatwoot + Sidekiq | 700 MB | On-demand |
-| Marimo | 300 MB | On-demand |
+| Marimo | 512 MB | On-demand |
 | Bolt.diy | 512 MB | On-demand |
 
 Con **7 GB de swap** la instancia maneja los servicios on-demand sin OOM.
