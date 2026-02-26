@@ -214,15 +214,8 @@ VITE_LOG_LEVEL=debug
 DEFAULT_NUM_CTX=32768
 BOLTENV
 echo "Loading bolt.diy image..."
-# Primero intenta cargar imagen local (subida manualmente con scp antes del despliegue)
-if [ -f "/home/ec2-user/bolt.tar" ]; then
-  sudo docker load < /home/ec2-user/bolt.tar
-  echo "bolt.diy image loaded from local tar."
-else
-  echo "Local tar not found, pulling from registry..."
-  sudo docker pull ghcr.io/stackblitz-labs/bolt.diy:latest
-  sudo docker tag ghcr.io/stackblitz-labs/bolt.diy:latest bolt-ai:production
-fi
+sudo docker pull ghcr.io/stackblitz-labs/bolt.diy:latest
+sudo docker tag ghcr.io/stackblitz-labs/bolt.diy:latest bolt-ai:production
 echo "bolt.diy image ready."
 
 echo "[10/10] Starting services..."

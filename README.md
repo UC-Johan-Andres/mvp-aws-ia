@@ -74,7 +74,7 @@ Usa `docker start` / `docker stop` directamente, sin docker-compose dentro del c
 
 ## Infraestructura AWS
 
-- **EC2**: t3.micro — 1 GB RAM, 1 vCPU (free tier)
+- **EC2**: t4g.small — 2 GB RAM, 2 vCPU (Graviton2 ARM64)
 - **Disco**: EBS 27 GB gp3, expandido al arranque con `growpart` + `xfs_growfs`
 - **Swap**: 7 GB en `/swapfile`, `vm.swappiness=80`
 - **Secretos**: AWS Parameter Store (SSM) — ningún secreto en el repositorio
@@ -112,10 +112,7 @@ Parámetros a completar:
 # 1. Conectarse a la instancia
 ssh -i tu-key.pem ec2-user@<elastic-ip>
 
-# 2. Subir la imagen de bolt (desde tu máquina local)
-scp -i tu-key.pem bolt.tar ec2-user@<elastic-ip>:/home/ec2-user/bolt.tar
-
-# 3. Ejecutar el script de aprovisionamiento
+# 2. Ejecutar el script de aprovisionamiento
 sudo bash /opt/mvp-aws-ia/user_data.sh
 ```
 
@@ -190,7 +187,7 @@ El bootstrap SSL está incluido en `user_data.sh`:
 
 | Servicio | Imagen / Origen |
 |---|---|
-| `postgres` | `blacknoob20/pg15vector-alpine` (PostgreSQL 15 + pgvector) |
+| `postgres` | `pgvector/pgvector:pg15` (PostgreSQL 15 + pgvector, multi-arch) |
 | `redis` | `redis:7-alpine` |
 | `mongo` | `mongo:6.0` |
 | `chatwoot` | `chatwoot/chatwoot:latest` |
@@ -199,14 +196,7 @@ El bootstrap SSL está incluido en `user_data.sh`:
 | `nginx` | `nginx:1.25-alpine` |
 | `launcher` | Build local — `./launcher/Dockerfile` (Go multi-stage) |
 | `marimo` | Build local — `./marimo/Dockerfile` (Python 3.14 + uv) |
-| `bolt` | Tar pre-compilado subido manualmente → taggeado como `bolt-ai:production` |
-
-### Despliegue de la imagen de bolt
-Antes de aprovisionar la instancia, subir el tar a EC2:
-```bash
-scp bolt.tar ec2-user@<IP_EC2>:/home/ec2-user/bolt.tar
-```
-`user_data.sh` la carga automáticamente si la encuentra en esa ruta. Si no existe, hace pull de `ghcr.io/stackblitz-labs/bolt.diy:latest` como fallback.
+| `bolt` | `ghcr.io/stackblitz-labs/bolt.diy:latest` → taggeado como `bolt-ai:production` |
 
 ---
 

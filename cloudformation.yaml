@@ -4,17 +4,17 @@ Description: 'AI Ecosystem - EC2 Infrastructure (N8n, Chatwoot, LibreChat, Bridg
 Parameters:
   InstanceType:
     Type: String
-    Default: t3.micro
+    Default: t4g.small
     AllowedValues:
-      - t2.micro
-      - t3.micro
-      - t3.small
-    Description: EC2 instance type (t3.micro recommended for this stack)
+      - t4g.micro
+      - t4g.small
+      - t4g.medium
+    Description: EC2 instance type (t4g.small recommended — 2 GB RAM, Graviton2 ARM)
 
   AmiId:
     Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
-    Default: /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64
-    Description: AMI ID for the EC2 instance (resolves latest Amazon Linux 2023 for the current region)
+    Default: /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-arm64
+    Description: AMI ID for the EC2 instance (resolves latest Amazon Linux 2023 ARM64 for the current region)
 
   KeyName:
     Type: AWS::EC2::KeyPair::KeyName
