@@ -1,6 +1,6 @@
 # AI Ecosystem
 
-Plataforma de herramientas de IA integradas, desplegada en AWS EC2 con Docker Compose. Combina varios servicios open-source bajo un único reverse proxy nginx con HTTPS, activados bajo demanda para optimizar el uso de memoria en instancias pequeñas (t3.micro / free tier).
+Plataforma de herramientas de IA integradas, desplegada en AWS EC2 con Docker Compose. Combina varios servicios open-source bajo un único reverse proxy nginx con HTTPS, activados bajo demanda para optimizar el uso de memoria en instancias pequeñas (t4g.small, Graviton2 ARM64).
 
 ---
 
@@ -101,7 +101,7 @@ Parámetros a completar:
 
 | Parámetro | Valor |
 |---|---|
-| `InstanceType` | `t3.micro` (default) |
+| `InstanceType` | `t4g.small` (default) |
 | `KeyName` | Nombre de tu Key Pair |
 | `SSHLocation` | Tu IP (`x.x.x.x/32`) o `0.0.0.0/0` |
 | `EIPAllocationId` | `eipalloc-xxxxxxxx` (Allocation ID de tu Elastic IP) |
