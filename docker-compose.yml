@@ -212,6 +212,10 @@ services:
       context: ./launcher
       dockerfile: Dockerfile
     container_name: launcher
+    environment:
+      - AUTH_USER=${BOLT_AUTH_USER:-admin}
+      - AUTH_PASSWORD=${BOLT_AUTH_PASSWORD}
+      - SESSION_SECRET=${SESSION_SECRET}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
     networks:

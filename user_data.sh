@@ -136,6 +136,8 @@ N8N_BASIC_AUTH_USER=$(aws ssm get-parameter --name "/ai-ecosystem/n8n-basic-auth
 N8N_BASIC_AUTH_PASSWORD=$(aws ssm get-parameter --name "/ai-ecosystem/n8n-basic-auth-password" --with-decryption --query "Parameter.Value" --output text 2>/dev/null || echo "")
 MONGO_ROOT_USERNAME=$(aws ssm get-parameter --name "/ai-ecosystem/mongo-root-username" --query "Parameter.Value" --output text 2>/dev/null || echo "librechat")
 MONGO_ROOT_PASSWORD=$(aws ssm get-parameter --name "/ai-ecosystem/mongo-root-password" --with-decryption --query "Parameter.Value" --output text 2>/dev/null || echo "")
+BOLT_AUTH_USER=$(aws ssm get-parameter --name "/ai-ecosystem/bolt-auth-user" --query "Parameter.Value" --output text 2>/dev/null || echo "admin")
+BOLT_AUTH_PASSWORD=$(aws ssm get-parameter --name "/ai-ecosystem/bolt-auth-password" --with-decryption --query "Parameter.Value" --output text 2>/dev/null || echo "")
 
 # N8N_ENCRYPTION_KEY: only use SSM value if provided, otherwise let n8n generate its own
 N8N_ENCRYPTION_KEY_FROM_SSM="$N8N_ENCRYPTION_KEY"
@@ -215,6 +217,9 @@ MONGO_ROOT_USERNAME=${MONGO_ROOT_USERNAME}
 MONGO_ROOT_PASSWORD=${MONGO_ROOT_PASSWORD}
 OPENROUTER_KEY=${OPENROUTER_KEY}
 TIMEZONE=America/Bogota
+BOLT_AUTH_USER=${BOLT_AUTH_USER}
+BOLT_AUTH_PASSWORD=${BOLT_AUTH_PASSWORD}
+SESSION_SECRET=${SESSION_SECRET}
 EOF
 
 echo "[9.5/10] Setting up bolt.diy..."
