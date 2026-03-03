@@ -294,10 +294,10 @@ sudo docker-compose --env-file .env build launcher marimo
 echo "Building docker-agent binary..."
 cd /opt/mvp-aws-ia/docker-agent
 sudo docker build -f Dockerfile.build --target builder -t docker-agent-builder .
-sudo docker rm -f _agent_export 2>/dev/null || true
-sudo docker create --name _agent_export docker-agent-builder
-sudo docker cp _agent_export:/build/docker-agent /usr/local/bin/docker-agent
-sudo docker rm _agent_export && sudo docker rmi docker-agent-builder
+sudo docker rm -f agent-export 2>/dev/null || true
+sudo docker create --name agent-export docker-agent-builder
+sudo docker cp agent-export:/build/docker-agent /usr/local/bin/docker-agent
+sudo docker rm agent-export && sudo docker rmi docker-agent-builder
 sudo chmod +x /usr/local/bin/docker-agent
 sudo cp docker-agent.service /etc/systemd/system/
 sudo systemctl daemon-reload
