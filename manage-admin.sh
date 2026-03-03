@@ -39,8 +39,13 @@ cmd_n8n_basic_auth() {
   new_user="${new_user:-$current_user}"
   new_pass=$(read_password "Nueva contraseña")
 
-  sed -i "s|^N8N_BASIC_AUTH_USER=.*|N8N_BASIC_AUTH_USER=${new_user}|" "$ENV_FILE"
-  sed -i "s|^N8N_BASIC_AUTH_PASSWORD=.*|N8N_BASIC_AUTH_PASSWORD=${new_pass}|" "$ENV_FILE"
+  python3 -c "
+import re, sys
+content = open(sys.argv[1]).read()
+content = re.sub(r'N8N_BASIC_AUTH_USER=.*', 'N8N_BASIC_AUTH_USER=' + sys.argv[2], content)
+content = re.sub(r'N8N_BASIC_AUTH_PASSWORD=.*', 'N8N_BASIC_AUTH_PASSWORD=' + sys.argv[3], content)
+open(sys.argv[1], 'w').write(content)
+" "$ENV_FILE" "$new_user" "$new_pass"
 
   cd "$COMPOSE_DIR"
   docker-compose --env-file .env up -d n8n

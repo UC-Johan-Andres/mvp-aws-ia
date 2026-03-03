@@ -310,7 +310,8 @@ sudo ./manage-admin.sh <comando>
 | `n8n-basic-auth` | Cambia el usuario/contraseña de HTTP Basic Auth de n8n y reinicia el servicio |
 | `n8n-reset-users` | Borra todos los usuarios internos de n8n para poder re-registrar el owner desde la UI |
 | `chatwoot-set-password` | Cambia la contraseña de un usuario Chatwoot existente por email |
-| `chatwoot-create-admin` | Crea un nuevo SuperAdmin + administrador de cuenta en Chatwoot |
+| `chatwoot-create-admin` | Crea un nuevo SuperAdmin + cuenta si no existe ninguna |
+| `chatwoot-create-account` | Crea una cuenta nueva y asocia un usuario existente como administrador |
 
 ---
 
