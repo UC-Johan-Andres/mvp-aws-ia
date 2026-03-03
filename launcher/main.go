@@ -114,7 +114,7 @@ var loginPage = template.Must(template.New("login").Parse(`<!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>Acceso — Bolt.diy</title>
+    <title>Acceso — AI Ecosystem</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body {
@@ -165,7 +165,7 @@ var loginPage = template.Must(template.New("login").Parse(`<!DOCTYPE html>
 </head>
 <body>
     <div class="card">
-        <h2>Bolt.diy</h2>
+        <h2>AI Ecosystem</h2>
         {{if .Error}}<p class="error">{{.Error}}</p>{{end}}
         <form method="POST" action="/auth/login">
             <div class="field">
