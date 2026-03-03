@@ -1,15 +1,16 @@
 package main
 
 import (
+	"bufio"
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
 	"html/template"
 	"log"
+	"net"
 	"net/http"
 	"os"
-	"os/exec"
 	"strconv"
 	"strings"
 	"sync"
@@ -27,6 +28,7 @@ var (
 	authUser      = getEnv("AUTH_USER", "admin")
 	authPassword  = getEnv("AUTH_PASSWORD", "")
 	sessionSecret = getEnv("SESSION_SECRET", "change_me")
+	agentSocket   = getEnv("AGENT_SOCKET", "/var/run/docker-agent.sock")
 )
 
 func getEnv(key, fallback string) string {
@@ -210,6 +212,7 @@ func handleAuthLogin(w http.ResponseWriter, r *http.Request) {
 				Name:     cookieName,
 				Value:    makeToken(),
 				Path:     "/",
+				Domain:   ".soylideria.com",
 				HttpOnly: true,
 				Secure:   true,
 				SameSite: http.SameSiteLaxMode,
@@ -328,12 +331,23 @@ func triggerStart(service string) {
 	log.Printf("%s iniciado", service)
 }
 
-func isRunning(service string) bool {
-	out, err := exec.Command("docker", "inspect", "-f", "{{.State.Running}}", service).Output()
+func agentCall(command string) (string, error) {
+	conn, err := net.Dial("unix", agentSocket)
 	if err != nil {
-		return false
+		return "", fmt.Errorf("dial agent: %w", err)
 	}
-	return strings.TrimSpace(string(out)) == "true"
+	defer conn.Close()
+	fmt.Fprintf(conn, "%s\n", command)
+	scanner := bufio.NewScanner(conn)
+	if !scanner.Scan() {
+		return "", fmt.Errorf("no response from agent")
+	}
+	return strings.TrimSpace(scanner.Text()), nil
+}
+
+func isRunning(service string) bool {
+	resp, err := agentCall("STATUS " + service)
+	return err == nil && resp == "RUNNING"
 }
 
 func getRunningServices() []string {
@@ -365,9 +379,9 @@ func startService(service string) {
 	if extra, ok := companions[service]; ok {
 		targets = append(targets, extra...)
 	}
-	args := append([]string{"start"}, targets...)
-	if out, err := exec.Command("docker", args...).CombinedOutput(); err != nil {
-		log.Printf("Error iniciando %s: %v\n%s", service, err, out)
+	resp, err := agentCall("START " + strings.Join(targets, " "))
+	if err != nil || resp != "OK" {
+		log.Printf("Error iniciando %s: %v %s", service, err, resp)
 	}
 }
 
@@ -376,9 +390,9 @@ func stopService(service string) {
 	if extra, ok := companions[service]; ok {
 		targets = append(targets, extra...)
 	}
-	args := append([]string{"stop"}, targets...)
-	if out, err := exec.Command("docker", args...).CombinedOutput(); err != nil {
-		log.Printf("Error deteniendo %s: %v\n%s", service, err, out)
+	resp, err := agentCall("STOP " + strings.Join(targets, " "))
+	if err != nil || resp != "OK" {
+		log.Printf("Error deteniendo %s: %v %s", service, err, resp)
 	}
 }
 

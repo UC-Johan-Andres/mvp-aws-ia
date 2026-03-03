@@ -1,0 +1,16 @@
+[Unit]
+Description=Docker Agent — restricted Unix socket
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/docker-agent
+Restart=always
+RestartSec=3
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=docker-agent
+
+[Install]
+WantedBy=multi-user.target

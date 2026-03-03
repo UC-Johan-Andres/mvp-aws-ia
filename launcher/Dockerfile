@@ -4,7 +4,6 @@ COPY go.mod main.go ./
 RUN go build -o launcher .
 
 FROM alpine:3.19
-RUN apk add --no-cache docker-cli
 COPY --from=builder /app/launcher /app/launcher
 WORKDIR /app
 EXPOSE 8090

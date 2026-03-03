@@ -157,7 +157,7 @@ MONGO_URI=mongodb://${MONGO_ROOT_USERNAME}:${MONGO_ROOT_PASSWORD}@mongo:27017/Li
 JWT_SECRET=${JWT_SECRET}
 JWT_REFRESH_SECRET=${JWT_REFRESH_SECRET}
 SESSION_SECRET=${SESSION_SECRET}
-ALLOW_REGISTRATION=true
+ALLOW_REGISTRATION=false
 OPENROUTER_KEY=${OPENROUTER_KEY}
 DOMAIN_CLIENT=https://${LIBRECHAT_DOMAIN}
 DOMAIN_SERVER=https://${LIBRECHAT_DOMAIN}
@@ -288,6 +288,31 @@ sudo docker-compose --env-file .env stop chatwoot
 # Step 6: Build custom images and start core services
 echo "Building custom images (launcher, marimo)..."
 sudo docker-compose --env-file .env build launcher marimo
+
+# Step 6.5: Build and install docker-agent
+echo "Building docker-agent binary..."
+cd /opt/mvp-aws-ia/docker-agent
+sudo docker build -f Dockerfile.build -t docker-agent-builder .
+sudo docker create --name _agent_export docker-agent-builder
+sudo docker cp _agent_export:/docker-agent /usr/local/bin/docker-agent
+sudo docker rm _agent_export && sudo docker rmi docker-agent-builder
+sudo chmod +x /usr/local/bin/docker-agent
+sudo cp docker-agent.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable docker-agent
+sudo systemctl start docker-agent
+# Esperar a que el socket esté listo antes de iniciar launcher
+AGENT_RETRIES=0
+until [ -S /var/run/docker-agent.sock ]; do
+  AGENT_RETRIES=$((AGENT_RETRIES + 1))
+  if [ $AGENT_RETRIES -ge 10 ]; then
+    echo "ERROR: docker-agent socket no apareció. Abortando."
+    sudo systemctl status docker-agent --no-pager -l; exit 1
+  fi
+  sleep 1
+done
+echo "docker-agent listo en /var/run/docker-agent.sock"
+cd /opt/mvp-aws-ia
 
 echo "Pre-creating on-demand containers (stopped)..."
 sudo docker-compose --env-file .env up --no-start n8n librechat chatwoot chatwoot_sidekiq marimo bolt

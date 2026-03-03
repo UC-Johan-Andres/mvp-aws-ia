@@ -1,0 +1,7 @@
+FROM golang:1.22-alpine AS builder
+WORKDIR /build
+COPY go.mod main.go ./
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o docker-agent .
+
+FROM scratch AS export
+COPY --from=builder /build/docker-agent /docker-agent

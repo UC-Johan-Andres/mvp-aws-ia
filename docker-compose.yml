@@ -217,7 +217,7 @@ services:
       - AUTH_PASSWORD=${BOLT_AUTH_PASSWORD}
       - SESSION_SECRET=${SESSION_SECRET}
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
+      - /var/run/docker-agent.sock:/var/run/docker-agent.sock:ro
     networks:
       - ai_stack
     mem_limit: 32m
