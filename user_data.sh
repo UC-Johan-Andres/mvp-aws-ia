@@ -114,6 +114,7 @@ else
   sudo git clone https://github.com/UC-Johan-Andres/mvp-aws-ia.git
   cd mvp-aws-ia
 fi
+sudo chmod 700 /opt/mvp-aws-ia/manage-admin.sh
 
 # Domain configuration (customize if DNS is pointing to this server)
 CHATWOOT_DOMAIN="chatwoottest.soylideria.com"

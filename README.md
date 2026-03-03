@@ -62,13 +62,20 @@ Servicio propio escrito en **Go** que mantiene apagados los servicios pesados cu
 ### Límite LRU
 Máximo **2 servicios** on-demand activos simultáneamente. Si se solicita un tercero, el más antiguo se detiene automáticamente.
 
-### Docker-outside-of-Docker
-El Launcher controla contenedores del host montando el socket Docker:
-```yaml
-volumes:
-  - /var/run/docker.sock:/var/run/docker.sock
+### Docker Agent — socket restringido
+El Launcher no monta el socket de Docker directamente. Un servicio systemd (`docker-agent`)
+expone un socket propio con solo 3 operaciones sobre 6 servicios en whitelist:
+
 ```
-Usa `docker start` / `docker stop` directamente, sin docker-compose dentro del contenedor.
+Launcher container
+  └── /var/run/docker-agent.sock  (START / STOP / STATUS, 6 servicios)
+docker-agent (systemd en host)
+  └── /var/run/docker.sock        (acceso completo, oculto al container)
+```
+
+Si el container Launcher es comprometido, el atacante no puede escapar al host ni
+controlar servicios fuera del whitelist (`n8n`, `librechat`, `chatwoot`,
+`chatwoot_sidekiq`, `marimo`, `bolt`).
 
 ---
 
@@ -207,8 +214,14 @@ El bootstrap SSL está incluido en `user_data.sh`:
 ├── docker-compose.yml        # Orquestación principal
 ├── nginx.conf                # Reverse proxy, SSL, COOP/COEP para Bolt
 ├── user_data.sh              # Aprovisionamiento EC2 completo (boot script)
+├── manage-admin.sh           # Gestión de usuarios n8n y Chatwoot (solo root)
 ├── librechat.yaml            # Configuración de modelos de LibreChat (OpenRouter)
 ├── index.html                # Página de inicio accesible por IP
+├── docker-agent/
+│   ├── main.go               # Servicio Go: socket Unix restringido para el Launcher
+│   ├── Dockerfile.build      # Multi-stage: compila el binario sin instalar Go en el host
+│   ├── docker-agent.service  # Unidad systemd
+│   └── go.mod
 ├── launcher/
 │   ├── main.go               # Activador on-demand con LRU (Go)
 │   ├── Dockerfile            # Multi-stage: golang:1.22-alpine → alpine:3.19
@@ -280,6 +293,24 @@ base_url = "https://openrouter.ai/api/v1/"
 | Bolt.diy | 512 MB | On-demand |
 
 Con **7 GB de swap** la instancia maneja los servicios on-demand sin OOM.
+
+---
+
+## Gestión de usuarios (`manage-admin.sh`)
+
+Script de recuperación de acceso para n8n y Chatwoot. Solo ejecutable como root en la instancia EC2. Las contraseñas se leen de forma interactiva (sin eco) y nunca se pasan como argumentos de línea de comandos.
+
+```bash
+cd /opt/mvp-aws-ia
+sudo ./manage-admin.sh <comando>
+```
+
+| Comando | Cuándo usarlo |
+|---|---|
+| `n8n-basic-auth` | Cambia el usuario/contraseña de HTTP Basic Auth de n8n y reinicia el servicio |
+| `n8n-reset-users` | Borra todos los usuarios internos de n8n para poder re-registrar el owner desde la UI |
+| `chatwoot-set-password` | Cambia la contraseña de un usuario Chatwoot existente por email |
+| `chatwoot-create-admin` | Crea un nuevo SuperAdmin + administrador de cuenta en Chatwoot |
 
 ---
 
