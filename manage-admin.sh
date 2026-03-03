@@ -14,10 +14,10 @@ fi
 read_password() {
   local prompt="$1" var ref_var
   while true; do
-    read -s -r -p "$prompt: " var; echo
-    read -s -r -p "Confirmar contraseña: " ref_var; echo
-    [ "$var" = "$ref_var" ] || { echo "Las contraseñas no coinciden. Intenta de nuevo."; continue; }
-    [ ${#var} -ge 10 ]      || { echo "Mínimo 10 caracteres."; continue; }
+    read -s -r -p "$prompt: " var; echo >&2
+    read -s -r -p "Confirmar contraseña: " ref_var; echo >&2
+    [ "$var" = "$ref_var" ] || { echo "Las contraseñas no coinciden. Intenta de nuevo." >&2; continue; }
+    [ ${#var} -ge 10 ]      || { echo "Mínimo 10 caracteres." >&2; continue; }
     break
   done
   printf '%s' "$var"
