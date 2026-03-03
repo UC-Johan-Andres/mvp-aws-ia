@@ -88,14 +88,17 @@ cmd_chatwoot_create_admin() {
 
   read -r -p "Nombre: " full_name
   read -r -p "Email: " email
+  read -r -p "Nombre de la cuenta (enter para usar 'Mi Empresa'): " account_name
+  account_name="${account_name:-Mi Empresa}"
   [ -n "$full_name" ] && [ -n "$email" ] || { echo "Nombre y email requeridos."; exit 1; }
   new_pass=$(read_password "Contraseña")
 
-  ADMIN_NAME="$full_name" ADMIN_EMAIL="$email" ADMIN_PASS="$new_pass" \
+  ADMIN_NAME="$full_name" ADMIN_EMAIL="$email" ADMIN_PASS="$new_pass" ACCOUNT_NAME="$account_name" \
   docker exec \
     -e ADMIN_NAME \
     -e ADMIN_EMAIL \
     -e ADMIN_PASS \
+    -e ACCOUNT_NAME \
     chatwoot bundle exec rails runner '
       if User.exists?(email: ENV["ADMIN_EMAIL"])
         $stderr.puts "ERROR: ya existe un usuario con ese email."
@@ -109,13 +112,33 @@ cmd_chatwoot_create_admin() {
         confirmed_at:          Time.now
       )
       SuperAdmin.create!(user: user)
-      account = Account.first
-      if account
-        AccountUser.create!(account: account, user: user, role: :administrator)
-        puts "OK: #{user.email} creado como SuperAdmin y admin de la cuenta \"#{account.name}\""
-      else
-        puts "OK: #{user.email} creado como SuperAdmin (sin cuentas aún)"
+      account = Account.first || Account.create!(name: ENV["ACCOUNT_NAME"])
+      AccountUser.create!(account: account, user: user, role: :administrator)
+      puts "OK: #{user.email} creado como SuperAdmin y admin de la cuenta \"#{account.name}\""
+    '
+}
+
+cmd_chatwoot_create_account() {
+  echo "=== Crear cuenta en Chatwoot y asociar usuario ==="
+  container_running chatwoot || { echo "ERROR: el container chatwoot no está corriendo."; exit 1; }
+
+  read -r -p "Nombre de la cuenta: " account_name
+  read -r -p "Email del usuario a asociar: " email
+  [ -n "$account_name" ] && [ -n "$email" ] || { echo "Nombre y email requeridos."; exit 1; }
+
+  ACCOUNT_NAME="$account_name" ADMIN_EMAIL="$email" \
+  docker exec \
+    -e ACCOUNT_NAME \
+    -e ADMIN_EMAIL \
+    chatwoot bundle exec rails runner '
+      user = User.find_by(email: ENV["ADMIN_EMAIL"])
+      unless user
+        $stderr.puts "ERROR: usuario #{ENV["ADMIN_EMAIL"]} no encontrado."
+        exit 1
       end
+      account = Account.create!(name: ENV["ACCOUNT_NAME"])
+      AccountUser.create!(account: account, user: user, role: :administrator)
+      puts "OK: cuenta \"#{account.name}\" creada y #{user.email} asociado como administrador"
     '
 }
 
@@ -123,14 +146,16 @@ cmd_chatwoot_create_admin() {
 case "${1:-}" in
   n8n-basic-auth)        cmd_n8n_basic_auth ;;
   n8n-reset-users)       cmd_n8n_reset_users ;;
-  chatwoot-set-password) cmd_chatwoot_set_password ;;
-  chatwoot-create-admin) cmd_chatwoot_create_admin ;;
+  chatwoot-set-password)  cmd_chatwoot_set_password ;;
+  chatwoot-create-admin)  cmd_chatwoot_create_admin ;;
+  chatwoot-create-account) cmd_chatwoot_create_account ;;
   *)
     echo "Uso: sudo $0 <comando>"
     echo ""
-    echo "  n8n-basic-auth         Cambia usuario/contraseña de HTTP Basic Auth de n8n"
-    echo "  n8n-reset-users        Borra todos los usuarios internos de n8n"
-    echo "  chatwoot-set-password  Cambia la contraseña de un usuario Chatwoot existente"
-    echo "  chatwoot-create-admin  Crea un nuevo SuperAdmin + administrador de cuenta"
+    echo "  n8n-basic-auth            Cambia usuario/contraseña de HTTP Basic Auth de n8n"
+    echo "  n8n-reset-users           Borra todos los usuarios internos de n8n"
+    echo "  chatwoot-set-password     Cambia la contraseña de un usuario Chatwoot existente"
+    echo "  chatwoot-create-admin     Crea un nuevo SuperAdmin + cuenta si no existe"
+    echo "  chatwoot-create-account   Crea una cuenta y asocia un usuario existente"
     exit 1 ;;
 esac
