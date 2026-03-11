@@ -139,6 +139,8 @@ MONGO_ROOT_USERNAME=$(aws ssm get-parameter --name "/ai-ecosystem/mongo-root-use
 MONGO_ROOT_PASSWORD=$(aws ssm get-parameter --name "/ai-ecosystem/mongo-root-password" --with-decryption --query "Parameter.Value" --output text 2>/dev/null || echo "")
 BOLT_AUTH_USER=$(aws ssm get-parameter --name "/ai-ecosystem/bolt-auth-user" --query "Parameter.Value" --output text 2>/dev/null || echo "admin")
 BOLT_AUTH_PASSWORD=$(aws ssm get-parameter --name "/ai-ecosystem/bolt-auth-password" --with-decryption --query "Parameter.Value" --output text 2>/dev/null || echo "")
+LIBRECHAT_CREDS_KEY=$(aws ssm get-parameter --name "/ai-ecosystem/librechat-creds-key" --with-decryption --query "Parameter.Value" --output text 2>/dev/null || echo "")
+LIBRECHAT_CREDS_IV=$(aws ssm get-parameter --name "/ai-ecosystem/librechat-creds-iv" --with-decryption --query "Parameter.Value" --output text 2>/dev/null || echo "")
 
 # N8N_ENCRYPTION_KEY: only use SSM value if provided, otherwise let n8n generate its own
 N8N_ENCRYPTION_KEY_FROM_SSM="$N8N_ENCRYPTION_KEY"
@@ -159,6 +161,9 @@ JWT_SECRET=${JWT_SECRET}
 JWT_REFRESH_SECRET=${JWT_REFRESH_SECRET}
 SESSION_SECRET=${SESSION_SECRET}
 ALLOW_REGISTRATION=false
+ALLOW_USER_API_KEYS=true
+CREDS_KEY=${LIBRECHAT_CREDS_KEY}
+CREDS_IV=${LIBRECHAT_CREDS_IV}
 OPENROUTER_KEY=${OPENROUTER_KEY}
 DOMAIN_CLIENT=https://${LIBRECHAT_DOMAIN}
 DOMAIN_SERVER=https://${LIBRECHAT_DOMAIN}
