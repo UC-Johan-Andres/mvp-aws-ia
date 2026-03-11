@@ -2,8 +2,8 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
+    <meta http-equiv="refresh" content="4">
     <title>Iniciando {{.Service}}...</title>
-    <script src="https://unpkg.com/htmx.org@2.0.4" defer></script>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body {
@@ -41,13 +41,7 @@
     <div class="card">
         <div class="spinner"></div>
         <h2>Iniciando <span class="service">{{.Service}}</span></h2>
-        <p>Verificando estado del servicio...</p>
-        <!-- HTMX polling: every 3s check if ready; server responds HX-Redirect when running -->
-        <div
-            hx-get="/services/{{.Service}}/ready"
-            hx-trigger="every 3s"
-            hx-swap="none">
-        </div>
+        <p>Esta página se actualizará automáticamente cada 4 segundos.</p>
     </div>
 </body>
 </html>
