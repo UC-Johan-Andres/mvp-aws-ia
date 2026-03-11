@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Iniciando {{.Service}}...</title>
+    <script src="https://unpkg.com/htmx.org@2.0.4" defer></script>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: #f0f2f5;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+        .card {
+            background: white;
+            padding: 48px 64px;
+            border-radius: 16px;
+            box-shadow: 0 4px 24px rgba(0,0,0,0.08);
+            text-align: center;
+            max-width: 420px;
+            width: 90%;
+        }
+        .spinner {
+            width: 48px; height: 48px;
+            border: 4px solid #e9ecef;
+            border-top-color: #007bff;
+            border-radius: 50%;
+            animation: spin 0.9s linear infinite;
+            margin: 0 auto 24px;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        h2 { font-size: 1.4rem; color: #1a1a2e; margin-bottom: 8px; }
+        p { color: #6c757d; font-size: 0.9rem; margin-top: 8px; }
+        .service { color: #007bff; font-weight: 600; }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <div class="spinner"></div>
+        <h2>Iniciando <span class="service">{{.Service}}</span></h2>
+        <p>Verificando estado del servicio...</p>
+        <!-- HTMX polling: every 3s check if ready; server responds HX-Redirect when running -->
+        <div
+            hx-get="/services/{{.Service}}/ready"
+            hx-trigger="every 3s"
+            hx-swap="none">
+        </div>
+    </div>
+</body>
+</html>
