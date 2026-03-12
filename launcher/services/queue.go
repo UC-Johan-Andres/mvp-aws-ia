@@ -34,14 +34,21 @@ var (
 )
 
 // syncActive reconciles the in-memory active map against actual Docker state.
+// - Adds services that are running in Docker but not tracked (e.g. after launcher restart).
+// - Removes services that were tracked as running but have stopped unexpectedly.
 // Must be called with mu held.
 func syncActive() {
 	for svc := range config.HostToService {
-		if _, tracked := active[svc]; tracked {
-			continue
-		}
-		if IsRunning(svc) {
-			active[svc] = &serviceState{startedAt: time.Now(), starting: false}
+		state, tracked := active[svc]
+		if tracked {
+			// Only verify services we think are running (not ones currently starting).
+			if !state.starting && !IsRunning(svc) {
+				delete(active, svc)
+			}
+		} else {
+			if IsRunning(svc) {
+				active[svc] = &serviceState{startedAt: time.Now(), starting: false}
+			}
 		}
 	}
 }
@@ -115,6 +122,7 @@ func processQueue() {
 }
 
 // doStart calls StartContainers and then marks the service as no longer starting.
+// If start fails, the slot is freed and the queue is processed so it doesn't stall.
 func doStart(service string) {
 	log.Printf("Iniciando %s...", service)
 	if err := StartContainers(service); err != nil {
@@ -122,6 +130,7 @@ func doStart(service string) {
 		mu.Lock()
 		delete(active, service)
 		mu.Unlock()
+		processQueue() // free the slot so the next queued service can start
 		return
 	}
 	mu.Lock()
