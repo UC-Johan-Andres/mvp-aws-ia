@@ -216,11 +216,17 @@ services:
       - AUTH_USER=${BOLT_AUTH_USER:-admin}
       - AUTH_PASSWORD=${BOLT_AUTH_PASSWORD}
       - SESSION_SECRET=${SESSION_SECRET}
+      - MONGO_URI=mongodb://${MONGO_ROOT_USERNAME}:${MONGO_ROOT_PASSWORD}@mongo:27017/LibreChat?authSource=admin
+      - N8N_INTERNAL_URL=http://n8n:5678
+      - N8N_BASIC_AUTH_USER=${N8N_BASIC_AUTH_USER}
+      - N8N_BASIC_AUTH_PASSWORD=${N8N_BASIC_AUTH_PASSWORD}
+      - N8N_OWNER_EMAIL=${BOLT_AUTH_USER}
+      - N8N_OWNER_PASSWORD=${BOLT_AUTH_PASSWORD}
     volumes:
       - /var/run/docker-agent.sock:/var/run/docker-agent.sock:ro
     networks:
       - ai_stack
-    mem_limit: 32m
+    mem_limit: 128m
     restart: unless-stopped
 
   # =======================

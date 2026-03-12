@@ -4,6 +4,7 @@ import (
 	"log"
 	"net/http"
 
+	"launcher/admin"
 	"launcher/auth"
 	"launcher/config"
 	"launcher/services"
@@ -31,6 +32,11 @@ func main() {
 	mux.HandleFunc("POST /services/{service}/stop", auth.RequireAuth(func(w http.ResponseWriter, r *http.Request) {
 		services.HandleStop(w, r, ui.RenderQueueFragment)
 	}))
+
+	// Admin — user management
+	mux.HandleFunc("/admin/librechat/users", auth.RequireAuth(admin.HandleLibreChatUsers))
+	mux.HandleFunc("/admin/librechat/users/{email}", auth.RequireAuth(admin.HandleLibreChatDeleteUser))
+	mux.HandleFunc("/admin/n8n/users", auth.RequireAuth(admin.HandleN8NUsers))
 
 	// Wake (catch-all — called by nginx @launcher on 502)
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
