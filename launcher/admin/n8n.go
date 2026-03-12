@@ -60,7 +60,7 @@ func listN8NUsers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	req, err := http.NewRequest(http.MethodGet, config.N8NInternalURL+"/api/v1/users", nil)
+	req, err := http.NewRequest(http.MethodGet, config.N8NInternalURL+"/rest/users", nil)
 	if err != nil {
 		jsonError(w, "failed to create request: "+err.Error(), http.StatusInternalServerError)
 		return
@@ -134,7 +134,7 @@ func createN8NUsers(w http.ResponseWriter, r *http.Request) {
 
 	body, _ := json.Marshal(requests)
 
-	req, err := http.NewRequest(http.MethodPost, config.N8NInternalURL+"/api/v1/users", bytes.NewReader(body))
+	req, err := http.NewRequest(http.MethodPost, config.N8NInternalURL+"/rest/users", bytes.NewReader(body))
 	if err != nil {
 		jsonError(w, "failed to create request: "+err.Error(), http.StatusInternalServerError)
 		return
