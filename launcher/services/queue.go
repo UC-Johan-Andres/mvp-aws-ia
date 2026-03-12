@@ -8,6 +8,40 @@ import (
 	"launcher/config"
 )
 
+// StartReconciler syncs Docker state immediately on startup and then every 30s.
+// This ensures the launcher always knows which containers are running, even if
+// they were started outside the launcher (e.g. manually or before a restart).
+func StartReconciler() {
+	// Initial sync — populate active before serving any requests.
+	mu.Lock()
+	syncActive()
+	mu.Unlock()
+	log.Printf("Reconciler: estado inicial — activos: %v", runningNames())
+
+	go func() {
+		ticker := time.NewTicker(30 * time.Second)
+		defer ticker.Stop()
+		for range ticker.C {
+			mu.Lock()
+			syncActive()
+			mu.Unlock()
+			processQueue() // a slot may have freed up
+		}
+	}()
+}
+
+// runningNames returns the names of currently tracked services (for logging).
+// Must NOT be called while holding mu.
+func runningNames() []string {
+	mu.Lock()
+	defer mu.Unlock()
+	names := make([]string, 0, len(active))
+	for svc := range active {
+		names = append(names, svc)
+	}
+	return names
+}
+
 // serviceState tracks when a service was registered and whether it is still starting.
 type serviceState struct {
 	startedAt time.Time

@@ -37,6 +37,9 @@ func main() {
 		services.HandleWake(w, r, ui.RenderWait, ui.RenderQueue)
 	})
 
+	// Discover running containers before serving requests.
+	services.StartReconciler()
+
 	log.Printf("Launcher escuchando en %s", config.Port)
 	log.Fatal(http.ListenAndServe(config.Port, mux))
 }
