@@ -60,21 +60,12 @@ func HandleReady(w http.ResponseWriter, r *http.Request) {
 	}
 
 	status := ServiceStatus(service)
-	switch {
-	case status == "running":
+	if status == "running" {
+		// Service is up — redirect the browser to the app.
 		w.Header().Set("HX-Redirect", "/")
-		w.WriteHeader(http.StatusOK)
-	case status == "starting":
-		// Keep polling — no action needed.
-		w.WriteHeader(http.StatusOK)
-	case strings.HasPrefix(status, "queued:"):
-		// Service moved to queue while user was on wait page — redirect to queue page.
-		w.Header().Set("HX-Redirect", "/services/queue")
-		w.WriteHeader(http.StatusOK)
-	default:
-		// Stopped / unknown — let the user retry.
-		w.WriteHeader(http.StatusOK)
 	}
+	// starting, queued, or stopped: keep polling silently.
+	w.WriteHeader(http.StatusOK)
 }
 
 // HandleQueueStatus returns an HTML fragment with the current queue state.

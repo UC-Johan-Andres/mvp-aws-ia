@@ -33,18 +33,29 @@ var (
 	queue  []QueueEntry
 )
 
+// syncActive reconciles the in-memory active map against actual Docker state.
+// Must be called with mu held.
+func syncActive() {
+	for svc := range config.HostToService {
+		if _, tracked := active[svc]; tracked {
+			continue
+		}
+		if IsRunning(svc) {
+			active[svc] = &serviceState{startedAt: time.Now(), starting: false}
+		}
+	}
+}
+
 // TriggerStart ensures the service is started. If all slots are occupied the
 // service is added to the waiting queue instead of evicting an existing one.
 func TriggerStart(service string) {
 	mu.Lock()
 
+	// Sync real Docker state so slot count is always accurate.
+	syncActive()
+
 	// Already active (starting or running) — nothing to do.
 	if _, exists := active[service]; exists {
-		mu.Unlock()
-		return
-	}
-	if IsRunning(service) {
-		active[service] = &serviceState{startedAt: time.Now(), starting: false}
 		mu.Unlock()
 		return
 	}
@@ -125,6 +136,8 @@ func doStart(service string) {
 func GetStatus() Status {
 	mu.Lock()
 	defer mu.Unlock()
+
+	syncActive()
 
 	running := make([]string, 0, len(active))
 	for svc := range active {

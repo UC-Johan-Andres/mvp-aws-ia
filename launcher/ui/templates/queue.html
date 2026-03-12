@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <title>En cola — {{.Service}}</title>
-    <script src="https://unpkg.com/htmx.org@2.0.4" defer></script>
+    <script src="https://unpkg.com/htmx.org@2.0.4"></script>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body {
@@ -103,6 +103,11 @@
         </p>
         <div class="position-badge">Posición {{.Position}} en la cola</div>
 
+        <!-- Cuando nuestro servicio arranque, redirigir automáticamente -->
+        <div hx-get="/services/{{.Service}}/ready"
+             hx-trigger="every 4s"
+             hx-swap="none"></div>
+
         <!-- HTMX polling block: every 3s fetch updated fragment -->
         <div
             id="queue-status"
@@ -122,7 +127,8 @@
                         class="btn-stop"
                         hx-post="/services/{{.}}/stop"
                         hx-target="#queue-status"
-                        hx-swap="outerHTML">
+                        hx-swap="outerHTML"
+                        hx-confirm="¿Detener {{.}}?">
                         Detener
                     </button>
                 </div>
