@@ -19,8 +19,8 @@ func n8nHTTPClient() *http.Client {
 // returning the session cookies from the response.
 func n8nLogin(client *http.Client) ([]*http.Cookie, error) {
 	body, _ := json.Marshal(map[string]string{
-		"email":    config.N8NOwnerEmail,
-		"password": config.N8NOwnerPass,
+		"emailOrLdapLoginId": config.N8NOwnerEmail,
+		"password":           config.N8NOwnerPass,
 	})
 
 	req, err := http.NewRequest(http.MethodPost, config.N8NInternalURL+"/rest/login", bytes.NewReader(body))
