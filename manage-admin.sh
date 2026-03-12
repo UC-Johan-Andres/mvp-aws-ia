@@ -147,13 +147,114 @@ cmd_chatwoot_create_account() {
     '
 }
 
+cmd_librechat_list_users() {
+  echo "=== Usuarios de LibreChat ==="
+  MONGO_USER=$(grep MONGO_ROOT_USERNAME "$COMPOSE_DIR/.env" | cut -d'=' -f2)
+  MONGO_PASS=$(grep MONGO_ROOT_PASSWORD "$COMPOSE_DIR/.env" | cut -d'=' -f2)
+  container_running mongo || { echo "ERROR: el container mongo no está corriendo."; exit 1; }
+  docker exec mongo mongosh \
+    -u "$MONGO_USER" -p "$MONGO_PASS" \
+    --authenticationDatabase admin \
+    --quiet \
+    --eval "db.getSiblingDB('LibreChat').users.find({}, {email:1, name:1, role:1, createdAt:1}).toArray()"
+}
+
+cmd_librechat_create_user() {
+  echo "=== Crear usuario en LibreChat ==="
+  container_running librechat || { echo "ERROR: el container librechat no está corriendo."; exit 1; }
+  container_running mongo || { echo "ERROR: el container mongo no está corriendo."; exit 1; }
+
+  read -r -p "Email: " email
+  read -r -p "Nombre: " name
+  read -r -p "Rol (USER/ADMIN) [USER]: " role
+  role="${role:-USER}"
+  [ "$role" = "USER" ] || [ "$role" = "ADMIN" ] || { echo "Rol inválido. Usa USER o ADMIN."; exit 1; }
+  new_pass=$(read_password "Contraseña")
+
+  MONGO_USER=$(grep MONGO_ROOT_USERNAME "$COMPOSE_DIR/.env" | cut -d'=' -f2)
+  MONGO_PASS=$(grep MONGO_ROOT_PASSWORD "$COMPOSE_DIR/.env" | cut -d'=' -f2)
+
+  # Pasar contraseña como env var para evitar problemas con caracteres especiales
+  HASH=$(docker exec -e "LC_PASS=${new_pass}" librechat node -e "
+const bcrypt = require('bcryptjs');
+bcrypt.hash(process.env.LC_PASS, 12, (err, hash) => process.stdout.write(hash));
+" 2>/dev/null)
+
+  [ -n "$HASH" ] || { echo "ERROR: no se pudo generar el hash de contraseña."; exit 1; }
+
+  USERNAME=$(echo "$email" | cut -d'@' -f1)
+
+  docker exec mongo mongosh \
+    -u "$MONGO_USER" -p "$MONGO_PASS" \
+    --authenticationDatabase admin \
+    --quiet \
+    --eval "
+      const db2 = db.getSiblingDB('LibreChat');
+      if (db2.users.findOne({email: '$email'})) {
+        print('ERROR: ya existe un usuario con ese email.');
+        quit(1);
+      }
+      db2.users.insertOne({
+        name: '$name',
+        username: '$USERNAME',
+        email: '$email',
+        password: '$HASH',
+        role: '$role',
+        provider: 'local',
+        emailVerified: true,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      });
+      print('OK: usuario $email creado con rol $role');
+    "
+}
+
+cmd_librechat_set_password() {
+  echo "=== Cambiar contraseña de usuario LibreChat ==="
+  container_running librechat || { echo "ERROR: el container librechat no está corriendo."; exit 1; }
+  container_running mongo || { echo "ERROR: el container mongo no está corriendo."; exit 1; }
+
+  read -r -p "Email del usuario: " email
+  [ -n "$email" ] || { echo "Email requerido."; exit 1; }
+  new_pass=$(read_password "Nueva contraseña")
+
+  MONGO_USER=$(grep MONGO_ROOT_USERNAME "$COMPOSE_DIR/.env" | cut -d'=' -f2)
+  MONGO_PASS=$(grep MONGO_ROOT_PASSWORD "$COMPOSE_DIR/.env" | cut -d'=' -f2)
+
+  HASH=$(docker exec -e "LC_PASS=${new_pass}" librechat node -e "
+const bcrypt = require('bcryptjs');
+bcrypt.hash(process.env.LC_PASS, 12, (err, hash) => process.stdout.write(hash));
+" 2>/dev/null)
+
+  [ -n "$HASH" ] || { echo "ERROR: no se pudo generar el hash de contraseña."; exit 1; }
+
+  docker exec mongo mongosh \
+    -u "$MONGO_USER" -p "$MONGO_PASS" \
+    --authenticationDatabase admin \
+    --quiet \
+    --eval "
+      const result = db.getSiblingDB('LibreChat').users.updateOne(
+        {email: '$email'},
+        {\$set: {password: '$HASH', updatedAt: new Date()}}
+      );
+      if (result.matchedCount === 0) {
+        print('ERROR: usuario $email no encontrado.');
+        quit(1);
+      }
+      print('OK: contraseña actualizada para $email');
+    "
+}
+
 # ── Dispatcher ────────────────────────────────────────────────────────────
 case "${1:-}" in
-  n8n-basic-auth)        cmd_n8n_basic_auth ;;
-  n8n-reset-users)       cmd_n8n_reset_users ;;
-  chatwoot-set-password)  cmd_chatwoot_set_password ;;
-  chatwoot-create-admin)  cmd_chatwoot_create_admin ;;
-  chatwoot-create-account) cmd_chatwoot_create_account ;;
+  n8n-basic-auth)           cmd_n8n_basic_auth ;;
+  n8n-reset-users)          cmd_n8n_reset_users ;;
+  chatwoot-set-password)    cmd_chatwoot_set_password ;;
+  chatwoot-create-admin)    cmd_chatwoot_create_admin ;;
+  chatwoot-create-account)  cmd_chatwoot_create_account ;;
+  librechat-list-users)     cmd_librechat_list_users ;;
+  librechat-create-user)    cmd_librechat_create_user ;;
+  librechat-set-password)   cmd_librechat_set_password ;;
   *)
     echo "Uso: sudo $0 <comando>"
     echo ""
@@ -162,5 +263,8 @@ case "${1:-}" in
     echo "  chatwoot-set-password     Cambia la contraseña de un usuario Chatwoot existente"
     echo "  chatwoot-create-admin     Crea un nuevo SuperAdmin + cuenta si no existe"
     echo "  chatwoot-create-account   Crea una cuenta y asocia un usuario existente"
+    echo "  librechat-list-users      Lista todos los usuarios de LibreChat"
+    echo "  librechat-create-user     Crea un nuevo usuario en LibreChat"
+    echo "  librechat-set-password    Cambia la contraseña de un usuario LibreChat"
     exit 1 ;;
 esac
