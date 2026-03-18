@@ -9,3 +9,4 @@ bridge/.env
 docker-compose.override.yml
 CLAUDE.md
 bolt.diy/
+deploy-gestion.sh
