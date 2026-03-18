@@ -1,0 +1,224 @@
+<div class="card-body">
+    <h4 class="section-title">USUARIOS</h4>
+
+    <div id="users-table">
+        {{if .Users}}
+        <table>
+            <thead>
+                <tr>
+                    <th>Email</th>
+                    <th>Nombre</th>
+                    <th>Rol</th>
+                    <th>Acciones</th>
+                </tr>
+            </thead>
+            <tbody>
+                {{range .Users}}
+                <tr>
+                    <td>{{.Email}}</td>
+                    <td>{{.Name}}</td>
+                    <td>
+                        <span class="role-badge {{if eq .Role "ADMIN"}}role-admin{{else if eq .Role "global:admin"}}role-admin{{else}}role-user{{end}}">
+                            {{.Role}}
+                        </span>
+                    </td>
+                    <td>
+                        {{if eq $.Tab "n8n"}}
+                        <button type="button" class="btn-small btn-invite"
+                                onclick="openInviteModal('{{.Email}}')">
+                            Invitar
+                        </button>
+                        {{end}}
+                        <button type="button" class="btn-small btn-delete" disabled title="Proximamente">
+                            Eliminar
+                        </button>
+                    </td>
+                </tr>
+                {{end}}
+            </tbody>
+        </table>
+        {{else}}
+        <div class="empty-state">
+            <p>No hay usuarios registrados.</p>
+            <p>Usa el formulario abajo para crear usuarios.</p>
+        </div>
+        {{end}}
+    </div>
+
+    <div class="form-section">
+        <h4 class="section-title">CREAR USUARIO(S)</h4>
+
+        <div class="toggle-group">
+            <label class="toggle-label">
+                <input type="radio" name="method" value="form" checked
+                       onclick="toggleMethod('form')">
+                Formulario
+            </label>
+            <label class="toggle-label">
+                <input type="radio" name="method" value="csv"
+                       onclick="toggleMethod('csv')">
+                CSV
+            </label>
+        </div>
+
+        <form id="form-method">
+            <input type="hidden" name="tab" value="{{.Tab}}">
+
+            <div class="dynamic-form {{.Tab}}-form">
+                <div class="rows-container">
+                    {{if eq .Tab "n8n"}}
+                    <div class="form-row">
+                        <input type="email" name="email" placeholder="email@ejemplo.com" required>
+                        <select name="role">
+                            <option value="global:member">global:member</option>
+                            <option value="global:admin">global:admin</option>
+                        </select>
+                        <button type="button" class="btn-remove" onclick="this.parentElement.remove()">&times;</button>
+                    </div>
+                    {{else}}
+                    <div class="form-row">
+                        <input type="email" name="email" placeholder="email@ejemplo.com" required>
+                        <input type="text" name="name" placeholder="Nombre">
+                        <input type="password" name="password" placeholder="Contrasena" required>
+                        <select name="role">
+                            <option value="USER">USER</option>
+                            <option value="ADMIN">ADMIN</option>
+                        </select>
+                        <button type="button" class="btn-remove" onclick="this.parentElement.remove()">&times;</button>
+                    </div>
+                    {{end}}
+                </div>
+                <button type="button" class="btn-add-row" onclick="addRow()">+ Agregar fila</button>
+            </div>
+
+            <div class="form-actions">
+                <button type="button" class="btn-cancel" onclick="resetForm()">Cancelar</button>
+                <button type="button" class="btn-submit" onclick="submitForm()">Crear Usuario(s)</button>
+            </div>
+        </form>
+
+        <form id="csv-method" class="csv-zone">
+            <input type="hidden" name="tab" value="{{.Tab}}">
+            <p>Arrastra un archivo CSV aqui o selecciona:</p>
+            <input type="file" id="csv-file" accept=".csv" onchange="handleCSVUpload(this)">
+            <div id="csv-preview" class="csv-preview" style="display:none;"></div>
+            <input type="hidden" name="csv_data" id="csv-data">
+            <div class="form-actions">
+                <button type="button" class="btn-cancel" onclick="resetForm()">Cancelar</button>
+                <button type="button" class="btn-submit" onclick="submitCSVForm()">Crear Usuario(s)</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+    function submitForm() {
+        const form = document.getElementById('form-method');
+        const formData = new FormData(form);
+
+        fetch('/gestion', {
+            method: 'POST',
+            body: formData
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.error) {
+                showToast('Error: ' + data.error, 'error');
+            } else {
+                showToast('Usuario(s) creado(s) exitosamente', 'success');
+                resetForm();
+                htmx.ajax('GET', '/gestion/content?tab={{.Tab}}', {
+                    target: '#main-content',
+                    swap: 'innerHTML'
+                });
+            }
+        })
+        .catch(err => {
+            showToast('Error: ' + err.message, 'error');
+        });
+    }
+
+    function submitCSVForm() {
+        const csvData = document.getElementById('csv-data').value;
+        if (!csvData) {
+            showToast('Selecciona un archivo CSV', 'error');
+            return;
+        }
+
+        const tab = '{{.Tab}}';
+        const lines = csvData.trim().split('\n');
+        const users = [];
+
+        for (let i = 1; i < lines.length; i++) {
+            const cols = lines[i].split(',').map(c => c.trim());
+            if (tab === 'n8n') {
+                users.push({ email: cols[0], role: cols[1] || 'global:member' });
+            } else {
+                users.push({ email: cols[0], name: cols[1] || '', password: cols[2] || '', role: cols[3] || 'USER' });
+            }
+        }
+
+        const formData = new FormData();
+        formData.append('tab', tab);
+        formData.append('users_json', JSON.stringify(users));
+
+        fetch('/gestion', {
+            method: 'POST',
+            body: formData
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.error) {
+                showToast('Error: ' + data.error, 'error');
+            } else {
+                showToast('Usuario(s) creado(s) exitosamente', 'success');
+                resetForm();
+                htmx.ajax('GET', '/gestion/content?tab={{.Tab}}', {
+                    target: '#main-content',
+                    swap: 'innerHTML'
+                });
+            }
+        })
+        .catch(err => {
+            showToast('Error: ' + err.message, 'error');
+        });
+    }
+
+    function resetForm() {
+        const radio = document.querySelector('input[name="method"][value="form"]');
+        if (radio) radio.checked = true;
+        toggleMethod('form');
+        document.getElementById('csv-preview').style.display = 'none';
+        document.getElementById('csv-data').value = '';
+
+        const form = document.getElementById('form-method');
+        const rowsContainer = form.querySelector('.rows-container');
+        rowsContainer.innerHTML = '';
+
+        if ('{{.Tab}}' === 'n8n') {
+            rowsContainer.innerHTML = `
+                <div class="form-row">
+                    <input type="email" name="email" placeholder="email@ejemplo.com" required>
+                    <select name="role">
+                        <option value="global:member">global:member</option>
+                        <option value="global:admin">global:admin</option>
+                    </select>
+                    <button type="button" class="btn-remove" onclick="this.parentElement.remove()">&times;</button>
+                </div>
+            `;
+        } else {
+            rowsContainer.innerHTML = `
+                <div class="form-row">
+                    <input type="email" name="email" placeholder="email@ejemplo.com" required>
+                    <input type="text" name="name" placeholder="Nombre">
+                    <input type="password" name="password" placeholder="Contrasena" required>
+                    <select name="role">
+                        <option value="USER">USER</option>
+                        <option value="ADMIN">ADMIN</option>
+                    </select>
+                    <button type="button" class="btn-remove" onclick="this.parentElement.remove()">&times;</button>
+                </div>
+            `;
+        }
+    }
+</script>

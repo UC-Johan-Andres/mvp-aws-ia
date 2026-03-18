@@ -38,6 +38,13 @@ func main() {
 	mux.HandleFunc("/admin/librechat/users/{email}", auth.RequireAuth(admin.HandleLibreChatDeleteUser))
 	mux.HandleFunc("/admin/n8n/users", auth.RequireAuth(admin.HandleN8NUsers))
 
+	// Gestion dashboard
+	mux.HandleFunc("GET /gestion", auth.RequireAuth(admin.HandleGestion))
+	mux.HandleFunc("GET /gestion/content", auth.RequireAuth(admin.HandleGestionContent))
+	mux.HandleFunc("POST /gestion", auth.RequireAuth(admin.HandleGestionSubmit))
+	mux.HandleFunc("GET /gestion/invite", auth.RequireAuth(admin.HandleInviteModal))
+	mux.HandleFunc("GET /gestion/users-rows", auth.RequireAuth(admin.HandleGestionUsersRows))
+
 	// Wake (catch-all — called by nginx @launcher on 502)
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		services.HandleWake(w, r, ui.RenderWait, ui.RenderQueue)

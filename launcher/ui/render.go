@@ -13,10 +13,14 @@ import (
 var templateFS embed.FS
 
 var (
-	tmplLogin    *template.Template
-	tmplWait     *template.Template
-	tmplQueue    *template.Template
-	tmplFragment *template.Template
+	tmplLogin       *template.Template
+	tmplWait        *template.Template
+	tmplQueue       *template.Template
+	tmplFragment    *template.Template
+	tmplGestion     *template.Template
+	tmplInviteModal *template.Template
+	tmplRows        *template.Template
+	tmplContent     *template.Template
 )
 
 // fragmentTmpl uses the same CSS classes as queue.html so styles apply correctly
@@ -71,6 +75,26 @@ func init() {
 	if err != nil {
 		log.Fatalf("ui: parse fragment: %v", err)
 	}
+
+	tmplGestion, err = template.ParseFS(templateFS, "templates/gestion.html")
+	if err != nil {
+		log.Fatalf("ui: parse gestion.html: %v", err)
+	}
+
+	tmplInviteModal, err = template.ParseFS(templateFS, "templates/invite_modal.html")
+	if err != nil {
+		log.Fatalf("ui: parse invite_modal.html: %v", err)
+	}
+
+	tmplRows, err = template.ParseFS(templateFS, "templates/gestion_rows.html")
+	if err != nil {
+		log.Fatalf("ui: parse gestion_rows.html: %v", err)
+	}
+
+	tmplContent, err = template.ParseFS(templateFS, "templates/gestion_content.html")
+	if err != nil {
+		log.Fatalf("ui: parse gestion_content.html: %v", err)
+	}
 }
 
 // RenderLogin renders the login page with an optional error message.
@@ -116,5 +140,56 @@ func RenderQueueFragment(w http.ResponseWriter, status services.Status) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if err := tmplFragment.Execute(w, status); err != nil {
 		log.Printf("ui: render fragment: %v", err)
+	}
+}
+
+// ─────────────────────────────────────────────────────────────────
+// Gestion Dashboard
+// ─────────────────────────────────────────────────────────────────
+
+type GestionData struct {
+	Tab   string
+	Users interface{}
+}
+
+// RenderGestion renders the full gestion dashboard page shell.
+func RenderGestion(w http.ResponseWriter, tab string) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	data := GestionData{Tab: tab}
+	if err := tmplGestion.Execute(w, data); err != nil {
+		log.Printf("ui: render gestion: %v", err)
+	}
+}
+
+// RenderGestionContent renders the inner content (users table + form) for HTMX swaps.
+func RenderGestionContent(w http.ResponseWriter, tab string, users interface{}) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	data := GestionData{Tab: tab, Users: users}
+	if err := tmplContent.Execute(w, data); err != nil {
+		log.Printf("ui: render gestion content: %v", err)
+	}
+}
+
+// RenderInviteModal renders the n8n invitation modal fragment.
+func RenderInviteModal(w http.ResponseWriter, email string, usersJSON string) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	data := struct {
+		Email     string
+		UsersJSON string
+	}{Email: email, UsersJSON: usersJSON}
+	if err := tmplInviteModal.Execute(w, data); err != nil {
+		log.Printf("ui: render invite modal: %v", err)
+	}
+}
+
+// RenderGestionRows renders the users table rows fragment for HTMX refresh.
+func RenderGestionRows(w http.ResponseWriter, tab string, users string) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	data := struct {
+		Tab   string
+		Users string
+	}{Tab: tab, Users: users}
+	if err := tmplRows.Execute(w, data); err != nil {
+		log.Printf("ui: render gestion rows: %v", err)
 	}
 }
