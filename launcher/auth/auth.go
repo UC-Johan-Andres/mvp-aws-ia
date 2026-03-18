@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -41,7 +42,11 @@ func HandleLogin(w http.ResponseWriter, r *http.Request, renderFn func(http.Resp
 				SameSite: http.SameSiteLaxMode,
 				MaxAge:   int(config.CookieTTL.Seconds()),
 			})
-			http.Redirect(w, r, "/", http.StatusSeeOther)
+			redirectTo := "/"
+			if redir := r.URL.Query().Get("redirect"); redir != "" {
+				redirectTo = redir
+			}
+			http.Redirect(w, r, redirectTo, http.StatusSeeOther)
 			return
 		}
 		renderFn(w, "Credenciales incorrectas")
@@ -62,11 +67,25 @@ func HandleLogout(w http.ResponseWriter, r *http.Request) {
 }
 
 // RequireAuth is a middleware that enforces authentication before calling next.
+// For GET requests without valid auth, it redirects to login with a return URL.
+// For other methods (POST, etc.), it returns 401 Unauthorized.
 func RequireAuth(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		cookie, err := r.Cookie(config.CookieName)
 		if err != nil || !ValidToken(cookie.Value) {
-			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			if r.Method == http.MethodGet {
+				redirectPath := r.URL.Path
+				if r.URL.RawQuery != "" {
+					redirectPath += "?" + r.URL.RawQuery
+				}
+				loginURL := "/auth/login"
+				if redirectPath != "/" {
+					loginURL += "?redirect=" + url.QueryEscape(redirectPath)
+				}
+				http.Redirect(w, r, loginURL, http.StatusSeeOther)
+			} else {
+				http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			}
 			return
 		}
 		next(w, r)
