@@ -89,7 +89,8 @@ func HandleGestion(w http.ResponseWriter, r *http.Request) {
 	ui.RenderGestion(w, tab)
 }
 
-// HandleGestionContent renders the inner content (users table + form) for HTMX.
+// HandleGestionContent renders the inner content (empty table + form) for HTMX.
+// Users are fetched client-side via JavaScript calling the API endpoints.
 func HandleGestionContent(w http.ResponseWriter, r *http.Request) {
 	tab := r.URL.Query().Get("tab")
 	if tab == "" {
@@ -99,20 +100,7 @@ func HandleGestionContent(w http.ResponseWriter, r *http.Request) {
 		tab = "n8n"
 	}
 
-	var users []GestionUser
-	var err error
-
-	if tab == "n8n" {
-		users, err = fetchN8NUsersStruct()
-	} else {
-		users, err = fetchLibreChatUsersStruct()
-	}
-
-	if err != nil {
-		users = []GestionUser{}
-	}
-
-	ui.RenderGestionContent(w, tab, users)
+	ui.RenderGestionContent(w, tab)
 }
 
 // HandleGestionSubmit handles POST to create users.

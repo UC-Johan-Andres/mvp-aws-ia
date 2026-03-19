@@ -1,8 +1,12 @@
 <div class="card-body">
     <h4 class="section-title">USUARIOS</h4>
 
+    <div id="loading-spinner" class="loading-spinner">
+        <div class="spinner"></div>
+        <span>Cargando usuarios...</span>
+    </div>
+
     <div id="users-table">
-        {{if .Users}}
         <table>
             <thead>
                 <tr>
@@ -12,37 +16,9 @@
                     <th>Acciones</th>
                 </tr>
             </thead>
-            <tbody>
-                {{range .Users}}
-                <tr>
-                    <td>{{.Email}}</td>
-                    <td>{{.Name}}</td>
-                    <td>
-                        <span class="role-badge {{if eq .Role "ADMIN"}}role-admin{{else if eq .Role "global:admin"}}role-admin{{else}}role-user{{end}}">
-                            {{.Role}}
-                        </span>
-                    </td>
-                    <td>
-                        {{if eq $.Tab "n8n"}}
-                        <button type="button" class="btn-small btn-invite"
-                                onclick="openInviteModal('{{.Email}}')">
-                            Invitar
-                        </button>
-                        {{end}}
-                        <button type="button" class="btn-small btn-delete" disabled title="Proximamente">
-                            Eliminar
-                        </button>
-                    </td>
-                </tr>
-                {{end}}
+            <tbody id="users-tbody">
             </tbody>
         </table>
-        {{else}}
-        <div class="empty-state">
-            <p>No hay usuarios registrados.</p>
-            <p>Usa el formulario abajo para crear usuarios.</p>
-        </div>
-        {{end}}
     </div>
 
     <div class="form-section">
@@ -62,8 +38,6 @@
         </div>
 
         <form id="form-method">
-            <input type="hidden" name="tab" value="{{.Tab}}">
-
             <div class="dynamic-form {{.Tab}}-form">
                 <div class="rows-container">
                     {{if eq .Tab "n8n"}}
@@ -79,7 +53,7 @@
                     <div class="form-row">
                         <input type="email" name="email" placeholder="email@ejemplo.com" required>
                         <input type="text" name="name" placeholder="Nombre">
-                        <input type="password" name="password" placeholder="Contrasena" required>
+                        <input type="password" name="password" placeholder="Contraseña" required>
                         <select name="role">
                             <option value="USER">USER</option>
                             <option value="ADMIN">ADMIN</option>
@@ -98,13 +72,12 @@
         </form>
 
         <form id="csv-method" class="csv-zone">
-            <input type="hidden" name="tab" value="{{.Tab}}">
             <p>Arrastra un archivo CSV aqui o selecciona:</p>
             <input type="file" id="csv-file" accept=".csv" onchange="handleCSVUpload(this)">
             <div id="csv-preview" class="csv-preview" style="display:none;"></div>
             <input type="hidden" name="csv_data" id="csv-data">
             <div class="form-actions">
-                <button type="button" class="btn-cancel" onclick="resetForm()">Cancelar</button>
+                <button type="button" class="btn-cancel" onclick="resetCSVForm()">Cancelar</button>
                 <button type="button" class="btn-submit" onclick="submitCSVForm()">Crear Usuario(s)</button>
             </div>
         </form>
@@ -112,30 +85,84 @@
 </div>
 
 <script>
-    function submitForm() {
-        const form = document.getElementById('form-method');
-        const formData = new FormData(form);
+    function addRow() {
+        const form = document.querySelector('.dynamic-form');
+        const isN8N = form.classList.contains('n8n-form');
 
-        fetch('/gestion', {
-            method: 'POST',
-            body: formData
-        })
-        .then(r => r.json())
-        .then(data => {
-            if (data.error) {
-                showToast('Error: ' + data.error, 'error');
+        const row = document.createElement('div');
+        row.className = 'form-row';
+
+        if (isN8N) {
+            row.innerHTML = `
+                <input type="email" name="email" placeholder="email@ejemplo.com" required>
+                <select name="role">
+                    <option value="global:member">global:member</option>
+                    <option value="global:admin">global:admin</option>
+                </select>
+                <button type="button" class="btn-remove" onclick="this.parentElement.remove()">&times;</button>
+            `;
+        } else {
+            row.innerHTML = `
+                <input type="email" name="email" placeholder="email@ejemplo.com" required>
+                <input type="text" name="name" placeholder="Nombre">
+                <input type="password" name="password" placeholder="Contraseña" required>
+                <select name="role">
+                    <option value="USER">USER</option>
+                    <option value="ADMIN">ADMIN</option>
+                </select>
+                <button type="button" class="btn-remove" onclick="this.parentElement.remove()">&times;</button>
+            `;
+        }
+        form.querySelector('.rows-container').appendChild(row);
+    }
+
+    function toggleMethod(method) {
+        const formMethod = method === 'form';
+        document.getElementById('form-method').style.display = formMethod ? 'block' : 'none';
+        document.getElementById('csv-method').className = formMethod ? '' : 'csv-zone active';
+    }
+
+    function handleCSVUpload(input) {
+        const file = input.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            const content = e.target.result;
+            const lines = content.trim().split('\n');
+            const count = lines.length - 1;
+            document.getElementById('csv-preview').textContent = count + ' usuario(s) detectado(s)';
+            document.getElementById('csv-data').value = content;
+        };
+        reader.readAsText(file);
+    }
+
+    function submitForm() {
+        const rows = document.querySelectorAll('.rows-container .form-row');
+        const users = [];
+        const tab = '{{.Tab}}';
+        
+        rows.forEach(row => {
+            const email = row.querySelector('input[name="email"]').value.trim();
+            const role = row.querySelector('select[name="role"]').value;
+            
+            if (!email) return;
+            
+            if (tab === 'n8n') {
+                users.push({ email, role });
             } else {
-                showToast('Usuario(s) creado(s) exitosamente', 'success');
-                resetForm();
-                htmx.ajax('GET', '/gestion/content?tab={{.Tab}}', {
-                    target: '#main-content',
-                    swap: 'innerHTML'
-                });
+                const name = row.querySelector('input[name="name"]').value.trim();
+                const password = row.querySelector('input[name="password"]').value;
+                users.push({ email, name, password, role });
             }
-        })
-        .catch(err => {
-            showToast('Error: ' + err.message, 'error');
         });
+        
+        if (users.length === 0) {
+            showToast('Ingresa al menos un email válido', 'error');
+            return;
+        }
+        
+        createUsers(users);
     }
 
     function submitCSVForm() {
@@ -151,37 +178,26 @@
 
         for (let i = 1; i < lines.length; i++) {
             const cols = lines[i].split(',').map(c => c.trim());
+            if (!cols[0]) continue;
+            
             if (tab === 'n8n') {
                 users.push({ email: cols[0], role: cols[1] || 'global:member' });
             } else {
-                users.push({ email: cols[0], name: cols[1] || '', password: cols[2] || '', role: cols[3] || 'USER' });
+                users.push({ 
+                    email: cols[0], 
+                    name: cols[1] || '', 
+                    password: cols[2] || cols[1] || '', 
+                    role: cols[3] || 'USER' 
+                });
             }
         }
 
-        const formData = new FormData();
-        formData.append('tab', tab);
-        formData.append('users_json', JSON.stringify(users));
+        if (users.length === 0) {
+            showToast('No se detectaron usuarios en el CSV', 'error');
+            return;
+        }
 
-        fetch('/gestion', {
-            method: 'POST',
-            body: formData
-        })
-        .then(r => r.json())
-        .then(data => {
-            if (data.error) {
-                showToast('Error: ' + data.error, 'error');
-            } else {
-                showToast('Usuario(s) creado(s) exitosamente', 'success');
-                resetForm();
-                htmx.ajax('GET', '/gestion/content?tab={{.Tab}}', {
-                    target: '#main-content',
-                    swap: 'innerHTML'
-                });
-            }
-        })
-        .catch(err => {
-            showToast('Error: ' + err.message, 'error');
-        });
+        createUsers(users);
     }
 
     function resetForm() {
@@ -211,7 +227,7 @@
                 <div class="form-row">
                     <input type="email" name="email" placeholder="email@ejemplo.com" required>
                     <input type="text" name="name" placeholder="Nombre">
-                    <input type="password" name="password" placeholder="Contrasena" required>
+                    <input type="password" name="password" placeholder="Contraseña" required>
                     <select name="role">
                         <option value="USER">USER</option>
                         <option value="ADMIN">ADMIN</option>
@@ -220,5 +236,12 @@
                 </div>
             `;
         }
+    }
+
+    function resetCsvForm() {
+        document.getElementById('csv-file').value = '';
+        document.getElementById('csv-preview').style.display = 'none';
+        document.getElementById('csv-preview').textContent = '';
+        document.getElementById('csv-data').value = '';
     }
 </script>

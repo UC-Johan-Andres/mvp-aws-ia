@@ -122,6 +122,7 @@
         .role-admin { background: #d4edda; color: #155724; }
         .role-user { background: #cce5ff; color: #004085; }
         .role-member { background: #cce5ff; color: #004085; }
+        .role-owner { background: #fff3cd; color: #856404; }
         .btn-small {
             padding: 4px 10px;
             border: none;
@@ -145,6 +146,26 @@
             color: #6c757d;
         }
         .empty-state p { margin-bottom: 8px; }
+
+        .loading-spinner {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            padding: 40px;
+            color: #6c757d;
+        }
+        .spinner {
+            width: 24px;
+            height: 24px;
+            border: 3px solid #e9ecef;
+            border-top-color: #007bff;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
 
         .form-section {
             border-top: 1px solid #e9ecef;
@@ -380,27 +401,29 @@
 
         <div class="card">
             <div class="tabs">
-                <button class="tab {{if eq .Tab "n8n"}}active{{end}}"
+                <button class="tab active" data-tab="n8n"
                         hx-get="/gestion/content?tab=n8n"
                         hx-target="#main-content"
-                        hx-swap="innerHTML">
+                        hx-swap="innerHTML"
+                        onclick="setActiveTab('n8n')">
                     n8n
                 </button>
-                <button class="tab {{if eq .Tab "librechat"}}active{{end}}"
+                <button class="tab" data-tab="librechat"
                         hx-get="/gestion/content?tab=librechat"
                         hx-target="#main-content"
-                        hx-swap="innerHTML">
+                        hx-swap="innerHTML"
+                        onclick="setActiveTab('librechat')">
                     LibreChat
                 </button>
             </div>
 
-            <div id="main-content" hx-get="/gestion/content?tab={{.Tab}}" hx-trigger="load" hx-swap="innerHTML">
+            <div id="main-content" hx-get="/gestion/content?tab=n8n" hx-trigger="load" hx-swap="innerHTML">
             </div>
         </div>
 
         <div class="footer-status">
             <span class="status-dot"></span>
-            Conectado a {{if eq .Tab "n8n"}}n8n{{else}}LibreChat{{end}}
+            <span id="footer-service">Conectado a n8n</span>
         </div>
     </div>
 
@@ -419,74 +442,137 @@
     </div>
 
     <script>
+        let currentTab = 'n8n';
         let currentInviteLink = '';
 
-        function addRow() {
-            const form = document.querySelector('.dynamic-form');
-            const isN8N = form.classList.contains('n8n-form');
+        function setActiveTab(tab) {
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.querySelector(`[data-tab="${tab}"]`).classList.add('active');
+            currentTab = tab;
+            document.getElementById('footer-service').textContent = 'Conectado a ' + (tab === 'n8n' ? 'n8n' : 'LibreChat');
+        }
 
-            const row = document.createElement('div');
-            row.className = 'form-row';
-
-            if (isN8N) {
-                row.innerHTML = `
-                    <input type="email" name="email" placeholder="email@ejemplo.com" required>
-                    <select name="role">
-                        <option value="global:member">global:member</option>
-                        <option value="global:admin">global:admin</option>
-                    </select>
-                    <button type="button" class="btn-remove" onclick="this.parentElement.remove()">&times;</button>
-                `;
-            } else {
-                row.innerHTML = `
-                    <input type="email" name="email" placeholder="email@ejemplo.com" required>
-                    <input type="text" name="name" placeholder="Nombre">
-                    <input type="password" name="password" placeholder="Contraseña" required>
-                    <select name="role">
-                        <option value="USER">USER</option>
-                        <option value="ADMIN">ADMIN</option>
-                    </select>
-                    <button type="button" class="btn-remove" onclick="this.parentElement.remove()">&times;</button>
-                `;
+        function showLoading(show) {
+            const spinner = document.getElementById('loading-spinner');
+            if (spinner) {
+                spinner.style.display = show ? 'flex' : 'none';
             }
-            form.querySelector('.rows-container').appendChild(row);
         }
 
-        function toggleMethod(method) {
-            const formMethod = method === 'form';
-            document.getElementById('form-method').style.display = formMethod ? 'block' : 'none';
-            document.getElementById('csv-method').className = formMethod ? '' : 'csv-zone active';
+        async function fetchUsers(tab) {
+            showLoading(true);
+            try {
+                const endpoint = tab === 'n8n' ? '/admin/n8n/users' : '/admin/librechat/users';
+                const resp = await fetch(endpoint);
+                if (!resp.ok) {
+                    const err = await resp.json().catch(() => ({error: 'Error desconocido'}));
+                    throw new Error(err.error || 'Error al obtener usuarios');
+                }
+                const data = await resp.json();
+                
+                const users = tab === 'n8n' ? (data.data ? data.data.items : []) : data;
+                renderUsersTable(users, tab);
+            } catch (err) {
+                showToast('Error: ' + err.message, 'error');
+                renderUsersTable([], tab);
+            } finally {
+                showLoading(false);
+            }
         }
 
-        function handleCSVUpload(input) {
-            const file = input.files[0];
-            if (!file) return;
-
-            const reader = new FileReader();
-            reader.onload = function(e) {
-                const content = e.target.result;
-                const lines = content.trim().split('\n');
-                const count = lines.length - 1;
-                document.getElementById('csv-preview').textContent = count + ' usuario(s) detectado(s)';
-                document.getElementById('csv-data').value = content;
-            };
-            reader.readAsText(file);
+        function renderUsersTable(users, tab) {
+            const tbody = document.getElementById('users-tbody');
+            if (!tbody) return;
+            
+            if (!users || users.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="4" class="empty-state">
+                            <p>No hay usuarios registrados.</p>
+                            <p>Usa el formulario abajo para crear usuarios.</p>
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+            
+            tbody.innerHTML = users.map(u => {
+                const roleClass = getRoleClass(u.role);
+                const name = u.firstName || u.name || '-';
+                const isPending = u.isPending === true;
+                
+                return `
+                    <tr>
+                        <td>${escapeHtml(u.email)}</td>
+                        <td>${escapeHtml(name)}</td>
+                        <td>
+                            <span class="role-badge ${roleClass}">
+                                ${escapeHtml(u.role)}${isPending ? ' (pendiente)' : ''}
+                            </span>
+                        </td>
+                        <td>
+                            ${tab === 'n8n' && u.inviteAcceptUrl ? `
+                                <button type="button" class="btn-small btn-invite" 
+                                        onclick="openInviteModalDirect('${escapeHtml(u.email)}', '${escapeHtml(u.inviteAcceptUrl)}')">
+                                    Invitar
+                                </button>
+                            ` : ''}
+                            <button type="button" class="btn-small btn-delete" disabled title="Próximamente">
+                                Eliminar
+                            </button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
         }
 
-        function showToast(message, type) {
-            const container = document.getElementById('toasts');
-            const toast = document.createElement('div');
-            toast.className = 'toast ' + type;
-            toast.textContent = message;
-            container.appendChild(toast);
-            setTimeout(() => toast.remove(), 4000);
+        function getRoleClass(role) {
+            if (role === 'ADMIN' || role === 'global:admin' || role === 'global:owner') {
+                return 'role-admin';
+            }
+            if (role === 'global:member' || role === 'USER') {
+                return 'role-user';
+            }
+            return 'role-user';
         }
 
-        function openInviteModal(email) {
-            htmx.ajax('GET', '/gestion/invite?email=' + encodeURIComponent(email), {
-                target: '#invite-link-box',
-                swap: 'innerHTML'
-            });
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        async function createUsers(users) {
+            try {
+                const endpoint = currentTab === 'n8n' ? '/admin/n8n/users' : '/admin/librechat/users';
+                const resp = await fetch(endpoint, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(users)
+                });
+                const data = await resp.json();
+                
+                if (!resp.ok) {
+                    throw new Error(data.error || (Array.isArray(data) ? data.map(d => d.error || d.Email + ': error').join(', ') : 'Error al crear usuarios'));
+                }
+                
+                const errors = Array.isArray(data) ? data.filter(d => !d.created && d.error).map(d => d.Email + ': ' + d.error) : [];
+                if (errors.length > 0) {
+                    showToast('Algunos usuarios fallaron: ' + errors.join(', '), 'error');
+                } else {
+                    showToast('Usuario(s) creado(s) exitosamente', 'success');
+                }
+                
+                fetchUsers(currentTab);
+                resetForm();
+            } catch (err) {
+                showToast('Error: ' + err.message, 'error');
+            }
+        }
+
+        function openInviteModalDirect(email, inviteUrl) {
+            currentInviteLink = inviteUrl;
+            document.getElementById('invite-link-box').textContent = inviteUrl;
             document.getElementById('invite-modal').classList.add('active');
         }
 
@@ -500,21 +586,18 @@
             });
         }
 
-        document.body.addEventListener('htmx:afterSwap', function(evt) {
-            if (evt.detail.target.id === 'invite-link-box') {
-                const linkText = evt.detail.target.textContent.trim();
-                if (linkText && linkText.startsWith('http')) {
-                    currentInviteLink = linkText;
-                }
-            }
-        });
+        function showToast(message, type) {
+            const container = document.getElementById('toasts');
+            const toast = document.createElement('div');
+            toast.className = 'toast ' + type;
+            toast.textContent = message;
+            container.appendChild(toast);
+            setTimeout(() => toast.remove(), 4000);
+        }
 
-        document.body.addEventListener('htmx:afterRequest', function(evt) {
-            if (evt.detail.successful && evt.detail.target.id !== 'invite-link-box') {
-                const form = evt.detail.target.querySelector('form');
-                if (form) {
-                    form.reset();
-                }
+        document.body.addEventListener('htmx:afterSwap', function(evt) {
+            if (evt.detail.target.id === 'main-content') {
+                fetchUsers(currentTab);
             }
         });
     </script>

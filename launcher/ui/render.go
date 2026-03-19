@@ -161,10 +161,11 @@ func RenderGestion(w http.ResponseWriter, tab string) {
 	}
 }
 
-// RenderGestionContent renders the inner content (users table + form) for HTMX swaps.
-func RenderGestionContent(w http.ResponseWriter, tab string, users interface{}) {
+// RenderGestionContent renders the inner content (empty table + form) for HTMX swaps.
+// Users are fetched client-side via JavaScript calling the API endpoints.
+func RenderGestionContent(w http.ResponseWriter, tab string) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	data := GestionData{Tab: tab, Users: users}
+	data := GestionData{Tab: tab}
 	if err := tmplContent.Execute(w, data); err != nil {
 		log.Printf("ui: render gestion content: %v", err)
 	}
