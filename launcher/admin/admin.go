@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -309,11 +310,30 @@ func fetchN8NUsersStruct() ([]GestionUser, error) {
 		return nil, fmt.Errorf("n8n returned status %d: %s", resp.StatusCode, string(data))
 	}
 
-	// n8n API returns {"data": ...} where data can be an array or single object
+	// n8n API returns {"data": {"count": N, "items": [...]}}
 	type n8nUser struct {
 		Email string `json:"email"`
 		Name  string `json:"firstName"`
 		Role  string `json:"role"`
+	}
+
+	// Try parsing as {"data": {"count": N, "items": [...]}} (paginated response)
+	var paginatedResponse struct {
+		Data struct {
+			Count int       `json:"count"`
+			Items []n8nUser `json:"items"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(data, &paginatedResponse); err == nil && len(paginatedResponse.Data.Items) > 0 {
+		users := make([]GestionUser, 0, len(paginatedResponse.Data.Items))
+		for _, u := range paginatedResponse.Data.Items {
+			users = append(users, GestionUser{
+				Email: u.Email,
+				Name:  u.Name,
+				Role:  u.Role,
+			})
+		}
+		return users, nil
 	}
 
 	// Try parsing as {"data": [...]} (array of users)
@@ -344,20 +364,7 @@ func fetchN8NUsersStruct() ([]GestionUser, error) {
 		}}, nil
 	}
 
-	// Fallback: try parsing as direct array (old format)
-	var rawUsers []n8nUser
-	if err := json.Unmarshal(data, &rawUsers); err == nil {
-		users := make([]GestionUser, 0, len(rawUsers))
-		for _, u := range rawUsers {
-			users = append(users, GestionUser{
-				Email: u.Email,
-				Name:  u.Name,
-				Role:  u.Role,
-			})
-		}
-		return users, nil
-	}
-
+	log.Printf("n8n users parse error, raw response: %s", string(data))
 	return nil, fmt.Errorf("failed to parse n8n users response")
 }
 
