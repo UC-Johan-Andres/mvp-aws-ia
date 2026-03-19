@@ -309,24 +309,56 @@ func fetchN8NUsersStruct() ([]GestionUser, error) {
 		return nil, fmt.Errorf("n8n returned status %d: %s", resp.StatusCode, string(data))
 	}
 
-	var rawUsers []struct {
+	// n8n API returns {"data": ...} where data can be an array or single object
+	type n8nUser struct {
 		Email string `json:"email"`
 		Name  string `json:"firstName"`
 		Role  string `json:"role"`
 	}
-	if err := json.Unmarshal(data, &rawUsers); err != nil {
-		return nil, err
+
+	// Try parsing as {"data": [...]} (array of users)
+	var arrayResponse struct {
+		Data []n8nUser `json:"data"`
+	}
+	if err := json.Unmarshal(data, &arrayResponse); err == nil && len(arrayResponse.Data) > 0 {
+		users := make([]GestionUser, 0, len(arrayResponse.Data))
+		for _, u := range arrayResponse.Data {
+			users = append(users, GestionUser{
+				Email: u.Email,
+				Name:  u.Name,
+				Role:  u.Role,
+			})
+		}
+		return users, nil
 	}
 
-	users := make([]GestionUser, 0, len(rawUsers))
-	for _, u := range rawUsers {
-		users = append(users, GestionUser{
-			Email: u.Email,
-			Name:  u.Name,
-			Role:  u.Role,
-		})
+	// Try parsing as {"data": {...}} (single user object)
+	var singleResponse struct {
+		Data n8nUser `json:"data"`
 	}
-	return users, nil
+	if err := json.Unmarshal(data, &singleResponse); err == nil && singleResponse.Data.Email != "" {
+		return []GestionUser{{
+			Email: singleResponse.Data.Email,
+			Name:  singleResponse.Data.Name,
+			Role:  singleResponse.Data.Role,
+		}}, nil
+	}
+
+	// Fallback: try parsing as direct array (old format)
+	var rawUsers []n8nUser
+	if err := json.Unmarshal(data, &rawUsers); err == nil {
+		users := make([]GestionUser, 0, len(rawUsers))
+		for _, u := range rawUsers {
+			users = append(users, GestionUser{
+				Email: u.Email,
+				Name:  u.Name,
+				Role:  u.Role,
+			})
+		}
+		return users, nil
+	}
+
+	return nil, fmt.Errorf("failed to parse n8n users response")
 }
 
 // fetchLibreChatUsersStruct fetches LibreChat users and returns as structured slice.
