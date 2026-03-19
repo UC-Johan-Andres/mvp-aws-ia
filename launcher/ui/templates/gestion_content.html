@@ -1,10 +1,11 @@
 <div class="card-body">
     <h4 class="section-title">USUARIOS</h4>
 
-    <div id="loading-spinner" class="loading-spinner">
-        <div class="spinner"></div>
-        <span>Cargando usuarios...</span>
+    {{if .Error}}
+    <div class="error-banner">
+        <span>{{.Error}}</span>
     </div>
+    {{end}}
 
     <div id="users-table">
         <table>
@@ -17,6 +18,39 @@
                 </tr>
             </thead>
             <tbody id="users-tbody">
+                {{$tab := .Tab}}
+                {{$users := .Users}}
+                {{if eq (len $users) 0}}
+                <tr>
+                    <td colspan="4" class="empty-state">
+                        <p>No hay usuarios registrados.</p>
+                        <p>Usa el formulario abajo para crear usuarios.</p>
+                    </td>
+                </tr>
+                {{else}}
+                {{range $users}}
+                <tr>
+                    <td>{{.Email}}</td>
+                    <td>{{.Name}}</td>
+                    <td>
+                        <span class="role-badge {{if or (eq .Role "ADMIN") (eq .Role "global:admin") (eq .Role "global:owner")}}role-admin{{else}}role-user{{end}}">
+                            {{.Role}}{{if .IsPending}} (pendiente){{end}}
+                        </span>
+                    </td>
+                    <td>
+                        {{if and (eq $tab "n8n") .InviteURL}}
+                        <button type="button" class="btn-small btn-invite" 
+                                onclick="openInviteModalDirect('{{.Email}}', '{{.InviteURL}}')">
+                            Invitar
+                        </button>
+                        {{end}}
+                        <button type="button" class="btn-small btn-delete" disabled title="Próximamente">
+                            Eliminar
+                        </button>
+                    </td>
+                </tr>
+                {{end}}
+                {{end}}
             </tbody>
         </table>
     </div>
@@ -37,7 +71,9 @@
             </label>
         </div>
 
-        <form id="form-method">
+        <form id="form-method" hx-post="/gestion" hx-target="#main-content" hx-swap="innerHTML">
+            <input type="hidden" name="tab" value="{{.Tab}}">
+
             <div class="dynamic-form {{.Tab}}-form">
                 <div class="rows-container">
                     {{if eq .Tab "n8n"}}
@@ -67,18 +103,19 @@
 
             <div class="form-actions">
                 <button type="button" class="btn-cancel" onclick="resetForm()">Cancelar</button>
-                <button type="button" class="btn-submit" onclick="submitForm()">Crear Usuario(s)</button>
+                <button type="submit" class="btn-submit">Crear Usuario(s)</button>
             </div>
         </form>
 
-        <form id="csv-method" class="csv-zone">
+        <form id="csv-method" class="csv-zone" hx-post="/gestion" hx-target="#main-content" hx-swap="innerHTML">
+            <input type="hidden" name="tab" value="{{.Tab}}">
             <p>Arrastra un archivo CSV aqui o selecciona:</p>
             <input type="file" id="csv-file" accept=".csv" onchange="handleCSVUpload(this)">
             <div id="csv-preview" class="csv-preview" style="display:none;"></div>
             <input type="hidden" name="csv_data" id="csv-data">
             <div class="form-actions">
                 <button type="button" class="btn-cancel" onclick="resetCSVForm()">Cancelar</button>
-                <button type="button" class="btn-submit" onclick="submitCSVForm()">Crear Usuario(s)</button>
+                <button type="submit" class="btn-submit">Crear Usuario(s)</button>
             </div>
         </form>
     </div>
@@ -132,72 +169,10 @@
             const lines = content.trim().split('\n');
             const count = lines.length - 1;
             document.getElementById('csv-preview').textContent = count + ' usuario(s) detectado(s)';
+            document.getElementById('csv-preview').style.display = 'block';
             document.getElementById('csv-data').value = content;
         };
         reader.readAsText(file);
-    }
-
-    function submitForm() {
-        const rows = document.querySelectorAll('.rows-container .form-row');
-        const users = [];
-        const tab = '{{.Tab}}';
-        
-        rows.forEach(row => {
-            const email = row.querySelector('input[name="email"]').value.trim();
-            const role = row.querySelector('select[name="role"]').value;
-            
-            if (!email) return;
-            
-            if (tab === 'n8n') {
-                users.push({ email, role });
-            } else {
-                const name = row.querySelector('input[name="name"]').value.trim();
-                const password = row.querySelector('input[name="password"]').value;
-                users.push({ email, name, password, role });
-            }
-        });
-        
-        if (users.length === 0) {
-            showToast('Ingresa al menos un email válido', 'error');
-            return;
-        }
-        
-        createUsers(users);
-    }
-
-    function submitCSVForm() {
-        const csvData = document.getElementById('csv-data').value;
-        if (!csvData) {
-            showToast('Selecciona un archivo CSV', 'error');
-            return;
-        }
-
-        const tab = '{{.Tab}}';
-        const lines = csvData.trim().split('\n');
-        const users = [];
-
-        for (let i = 1; i < lines.length; i++) {
-            const cols = lines[i].split(',').map(c => c.trim());
-            if (!cols[0]) continue;
-            
-            if (tab === 'n8n') {
-                users.push({ email: cols[0], role: cols[1] || 'global:member' });
-            } else {
-                users.push({ 
-                    email: cols[0], 
-                    name: cols[1] || '', 
-                    password: cols[2] || cols[1] || '', 
-                    role: cols[3] || 'USER' 
-                });
-            }
-        }
-
-        if (users.length === 0) {
-            showToast('No se detectaron usuarios en el CSV', 'error');
-            return;
-        }
-
-        createUsers(users);
     }
 
     function resetForm() {
@@ -238,7 +213,7 @@
         }
     }
 
-    function resetCsvForm() {
+    function resetCSVForm() {
         document.getElementById('csv-file').value = '';
         document.getElementById('csv-preview').style.display = 'none';
         document.getElementById('csv-preview').textContent = '';

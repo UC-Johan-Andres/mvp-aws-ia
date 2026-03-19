@@ -304,6 +304,14 @@
         }
         .toast.success { border-left: 4px solid #28a745; }
         .toast.error { border-left: 4px solid #dc3545; }
+        .error-banner {
+            background: #f8d7da;
+            color: #721c24;
+            padding: 12px 16px;
+            border-radius: 6px;
+            margin-bottom: 16px;
+            border: 1px solid #f5c6cb;
+        }
         @keyframes slideIn {
             from { transform: translateX(100%); opacity: 0; }
             to { transform: translateX(0); opacity: 1; }
@@ -442,132 +450,12 @@
     </div>
 
     <script>
-        let currentTab = 'n8n';
         let currentInviteLink = '';
 
         function setActiveTab(tab) {
             document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
             document.querySelector(`[data-tab="${tab}"]`).classList.add('active');
-            currentTab = tab;
             document.getElementById('footer-service').textContent = 'Conectado a ' + (tab === 'n8n' ? 'n8n' : 'LibreChat');
-        }
-
-        function showLoading(show) {
-            const spinner = document.getElementById('loading-spinner');
-            if (spinner) {
-                spinner.style.display = show ? 'flex' : 'none';
-            }
-        }
-
-        async function fetchUsers(tab) {
-            showLoading(true);
-            try {
-                const endpoint = tab === 'n8n' ? '/admin/n8n/users' : '/admin/librechat/users';
-                const resp = await fetch(endpoint);
-                if (!resp.ok) {
-                    const err = await resp.json().catch(() => ({error: 'Error desconocido'}));
-                    throw new Error(err.error || 'Error al obtener usuarios');
-                }
-                const data = await resp.json();
-                
-                const users = tab === 'n8n' ? (data.data ? data.data.items : []) : data;
-                renderUsersTable(users, tab);
-            } catch (err) {
-                showToast('Error: ' + err.message, 'error');
-                renderUsersTable([], tab);
-            } finally {
-                showLoading(false);
-            }
-        }
-
-        function renderUsersTable(users, tab) {
-            const tbody = document.getElementById('users-tbody');
-            if (!tbody) return;
-            
-            if (!users || users.length === 0) {
-                tbody.innerHTML = `
-                    <tr>
-                        <td colspan="4" class="empty-state">
-                            <p>No hay usuarios registrados.</p>
-                            <p>Usa el formulario abajo para crear usuarios.</p>
-                        </td>
-                    </tr>
-                `;
-                return;
-            }
-            
-            tbody.innerHTML = users.map(u => {
-                const roleClass = getRoleClass(u.role);
-                const name = u.firstName || u.name || '-';
-                const isPending = u.isPending === true;
-                
-                return `
-                    <tr>
-                        <td>${escapeHtml(u.email)}</td>
-                        <td>${escapeHtml(name)}</td>
-                        <td>
-                            <span class="role-badge ${roleClass}">
-                                ${escapeHtml(u.role)}${isPending ? ' (pendiente)' : ''}
-                            </span>
-                        </td>
-                        <td>
-                            ${tab === 'n8n' && u.inviteAcceptUrl ? `
-                                <button type="button" class="btn-small btn-invite" 
-                                        onclick="openInviteModalDirect('${escapeHtml(u.email)}', '${escapeHtml(u.inviteAcceptUrl)}')">
-                                    Invitar
-                                </button>
-                            ` : ''}
-                            <button type="button" class="btn-small btn-delete" disabled title="Próximamente">
-                                Eliminar
-                            </button>
-                        </td>
-                    </tr>
-                `;
-            }).join('');
-        }
-
-        function getRoleClass(role) {
-            if (role === 'ADMIN' || role === 'global:admin' || role === 'global:owner') {
-                return 'role-admin';
-            }
-            if (role === 'global:member' || role === 'USER') {
-                return 'role-user';
-            }
-            return 'role-user';
-        }
-
-        function escapeHtml(text) {
-            const div = document.createElement('div');
-            div.textContent = text;
-            return div.innerHTML;
-        }
-
-        async function createUsers(users) {
-            try {
-                const endpoint = currentTab === 'n8n' ? '/admin/n8n/users' : '/admin/librechat/users';
-                const resp = await fetch(endpoint, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(users)
-                });
-                const data = await resp.json();
-                
-                if (!resp.ok) {
-                    throw new Error(data.error || (Array.isArray(data) ? data.map(d => d.error || d.Email + ': error').join(', ') : 'Error al crear usuarios'));
-                }
-                
-                const errors = Array.isArray(data) ? data.filter(d => !d.created && d.error).map(d => d.Email + ': ' + d.error) : [];
-                if (errors.length > 0) {
-                    showToast('Algunos usuarios fallaron: ' + errors.join(', '), 'error');
-                } else {
-                    showToast('Usuario(s) creado(s) exitosamente', 'success');
-                }
-                
-                fetchUsers(currentTab);
-                resetForm();
-            } catch (err) {
-                showToast('Error: ' + err.message, 'error');
-            }
         }
 
         function openInviteModalDirect(email, inviteUrl) {
@@ -583,6 +471,8 @@
         function copyInviteLink() {
             navigator.clipboard.writeText(currentInviteLink).then(() => {
                 showToast('Enlace copiado al portapapeles', 'success');
+            }).catch(() => {
+                showToast('Error al copiar', 'error');
             });
         }
 
@@ -597,7 +487,36 @@
 
         document.body.addEventListener('htmx:afterSwap', function(evt) {
             if (evt.detail.target.id === 'main-content') {
-                fetchUsers(currentTab);
+                const hasError = evt.detail.target.querySelector('.error-banner');
+                if (hasError) {
+                    showToast(hasError.textContent.trim(), 'error');
+                }
+            }
+            if (evt.detail.target.classList.contains('toast')) {
+                showToast(evt.detail.target.textContent, 'success');
+            }
+        });
+
+        document.body.addEventListener('htmx:beforeSwap', function(evt) {
+            if (evt.detail.target.id === 'main-content' && evt.detail.serverResponse && evt.detail.serverResponse.headers) {
+                const contentType = evt.detail.serverResponse.headers.get('content-type');
+                if (contentType && contentType.includes('application/json')) {
+                    evt.detail.serverResponse.text().then(text => {
+                        try {
+                            const data = JSON.parse(text);
+                            if (data.error) {
+                                showToast(data.error, 'error');
+                            } else if (Array.isArray(data)) {
+                                const errors = data.filter(d => !d.created && d.error).map(d => d.email + ': ' + d.error);
+                                if (errors.length > 0) {
+                                    showToast('Algunos fallaron: ' + errors.join(', '), 'error');
+                                } else {
+                                    showToast('Usuario(s) creado(s) exitosamente', 'success');
+                                }
+                            }
+                        } catch (e) {}
+                    });
+                }
             }
         });
     </script>

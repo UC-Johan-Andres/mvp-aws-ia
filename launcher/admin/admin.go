@@ -65,15 +65,125 @@ func jsonError(w http.ResponseWriter, msg string, code int) {
 	json.NewEncoder(w).Encode(map[string]string{"error": msg})
 }
 
+// getN8NUsers fetches users from n8n API and returns parsed data.
+func getN8NUsers() ([]N8NUser, error) {
+	if config.N8NOwnerEmail == "" || config.N8NOwnerPass == "" {
+		return nil, fmt.Errorf("n8n owner credentials not configured")
+	}
+
+	client := n8nHTTPClient()
+
+	cookies, err := n8nLogin(client)
+	if err != nil {
+		return nil, fmt.Errorf("n8n authentication failed: %w", err)
+	}
+
+	req, err := http.NewRequest(http.MethodGet, config.N8NInternalURL+"/rest/users", nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	if config.N8NBasicUser != "" {
+		req.SetBasicAuth(config.N8NBasicUser, config.N8NBasicPass)
+	}
+	for _, c := range cookies {
+		req.AddCookie(c)
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		data, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("n8n returned status %d: %s", resp.StatusCode, string(data))
+	}
+
+	var result struct {
+		Data struct {
+			Count int       `json:"count"`
+			Items []N8NUser `json:"items"`
+		} `json:"data"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, err
+	}
+
+	return result.Data.Items, nil
+}
+
+// getLibreChatUsers fetches users from LibreChat MongoDB.
+func getLibreChatUsers() ([]LibreChatUser, error) {
+	if config.MongoURI == "" {
+		return nil, fmt.Errorf("MongoDB not configured")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	coll, client, err := mongoCollection(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer client.Disconnect(ctx)
+
+	cursor, err := coll.Find(ctx, bson.D{})
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+
+	var users []lcUser
+	if err := cursor.All(ctx, &users); err != nil {
+		return nil, err
+	}
+
+	result := make([]LibreChatUser, 0, len(users))
+	for _, u := range users {
+		result = append(result, LibreChatUser{
+			Email:     u.Email,
+			Name:      u.Name,
+			Role:      u.Role,
+			CreatedAt: u.CreatedAt.Format(time.RFC3339),
+		})
+	}
+
+	return result, nil
+}
+
 // ─────────────────────────────────────────────────────────────────
 // Gestion Dashboard
 // ─────────────────────────────────────────────────────────────────
 
 // GestionUser represents a user for template rendering.
 type GestionUser struct {
-	Email string
-	Name  string
-	Role  string
+	Email     string
+	Name      string
+	Role      string
+	InviteURL string
+	IsPending bool
+	CreatedAt string
+}
+
+// N8NUser represents a user from n8n API.
+type N8NUser struct {
+	ID              string `json:"id"`
+	Email           string `json:"email"`
+	FirstName       string `json:"firstName"`
+	LastName        string `json:"lastName"`
+	Role            string `json:"role"`
+	IsPending       bool   `json:"isPending"`
+	InviteAcceptURL string `json:"inviteAcceptUrl"`
+}
+
+// LibreChatUser represents a user from LibreChat.
+type LibreChatUser struct {
+	Email     string `json:"email"`
+	Name      string `json:"name"`
+	Role      string `json:"role"`
+	CreatedAt string `json:"createdAt"`
 }
 
 // HandleGestion renders the users management dashboard page shell.
@@ -89,8 +199,8 @@ func HandleGestion(w http.ResponseWriter, r *http.Request) {
 	ui.RenderGestion(w, tab)
 }
 
-// HandleGestionContent renders the inner content (empty table + form) for HTMX.
-// Users are fetched client-side via JavaScript calling the API endpoints.
+// HandleGestionContent renders the inner content (table + form) for HTMX.
+// Users are fetched server-side and passed to the template.
 func HandleGestionContent(w http.ResponseWriter, r *http.Request) {
 	tab := r.URL.Query().Get("tab")
 	if tab == "" {
@@ -100,10 +210,51 @@ func HandleGestionContent(w http.ResponseWriter, r *http.Request) {
 		tab = "n8n"
 	}
 
-	ui.RenderGestionContent(w, tab)
+	var users []GestionUser
+
+	if tab == "n8n" {
+		n8nUsers, err := getN8NUsers()
+		if err != nil {
+			ui.RenderGestionContentWithError(w, tab, "Error al obtener usuarios de n8n: "+err.Error())
+			return
+		}
+		for _, u := range n8nUsers {
+			name := u.FirstName
+			if u.LastName != "" {
+				name += " " + u.LastName
+			}
+			if name == "" {
+				name = "-"
+			}
+			users = append(users, GestionUser{
+				Email:     u.Email,
+				Name:      name,
+				Role:      u.Role,
+				InviteURL: u.InviteAcceptURL,
+				IsPending: u.IsPending,
+			})
+		}
+	} else {
+		lcUsers, err := getLibreChatUsers()
+		if err != nil {
+			ui.RenderGestionContentWithError(w, tab, "Error al obtener usuarios de LibreChat: "+err.Error())
+			return
+		}
+		for _, u := range lcUsers {
+			users = append(users, GestionUser{
+				Email:     u.Email,
+				Name:      u.Name,
+				Role:      u.Role,
+				CreatedAt: u.CreatedAt,
+			})
+		}
+	}
+
+	ui.RenderGestionContent(w, tab, users)
 }
 
-// HandleGestionSubmit handles POST to create users.
+// HandleGestionSubmit handles POST to create users via HTMX form submission.
+// After successful creation, re-renders the content with updated user list.
 func HandleGestionSubmit(w http.ResponseWriter, r *http.Request) {
 	r.ParseForm()
 	tab := r.FormValue("tab")
@@ -111,26 +262,64 @@ func HandleGestionSubmit(w http.ResponseWriter, r *http.Request) {
 		tab = "n8n"
 	}
 
-	var result []byte
 	var err error
 
-	if r.FormValue("users_json") != "" {
-		result, err = createUsersFromJSON(tab, r.FormValue("users_json"))
+	if r.FormValue("csv_data") != "" {
+		_, err = createUsersFromCSV(tab, r.FormValue("csv_data"))
+	} else if r.FormValue("users_json") != "" {
+		_, err = createUsersFromJSON(tab, r.FormValue("users_json"))
 	} else if tab == "n8n" {
-		result, err = createN8NUsersFromForm(r)
+		_, err = createN8NUsersFromForm(r)
 	} else {
-		result, err = createLibreChatUsersFromForm(r)
+		_, err = createLibreChatUsersFromForm(r)
 	}
 
 	if err != nil {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		ui.RenderGestionContentWithError(w, tab, "Error al crear usuarios: "+err.Error())
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	w.Write(result)
+	HandleGestionContent(w, r)
+}
+
+// createUsersFromCSV creates users from CSV string.
+func createUsersFromCSV(tab string, csvData string) ([]byte, error) {
+	lines := strings.Split(strings.TrimSpace(csvData), "\n")
+	if len(lines) < 2 {
+		return nil, fmt.Errorf("CSV debe tener al menos una fila de encabezado y una de datos")
+	}
+
+	rawUsers := make([]map[string]string, 0)
+	for i := 1; i < len(lines); i++ {
+		cols := strings.Split(lines[i], ",")
+		if len(cols) < 1 || strings.TrimSpace(cols[0]) == "" {
+			continue
+		}
+
+		user := make(map[string]string)
+		user["email"] = strings.TrimSpace(cols[0])
+		if len(cols) > 1 {
+			user["name"] = strings.TrimSpace(cols[1])
+		}
+		if len(cols) > 2 {
+			user["password"] = strings.TrimSpace(cols[2])
+		}
+		if len(cols) > 3 {
+			user["role"] = strings.TrimSpace(cols[3])
+		}
+		rawUsers = append(rawUsers, user)
+	}
+
+	if len(rawUsers) == 0 {
+		return nil, fmt.Errorf("no se encontraron usuarios válidos en el CSV")
+	}
+
+	jsonData, err := json.Marshal(rawUsers)
+	if err != nil {
+		return nil, fmt.Errorf("error al procesar CSV: %w", err)
+	}
+
+	return createUsersFromJSON(tab, string(jsonData))
 }
 
 // createUsersFromJSON creates users from JSON string (CSV import).

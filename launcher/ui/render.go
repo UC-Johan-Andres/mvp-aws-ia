@@ -150,6 +150,7 @@ func RenderQueueFragment(w http.ResponseWriter, status services.Status) {
 type GestionData struct {
 	Tab   string
 	Users interface{}
+	Error string
 }
 
 // RenderGestion renders the full gestion dashboard page shell.
@@ -161,13 +162,22 @@ func RenderGestion(w http.ResponseWriter, tab string) {
 	}
 }
 
-// RenderGestionContent renders the inner content (empty table + form) for HTMX swaps.
-// Users are fetched client-side via JavaScript calling the API endpoints.
-func RenderGestionContent(w http.ResponseWriter, tab string) {
+// RenderGestionContent renders the inner content (table + form) for HTMX swaps.
+// Users are fetched server-side.
+func RenderGestionContent(w http.ResponseWriter, tab string, users interface{}) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	data := GestionData{Tab: tab}
+	data := GestionData{Tab: tab, Users: users}
 	if err := tmplContent.Execute(w, data); err != nil {
 		log.Printf("ui: render gestion content: %v", err)
+	}
+}
+
+// RenderGestionContentWithError renders the inner content with an error message.
+func RenderGestionContentWithError(w http.ResponseWriter, tab string, errMsg string) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	data := GestionData{Tab: tab, Error: errMsg, Users: []interface{}{}}
+	if err := tmplContent.Execute(w, data); err != nil {
+		log.Printf("ui: render gestion content with error: %v", err)
 	}
 }
 
