@@ -44,6 +44,7 @@ func main() {
 	mux.HandleFunc("POST /gestion", auth.RequireAuth(admin.HandleGestionSubmit))
 	mux.HandleFunc("GET /gestion/invite", auth.RequireAuth(admin.HandleInviteModal))
 	mux.HandleFunc("GET /gestion/users-rows", auth.RequireAuth(admin.HandleGestionUsersRows))
+	mux.HandleFunc("GET /gestion/stream", auth.RequireAuth(admin.HandleGestionStream))
 
 	// Wake (catch-all — called by nginx @launcher on 502)
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {

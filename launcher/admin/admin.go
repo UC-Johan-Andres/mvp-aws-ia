@@ -279,6 +279,8 @@ func HandleGestionSubmit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	BroadcastUsersUpdate()
+
 	HandleGestionContent(w, r)
 }
 

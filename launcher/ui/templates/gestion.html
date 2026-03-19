@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <title>Gestión de Usuarios — AI Ecosystem</title>
     <script src="https://unpkg.com/htmx.org@2.0.4"></script>
+    <script src="https://unpkg.com/htmx.org@2.0.4/dist/ext/sse.js"></script>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body {
@@ -397,8 +398,9 @@
         }
     </style>
 </head>
-<body>
-    <div class="container">
+<body hx-ext="sse">
+    <div sse-connect="/gestion/stream" sse-swap="users_updated" id="sse-container" style="display:none;"></div>
+    <div class="container" id="app-container">
         <div class="header">
             <h1>Gestión de Usuarios</h1>
             <div class="header-actions">
@@ -451,12 +453,136 @@
 
     <script>
         let currentInviteLink = '';
+        let cachedUsers = { n8n: [], librechat: [] };
+        let currentTab = 'n8n';
+        let isInitialized = false;
 
         function setActiveTab(tab) {
             document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
             document.querySelector(`[data-tab="${tab}"]`).classList.add('active');
+            currentTab = tab;
             document.getElementById('footer-service').textContent = 'Conectado a ' + (tab === 'n8n' ? 'n8n' : 'LibreChat');
+            renderUsersFromCache(tab);
         }
+
+        function escapeHtml(text) {
+            if (!text) return '';
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        function getRoleClass(role) {
+            if (role === 'ADMIN' || role === 'global:admin' || role === 'global:owner') {
+                return 'role-admin';
+            }
+            return 'role-user';
+        }
+
+        function renderUsersFromCache(tab) {
+            const tbody = document.getElementById('users-tbody');
+            if (!tbody) return;
+
+            const users = cachedUsers[tab] || [];
+
+            if (users.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="4" class="empty-state">
+                            <p>No hay usuarios registrados.</p>
+                            <p>Usa el formulario abajo para crear usuarios.</p>
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+
+            tbody.innerHTML = users.map(u => {
+                const name = u.firstName || u.name || '-';
+                const isPending = u.isPending === true;
+
+                return `
+                    <tr>
+                        <td>${escapeHtml(u.email)}</td>
+                        <td>${escapeHtml(name)}</td>
+                        <td>
+                            <span class="role-badge ${getRoleClass(u.role)}">
+                                ${escapeHtml(u.role)}${isPending ? ' (pendiente)' : ''}
+                            </span>
+                        </td>
+                        <td>
+                            ${tab === 'n8n' && u.inviteAcceptUrl ? `
+                                <button type="button" class="btn-small btn-invite" 
+                                        onclick="openInviteModalDirect('${escapeHtml(u.email)}', '${escapeHtml(u.inviteAcceptUrl)}')">
+                                    Invitar
+                                </button>
+                            ` : ''}
+                            <button type="button" class="btn-small btn-delete" disabled title="Próximamente">
+                                Eliminar
+                            </button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        document.body.addEventListener('sse:message', function(evt) {
+            const eventName = evt.detail.eventName;
+            
+            if (eventName === 'init' || eventName === 'users_updated') {
+                try {
+                    const data = JSON.parse(evt.detail.data);
+                    if (data.n8n) cachedUsers.n8n = data.n8n;
+                    if (data.librechat) cachedUsers.librechat = data.librechat;
+                    
+                    if (!isInitialized) {
+                        isInitialized = true;
+                        renderUsersFromCache(currentTab);
+                    } else {
+                        renderUsersFromCache(currentTab);
+                    }
+
+                    if (eventName === 'users_updated') {
+                        showToast('Usuarios actualizados', 'success');
+                    }
+                } catch (e) {
+                    console.error('SSE: failed to parse message', e);
+                }
+            }
+        });
+
+        document.body.addEventListener('htmx:afterSwap', function(evt) {
+            if (evt.detail.target.id === 'main-content') {
+                const hasError = evt.detail.target.querySelector('.error-banner');
+                if (hasError) {
+                    showToast(hasError.textContent.trim(), 'error');
+                }
+                renderUsersFromCache(currentTab);
+            }
+        });
+
+        document.body.addEventListener('htmx:beforeSwap', function(evt) {
+            if (evt.detail.target.id === 'main-content' && evt.detail.serverResponse && evt.detail.serverResponse.headers) {
+                const contentType = evt.detail.serverResponse.headers.get('content-type');
+                if (contentType && contentType.includes('application/json')) {
+                    evt.detail.serverResponse.text().then(text => {
+                        try {
+                            const data = JSON.parse(text);
+                            if (data.error) {
+                                showToast(data.error, 'error');
+                            } else if (Array.isArray(data)) {
+                                const errors = data.filter(d => !d.created && d.error).map(d => d.email + ': ' + d.error);
+                                if (errors.length > 0) {
+                                    showToast('Algunos fallaron: ' + errors.join(', '), 'error');
+                                } else {
+                                    showToast('Usuario(s) creado(s) exitosamente', 'success');
+                                }
+                            }
+                        } catch (e) {}
+                    });
+                }
+            }
+        });
 
         function openInviteModalDirect(email, inviteUrl) {
             currentInviteLink = inviteUrl;
@@ -484,41 +610,6 @@
             container.appendChild(toast);
             setTimeout(() => toast.remove(), 4000);
         }
-
-        document.body.addEventListener('htmx:afterSwap', function(evt) {
-            if (evt.detail.target.id === 'main-content') {
-                const hasError = evt.detail.target.querySelector('.error-banner');
-                if (hasError) {
-                    showToast(hasError.textContent.trim(), 'error');
-                }
-            }
-            if (evt.detail.target.classList.contains('toast')) {
-                showToast(evt.detail.target.textContent, 'success');
-            }
-        });
-
-        document.body.addEventListener('htmx:beforeSwap', function(evt) {
-            if (evt.detail.target.id === 'main-content' && evt.detail.serverResponse && evt.detail.serverResponse.headers) {
-                const contentType = evt.detail.serverResponse.headers.get('content-type');
-                if (contentType && contentType.includes('application/json')) {
-                    evt.detail.serverResponse.text().then(text => {
-                        try {
-                            const data = JSON.parse(text);
-                            if (data.error) {
-                                showToast(data.error, 'error');
-                            } else if (Array.isArray(data)) {
-                                const errors = data.filter(d => !d.created && d.error).map(d => d.email + ': ' + d.error);
-                                if (errors.length > 0) {
-                                    showToast('Algunos fallaron: ' + errors.join(', '), 'error');
-                                } else {
-                                    showToast('Usuario(s) creado(s) exitosamente', 'success');
-                                }
-                            }
-                        } catch (e) {}
-                    });
-                }
-            }
-        });
     </script>
 </body>
 </html>
