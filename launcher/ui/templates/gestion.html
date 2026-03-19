@@ -552,6 +552,7 @@
         });
 
         document.body.addEventListener('htmx:afterSwap', function(evt) {
+            if (!evt.detail.target) return;
             if (evt.detail.target.id === 'main-content') {
                 const hasError = evt.detail.target.querySelector('.error-banner');
                 if (hasError) {
@@ -562,6 +563,7 @@
         });
 
         document.body.addEventListener('htmx:beforeSwap', function(evt) {
+            if (!evt.detail.target) return;
             if (evt.detail.target.id === 'main-content' && evt.detail.serverResponse && evt.detail.serverResponse.headers) {
                 const contentType = evt.detail.serverResponse.headers.get('content-type');
                 if (contentType && contentType.includes('application/json')) {
