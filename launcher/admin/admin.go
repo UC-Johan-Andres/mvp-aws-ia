@@ -194,6 +194,7 @@ func getLibreChatUsers() ([]LibreChatUser, error) {
 
 // GestionUser represents a user for template rendering.
 type GestionUser struct {
+	ID        string
 	Email     string
 	Name      string
 	Role      string
@@ -262,6 +263,7 @@ func HandleGestionContent(w http.ResponseWriter, r *http.Request) {
 				name = "-"
 			}
 			users = append(users, GestionUser{
+				ID:        u.ID,
 				Email:     u.Email,
 				Name:      name,
 				Role:      u.Role,
@@ -277,6 +279,7 @@ func HandleGestionContent(w http.ResponseWriter, r *http.Request) {
 		}
 		for _, u := range lcUsers {
 			users = append(users, GestionUser{
+				ID:        u.Email,
 				Email:     u.Email,
 				Name:      u.Name,
 				Role:      u.Role,
@@ -526,6 +529,7 @@ func fetchN8NUsersStruct() ([]GestionUser, error) {
 
 	// n8n API returns {"data": {"count": N, "items": [...]}}
 	type n8nUser struct {
+		ID    string `json:"id"`
 		Email string `json:"email"`
 		Name  string `json:"firstName"`
 		Role  string `json:"role"`
@@ -542,6 +546,7 @@ func fetchN8NUsersStruct() ([]GestionUser, error) {
 		users := make([]GestionUser, 0, len(paginatedResponse.Data.Items))
 		for _, u := range paginatedResponse.Data.Items {
 			users = append(users, GestionUser{
+				ID:    u.ID,
 				Email: u.Email,
 				Name:  u.Name,
 				Role:  u.Role,
@@ -558,6 +563,7 @@ func fetchN8NUsersStruct() ([]GestionUser, error) {
 		users := make([]GestionUser, 0, len(arrayResponse.Data))
 		for _, u := range arrayResponse.Data {
 			users = append(users, GestionUser{
+				ID:    u.ID,
 				Email: u.Email,
 				Name:  u.Name,
 				Role:  u.Role,
@@ -572,6 +578,7 @@ func fetchN8NUsersStruct() ([]GestionUser, error) {
 	}
 	if err := json.Unmarshal(data, &singleResponse); err == nil && singleResponse.Data.Email != "" {
 		return []GestionUser{{
+			ID:    singleResponse.Data.ID,
 			Email: singleResponse.Data.Email,
 			Name:  singleResponse.Data.Name,
 			Role:  singleResponse.Data.Role,

@@ -452,7 +452,7 @@
     </style>
 </head>
 <body>
-    <div hx-ext="sse" sse-connect="/gestion/stream" sse-swap="init,users_updated" hx-target="#users-tbody" hx-swap="innerHTML" id="sse-container"></div>
+    <div hx-ext="sse" sse-connect="/gestion/stream" sse-swap="init,users_updated" id="sse-container"></div>
     <div class="container" id="app-container">
         <div class="header">
             <h1>Gestión de Usuarios</h1>
@@ -638,7 +638,7 @@
             tbody.innerHTML = generateUsersHTML(users, tab);
         }
 
-        // SSE: interceptar ANTES del swap para transformar JSON a HTML
+        // SSE: interceptar ANTES del swap - solo actualizar cache, no hacer swap automático
         document.body.addEventListener('htmx:sseBeforeMessage', function(evt) {
             const eventName = evt.detail.type;
             
@@ -655,20 +655,21 @@
                     
                     console.log('Cache updated:', cachedUsers);
                     
-                    // 3. Generar HTML para el tab actual
-                    const html = generateUsersHTML(cachedUsers[currentTab], currentTab);
-                    
-                    // 4. Reemplazar data con HTML para que htmx haga el swap
-                    evt.detail.data = html;
-                    
                     isInitialized = true;
-
+                    
+                    // 3. NO modificar evt.detail.data - evitar swap automático
+                    // 4. El renderizado lo hace el servidor via GET /gestion/content
+                    
+                    // Prevenir el swap automático de HTMX
+                    evt.preventDefault();
+                    
                     if (eventName === 'users_updated') {
                         showToast('Usuarios actualizados', 'success');
+                        renderUsersFromCache(currentTab);
                     }
                 } catch (e) {
                     console.error('SSE: failed to parse message', e);
-                    evt.preventDefault(); // Evitar swap si hay error
+                    evt.preventDefault();
                 }
             }
         });
@@ -850,11 +851,24 @@
                 const mainContent = document.getElementById('main-content');
                 if (mainContent) {
                     mainContent.innerHTML = html;
-                    const tbody = document.getElementById('users-tbody');
-                    if (tbody) {
-                        isInitialized = false;
-                        cachedUsers = { n8n: [], librechat: [] };
-                    }
+                    
+                    // Restaurar estado del tab y formulario
+                    // 1. Aplicar clase active al tab actual
+                    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+                    const activeTab = document.querySelector('[data-tab="' + currentTab + '"]');
+                    if (activeTab) activeTab.classList.add('active');
+                    
+                    // 2. Mostrar formulario correcto
+                    document.querySelectorAll('.user-form').forEach(f => f.classList.remove('active'));
+                    const form = document.getElementById('form-' + currentTab);
+                    if (form) form.classList.add('active');
+                    
+                    // 3. Actualizar footer
+                    document.getElementById('footer-service').textContent = 'Conectado a ' + (currentTab === 'n8n' ? 'n8n' : 'LibreChat');
+                    
+                    // 4. Limpiar cache para forzar re-render desde SSE
+                    isInitialized = false;
+                    cachedUsers = { n8n: [], librechat: [] };
                 }
             })
             .catch(error => {

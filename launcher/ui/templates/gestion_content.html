@@ -44,7 +44,13 @@
                             Invitar
                         </button>
                         {{end}}
-                        <button type="button" class="btn-small btn-delete" disabled title="Próximamente">
+                        <button type="button" class="btn-small btn-edit" 
+                                onclick="openEditModal('{{$tab}}', '{{.ID}}', '{{.Email}}', '{{.Name}}', '{{.Role}}')">
+                            Editar
+                        </button>
+                        <button type="button" class="btn-small btn-delete" 
+                                data-tab="{{$tab}}" data-id="{{.ID}}" data-email="{{.Email}}"
+                                onclick="deleteUser(this)">
                             Eliminar
                         </button>
                     </td>
