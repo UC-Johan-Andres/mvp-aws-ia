@@ -398,8 +398,8 @@
         }
     </style>
 </head>
-<body hx-ext="sse">
-    <div sse-connect="/gestion/stream" sse-swap="init,users_updated" id="sse-container" style="display:none;"></div>
+<body>
+    <div hx-ext="sse" sse-connect="/gestion/stream" id="sse-container"></div>
     <div class="container" id="app-container">
         <div class="header">
             <h1>Gestión de Usuarios</h1>
@@ -526,21 +526,22 @@
             }).join('');
         }
 
-        document.body.addEventListener('htmx:sseMessage', function(evt) {
-            const eventName = evt.detail.eventName;
+        function handleSSEMessage(evt) {
+            const eventName = evt.detail.type || evt.detail.eventName;
+            const eventData = evt.detail.data;
+            
+            console.log('SSE event received:', eventName, eventData);
             
             if (eventName === 'init' || eventName === 'users_updated') {
                 try {
-                    const data = JSON.parse(evt.detail.data);
+                    const data = JSON.parse(eventData);
                     if (data.n8n) cachedUsers.n8n = data.n8n;
                     if (data.librechat) cachedUsers.librechat = data.librechat;
                     
-                    if (!isInitialized) {
-                        isInitialized = true;
-                        renderUsersFromCache(currentTab);
-                    } else {
-                        renderUsersFromCache(currentTab);
-                    }
+                    console.log('Cache updated:', cachedUsers);
+                    
+                    isInitialized = true;
+                    renderUsersFromCache(currentTab);
 
                     if (eventName === 'users_updated') {
                         showToast('Usuarios actualizados', 'success');
@@ -549,7 +550,10 @@
                     console.error('SSE: failed to parse message', e);
                 }
             }
-        });
+        }
+
+        document.getElementById('sse-container').addEventListener('htmx:sseMessage', handleSSEMessage);
+        document.body.addEventListener('htmx:sseMessage', handleSSEMessage);
 
         document.body.addEventListener('htmx:afterSwap', function(evt) {
             if (!evt.detail.target) return;
