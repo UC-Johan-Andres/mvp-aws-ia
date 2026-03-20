@@ -175,9 +175,17 @@ func deleteN8NUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	userID := r.PathValue("id")
-	if userID == "" {
-		jsonError(w, "user id path parameter is required", http.StatusBadRequest)
+	type deleteRequest struct {
+		ID string `json:"id"`
+	}
+	var reqBody deleteRequest
+	if err := json.NewDecoder(r.Body).Decode(&reqBody); err != nil {
+		jsonError(w, "invalid JSON body: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if reqBody.ID == "" {
+		jsonError(w, "user id is required", http.StatusBadRequest)
 		return
 	}
 
@@ -189,7 +197,7 @@ func deleteN8NUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	req, err := http.NewRequest(http.MethodDelete, config.N8NInternalURL+"/rest/users/"+userID, nil)
+	req, err := http.NewRequest(http.MethodDelete, config.N8NInternalURL+"/rest/users/"+reqBody.ID, nil)
 	if err != nil {
 		jsonError(w, "failed to create request: "+err.Error(), http.StatusInternalServerError)
 		return
@@ -220,10 +228,11 @@ func deleteN8NUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	jsonOK(w, map[string]string{"deleted": userID})
+	jsonOK(w, map[string]string{"deleted": reqBody.ID})
 }
 
 type n8nUserUpdateRequest struct {
+	ID        string `json:"id"`
 	FirstName string `json:"firstName"`
 	Role      string `json:"role"`
 }
@@ -234,15 +243,14 @@ func updateN8NUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	userID := r.PathValue("id")
-	if userID == "" {
-		jsonError(w, "user id path parameter is required", http.StatusBadRequest)
-		return
-	}
-
 	var reqBody n8nUserUpdateRequest
 	if err := json.NewDecoder(r.Body).Decode(&reqBody); err != nil {
 		jsonError(w, "invalid JSON body: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if reqBody.ID == "" {
+		jsonError(w, "user id is required", http.StatusBadRequest)
 		return
 	}
 
@@ -260,7 +268,7 @@ func updateN8NUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	body, _ := json.Marshal(reqBody)
-	req, err := http.NewRequest(http.MethodPut, config.N8NInternalURL+"/rest/users/"+userID, bytes.NewReader(body))
+	req, err := http.NewRequest(http.MethodPut, config.N8NInternalURL+"/rest/users/"+reqBody.ID, bytes.NewReader(body))
 	if err != nil {
 		jsonError(w, "failed to create request: "+err.Error(), http.StatusInternalServerError)
 		return
@@ -291,5 +299,5 @@ func updateN8NUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	jsonOK(w, map[string]string{"updated": userID})
+	jsonOK(w, map[string]string{"updated": reqBody.ID})
 }

@@ -35,11 +35,7 @@ func main() {
 
 	// Admin — user management
 	mux.HandleFunc("/admin/librechat/users", auth.RequireAuth(admin.HandleLibreChatUsers))
-	mux.HandleFunc("/admin/librechat/users/{email}", auth.RequireAuth(admin.HandleLibreChatDeleteUser))
-	mux.HandleFunc("/admin/librechat/users/{email}", auth.RequireAuth(admin.HandleLibreChatUpdateUser))
 	mux.HandleFunc("/admin/n8n/users", auth.RequireAuth(admin.HandleN8NUsers))
-	mux.HandleFunc("/admin/n8n/users/{id}", auth.RequireAuth(admin.HandleN8NDeleteUser))
-	mux.HandleFunc("/admin/n8n/users/{id}", auth.RequireAuth(admin.HandleN8NUpdateUser))
 
 	// Gestion dashboard
 	mux.HandleFunc("GET /gestion", auth.RequireAuth(admin.HandleGestion))

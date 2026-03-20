@@ -207,9 +207,17 @@ func deleteLibreChatUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	email := r.PathValue("email")
-	if email == "" {
-		jsonError(w, "email path parameter is required", http.StatusBadRequest)
+	type deleteRequest struct {
+		Email string `json:"email"`
+	}
+	var reqBody deleteRequest
+	if err := json.NewDecoder(r.Body).Decode(&reqBody); err != nil {
+		jsonError(w, "invalid JSON body: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if reqBody.Email == "" {
+		jsonError(w, "email is required", http.StatusBadRequest)
 		return
 	}
 
@@ -223,7 +231,7 @@ func deleteLibreChatUser(w http.ResponseWriter, r *http.Request) {
 	}
 	defer client.Disconnect(ctx)
 
-	res, err := coll.DeleteOne(ctx, bson.M{"email": email})
+	res, err := coll.DeleteOne(ctx, bson.M{"email": reqBody.Email})
 	if err != nil {
 		jsonError(w, "failed to delete user: "+err.Error(), http.StatusInternalServerError)
 		return
@@ -234,12 +242,13 @@ func deleteLibreChatUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	jsonOK(w, map[string]string{"deleted": email})
+	jsonOK(w, map[string]string{"deleted": reqBody.Email})
 }
 
 type librechatUpdateRequest struct {
-	Name string `json:"name"`
-	Role string `json:"role"`
+	Email string `json:"email"`
+	Name  string `json:"name"`
+	Role  string `json:"role"`
 }
 
 func updateLibreChatUser(w http.ResponseWriter, r *http.Request) {
@@ -248,15 +257,14 @@ func updateLibreChatUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	email := r.PathValue("email")
-	if email == "" {
-		jsonError(w, "email path parameter is required", http.StatusBadRequest)
-		return
-	}
-
 	var reqBody librechatUpdateRequest
 	if err := json.NewDecoder(r.Body).Decode(&reqBody); err != nil {
 		jsonError(w, "invalid JSON body: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if reqBody.Email == "" {
+		jsonError(w, "email is required", http.StatusBadRequest)
 		return
 	}
 
@@ -288,7 +296,7 @@ func updateLibreChatUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	res, err := coll.UpdateOne(ctx, bson.M{"email": email}, bson.M{"$set": update})
+	res, err := coll.UpdateOne(ctx, bson.M{"email": reqBody.Email}, bson.M{"$set": update})
 	if err != nil {
 		jsonError(w, "failed to update user: "+err.Error(), http.StatusInternalServerError)
 		return
@@ -299,5 +307,5 @@ func updateLibreChatUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	jsonOK(w, map[string]string{"updated": email})
+	jsonOK(w, map[string]string{"updated": reqBody.Email})
 }

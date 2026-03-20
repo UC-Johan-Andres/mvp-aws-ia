@@ -19,13 +19,17 @@ import (
 	"launcher/ui"
 )
 
-// HandleLibreChatUsers routes GET/POST to the right function.
+// HandleLibreChatUsers routes GET/POST/DELETE/PUT to the right function.
 func HandleLibreChatUsers(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
 		listLibreChatUsers(w, r)
 	case http.MethodPost:
 		createLibreChatUsers(w, r)
+	case http.MethodDelete:
+		deleteLibreChatUser(w, r)
+	case http.MethodPut:
+		updateLibreChatUser(w, r)
 	default:
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 	}
@@ -67,13 +71,17 @@ func HandleN8NUpdateUser(w http.ResponseWriter, r *http.Request) {
 	updateN8NUser(w, r)
 }
 
-// HandleN8NUsers routes GET/POST
+// HandleN8NUsers routes GET/POST/DELETE/PUT
 func HandleN8NUsers(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
 		listN8NUsers(w, r)
 	case http.MethodPost:
 		createN8NUsers(w, r)
+	case http.MethodDelete:
+		deleteN8NUser(w, r)
+	case http.MethodPut:
+		updateN8NUser(w, r)
 	default:
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 	}

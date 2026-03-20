@@ -747,12 +747,13 @@
             btn.disabled = true;
             btn.textContent = '...';
 
-            const endpoint = tab === 'n8n' 
-                ? '/admin/n8n/users/' + encodeURIComponent(userId)
-                : '/admin/librechat/users/' + encodeURIComponent(email);
+            const endpoint = tab === 'n8n' ? '/admin/n8n/users' : '/admin/librechat/users';
+            const body = tab === 'n8n' ? JSON.stringify({ id: userId }) : JSON.stringify({ email: email });
 
             fetch(endpoint, {
                 method: 'DELETE',
+                headers: { 'Content-Type': 'application/json' },
+                body: body,
                 credentials: 'same-origin'
             })
             .then(response => {
@@ -811,11 +812,10 @@
             saveBtn.disabled = true;
             saveBtn.textContent = '...';
 
-            const endpoint = tab === 'n8n'
-                ? '/admin/n8n/users/' + encodeURIComponent(userId)
-                : '/admin/librechat/users/' + encodeURIComponent(email);
-
-            const body = JSON.stringify({ name: name, role: role });
+            const endpoint = tab === 'n8n' ? '/admin/n8n/users' : '/admin/librechat/users';
+            const body = tab === 'n8n' 
+                ? JSON.stringify({ id: userId, firstName: name, role: role })
+                : JSON.stringify({ email: email, name: name, role: role });
 
             fetch(endpoint, {
                 method: 'PUT',
@@ -832,10 +832,14 @@
             .then(data => {
                 showToast('Usuario actualizado', 'success');
                 closeEditModal();
-                if (typeof BroadcastUsersUpdate === 'function') {
-                    BroadcastUsersUpdate();
-                } else {
-                    window.location.reload();
+                refreshUsersTable();
+            })
+            .catch(error => {
+                showToast('Error: ' + error.message, 'error');
+                saveBtn.disabled = false;
+                saveBtn.textContent = 'Guardar';
+            });
+        }
                 }
             })
             .catch(error => {
