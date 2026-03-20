@@ -687,7 +687,8 @@
             const tbody = document.getElementById('users-tbody');
             if (!tbody) return;
 
-            const users = cachedUsers[tab] || [];
+            const data = getCachedUsers();
+            const users = data[tab] || [];
             tbody.innerHTML = generateUsersHTML(users, tab);
         }
 
