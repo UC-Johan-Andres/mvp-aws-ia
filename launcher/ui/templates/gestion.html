@@ -524,9 +524,47 @@
 
     <script>
         let currentInviteLink = '';
-        let cachedUsers = { n8n: [], librechat: [] };
         let currentTab = 'n8n';
         let isInitialized = false;
+
+        // Funciones para localStorage
+        function getCachedUsers() {
+            const stored = localStorage.getItem('gestionUsers');
+            return stored ? JSON.parse(stored) : { n8n: [], librechat: [] };
+        }
+
+        function setCachedUsers(data) {
+            localStorage.setItem('gestionUsers', JSON.stringify(data));
+        }
+
+        function updateLocalStorageFromResponse(tab, responseData) {
+            const data = getCachedUsers();
+            if (responseData && responseData.email) {
+                const exists = data[tab].find(u => u.email === responseData.email);
+                if (!exists) {
+                    data[tab].push(responseData);
+                }
+            }
+            setCachedUsers(data);
+            renderUsersFromCache(tab);
+        }
+
+        function removeFromLocalStorage(tab, email) {
+            const data = getCachedUsers();
+            data[tab] = data[tab].filter(u => u.email !== email);
+            setCachedUsers(data);
+            renderUsersFromCache(tab);
+        }
+
+        function updateUserInLocalStorage(tab, updatedUser) {
+            const data = getCachedUsers();
+            const index = data[tab].findIndex(u => u.email === updatedUser.email);
+            if (index !== -1) {
+                data[tab][index] = { ...data[tab][index], ...updatedUser };
+            }
+            setCachedUsers(data);
+            renderUsersFromCache(tab);
+        }
 
         // Inicializar formulario activo al cargar
         document.addEventListener('DOMContentLoaded', function() {
@@ -535,6 +573,13 @@
             if (formN8n && formLibrechat) {
                 formN8n.classList.add('active');
                 formLibrechat.classList.remove('active');
+            }
+            
+            // Si hay datos en localStorage, renderizar
+            const cached = getCachedUsers();
+            if (cached.n8n.length > 0 || cached.librechat.length > 0) {
+                isInitialized = true;
+                renderUsersFromCache(currentTab);
             }
         });
 
@@ -550,11 +595,12 @@
             const form = document.getElementById('form-' + tab);
             if (form) form.classList.add('active');
             
-            // Si tenemos datos en cache, renderizar desde cache (sin petición)
-            if (isInitialized && cachedUsers[tab]) {
+            // Renderizar desde localStorage (sin petición al servidor)
+            const cached = getCachedUsers();
+            if (cached[tab] && cached[tab].length > 0) {
+                isInitialized = true;
                 renderUsersFromCache(tab);
             }
-            // Si no hay cache, htmx ya cargó el contenido inicial con el GET
         }
 
         function setActiveTab(tab) {
@@ -603,14 +649,21 @@
                         </button>
                     `;
                 }
+                
+                // Botón Editar solo para LibreChat
+                if (tab === 'librechat') {
+                    actions += `
+                        <button type="button" class="btn-small btn-edit" 
+                                onclick="openEditModal('${tab}', '${escapeHtml(userId)}', '${escapeHtml(u.email)}', '${escapeHtml(name)}', '${escapeHtml(u.role)}')">
+                            Editar
+                        </button>
+                    `;
+                }
+                
                 actions += `
-                    <button type="button" class="btn-small btn-edit" 
-                            onclick="openEditModal('${tab}', '${escapeHtml(userId)}', '${escapeHtml(u.email)}', '${escapeHtml(name)}', '${escapeHtml(u.role)}')">
-                        Editar
-                    </button>
                     <button type="button" class="btn-small btn-delete" 
                             data-tab="${tab}" data-id="${escapeHtml(userId)}" data-email="${escapeHtml(u.email)}"
-                            onclick="deleteUser(this)"
+                            onclick="deleteUser(this)">
                         Eliminar
                     </button>
                 `;
@@ -638,7 +691,7 @@
             tbody.innerHTML = generateUsersHTML(users, tab);
         }
 
-        // SSE: interceptar ANTES del swap - solo actualizar cache, no hacer swap automático
+        // SSE: interceptar ANTES del swap - usar localStorage
         document.body.addEventListener('htmx:sseBeforeMessage', function(evt) {
             const eventName = evt.detail.type;
             
@@ -649,24 +702,22 @@
                     // 1. Parsear JSON del servidor
                     const data = JSON.parse(evt.detail.data);
                     
-                    // 2. Guardar en cache
-                    if (data.n8n) cachedUsers.n8n = data.n8n;
-                    if (data.librechat) cachedUsers.librechat = data.librechat;
+                    // 2. Guardar en localStorage
+                    setCachedUsers(data);
                     
-                    console.log('Cache updated:', cachedUsers);
+                    console.log('localStorage updated:', data);
                     
                     isInitialized = true;
-                    
-                    // 3. NO modificar evt.detail.data - evitar swap automático
-                    // 4. El renderizado lo hace el servidor via GET /gestion/content
                     
                     // Prevenir el swap automático de HTMX
                     evt.preventDefault();
                     
                     if (eventName === 'users_updated') {
                         showToast('Usuarios actualizados', 'success');
-                        renderUsersFromCache(currentTab);
                     }
+                    
+                    // Renderizar desde localStorage
+                    renderUsersFromCache(currentTab);
                 } catch (e) {
                     console.error('SSE: failed to parse message', e);
                     evt.preventDefault();
@@ -765,7 +816,7 @@
             })
             .then(data => {
                 showToast('Usuario eliminado', 'success');
-                refreshUsersTable();
+                removeFromLocalStorage(tab, email);
             })
             .catch(error => {
                 showToast('Error: ' + error.message, 'error');
@@ -775,6 +826,11 @@
         }
 
         function openEditModal(tab, userId, email, name, role) {
+            if (tab === 'n8n') {
+                showToast('Edición no disponible para n8n. Elimina y crea un nuevo usuario.', 'error');
+                return;
+            }
+            
             document.getElementById('edit-user-id').value = userId;
             document.getElementById('edit-user-tab').value = tab;
             document.getElementById('edit-user-email').value = email;
@@ -833,47 +889,12 @@
             .then(data => {
                 showToast('Usuario actualizado', 'success');
                 closeEditModal();
-                refreshUsersTable();
+                updateUserInLocalStorage(tab, { email: email, name: name, role: role });
             })
             .catch(error => {
                 showToast('Error: ' + error.message, 'error');
                 saveBtn.disabled = false;
                 saveBtn.textContent = 'Guardar';
-            });
-        }
-
-        function refreshUsersTable() {
-            fetch('/gestion/content?tab=' + currentTab, {
-                credentials: 'same-origin'
-            })
-            .then(response => response.text())
-            .then(html => {
-                const mainContent = document.getElementById('main-content');
-                if (mainContent) {
-                    mainContent.innerHTML = html;
-                    
-                    // Restaurar estado del tab y formulario
-                    // 1. Aplicar clase active al tab actual
-                    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-                    const activeTab = document.querySelector('[data-tab="' + currentTab + '"]');
-                    if (activeTab) activeTab.classList.add('active');
-                    
-                    // 2. Mostrar formulario correcto
-                    document.querySelectorAll('.user-form').forEach(f => f.classList.remove('active'));
-                    const form = document.getElementById('form-' + currentTab);
-                    if (form) form.classList.add('active');
-                    
-                    // 3. Actualizar footer
-                    document.getElementById('footer-service').textContent = 'Conectado a ' + (currentTab === 'n8n' ? 'n8n' : 'LibreChat');
-                    
-                    // 4. Limpiar cache para forzar re-render desde SSE
-                    isInitialized = false;
-                    cachedUsers = { n8n: [], librechat: [] };
-                }
-            })
-            .catch(error => {
-                console.error('Error refreshing table:', error);
-                window.location.reload();
             });
         }
     </script>

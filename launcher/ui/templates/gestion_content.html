@@ -44,10 +44,12 @@
                             Invitar
                         </button>
                         {{end}}
+                        {{if eq $tab "librechat"}}
                         <button type="button" class="btn-small btn-edit" 
                                 onclick="openEditModal('{{$tab}}', '{{.ID}}', '{{.Email}}', '{{.Name}}', '{{.Role}}')">
                             Editar
                         </button>
+                        {{end}}
                         <button type="button" class="btn-small btn-delete" 
                                 data-tab="{{$tab}}" data-id="{{.ID}}" data-email="{{.Email}}"
                                 onclick="deleteUser(this)">
