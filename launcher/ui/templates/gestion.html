@@ -399,7 +399,7 @@
     </style>
 </head>
 <body>
-    <div hx-ext="sse" sse-connect="/gestion/stream" id="sse-container"></div>
+    <div hx-ext="sse" sse-connect="/gestion/stream" sse-swap="init,users_updated" hx-target="#users-tbody" hx-swap="innerHTML" id="sse-container"></div>
     <div class="container" id="app-container">
         <div class="header">
             <h1>Gestión de Usuarios</h1>
@@ -411,18 +411,10 @@
 
         <div class="card">
             <div class="tabs">
-                <button class="tab active" data-tab="n8n"
-                        hx-get="/gestion/content?tab=n8n"
-                        hx-target="#main-content"
-                        hx-swap="innerHTML"
-                        onclick="setActiveTab('n8n')">
+                <button class="tab active" data-tab="n8n" onclick="switchTab('n8n')">
                     n8n
                 </button>
-                <button class="tab" data-tab="librechat"
-                        hx-get="/gestion/content?tab=librechat"
-                        hx-target="#main-content"
-                        hx-swap="innerHTML"
-                        onclick="setActiveTab('librechat')">
+                <button class="tab" data-tab="librechat" onclick="switchTab('librechat')">
                     LibreChat
                 </button>
             </div>
@@ -457,12 +449,23 @@
         let currentTab = 'n8n';
         let isInitialized = false;
 
-        function setActiveTab(tab) {
+        function switchTab(tab) {
+            // Actualizar UI de tabs
             document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
             document.querySelector(`[data-tab="${tab}"]`).classList.add('active');
             currentTab = tab;
             document.getElementById('footer-service').textContent = 'Conectado a ' + (tab === 'n8n' ? 'n8n' : 'LibreChat');
-            renderUsersFromCache(tab);
+            
+            // Si tenemos datos en cache, renderizar desde cache (sin petición)
+            if (isInitialized && cachedUsers[tab]) {
+                renderUsersFromCache(tab);
+            }
+            // Si no hay cache, htmx ya cargó el contenido inicial con el GET
+        }
+
+        function setActiveTab(tab) {
+            // Alias para compatibilidad
+            switchTab(tab);
         }
 
         function escapeHtml(text) {
@@ -479,14 +482,9 @@
             return 'role-user';
         }
 
-        function renderUsersFromCache(tab) {
-            const tbody = document.getElementById('users-tbody');
-            if (!tbody) return;
-
-            const users = cachedUsers[tab] || [];
-
-            if (users.length === 0) {
-                tbody.innerHTML = `
+        function generateUsersHTML(users, tab) {
+            if (!users || users.length === 0) {
+                return `
                     <tr>
                         <td colspan="4" class="empty-state">
                             <p>No hay usuarios registrados.</p>
@@ -494,66 +492,85 @@
                         </td>
                     </tr>
                 `;
-                return;
             }
 
-            tbody.innerHTML = users.map(u => {
+            return users.map(u => {
                 const name = u.firstName || u.name || '-';
                 const isPending = u.isPending === true;
+                const roleClass = getRoleClass(u.role);
+
+                let actions = '';
+                if (tab === 'n8n' && u.inviteAcceptUrl) {
+                    actions += `
+                        <button type="button" class="btn-small btn-invite" 
+                                onclick="openInviteModalDirect('${escapeHtml(u.email)}', '${escapeHtml(u.inviteAcceptUrl)}')">
+                            Invitar
+                        </button>
+                    `;
+                }
+                actions += `
+                    <button type="button" class="btn-small btn-delete" disabled title="Próximamente">
+                        Eliminar
+                    </button>
+                `;
 
                 return `
                     <tr>
                         <td>${escapeHtml(u.email)}</td>
                         <td>${escapeHtml(name)}</td>
                         <td>
-                            <span class="role-badge ${getRoleClass(u.role)}">
+                            <span class="role-badge ${roleClass}">
                                 ${escapeHtml(u.role)}${isPending ? ' (pendiente)' : ''}
                             </span>
                         </td>
-                        <td>
-                            ${tab === 'n8n' && u.inviteAcceptUrl ? `
-                                <button type="button" class="btn-small btn-invite" 
-                                        onclick="openInviteModalDirect('${escapeHtml(u.email)}', '${escapeHtml(u.inviteAcceptUrl)}')">
-                                    Invitar
-                                </button>
-                            ` : ''}
-                            <button type="button" class="btn-small btn-delete" disabled title="Próximamente">
-                                Eliminar
-                            </button>
-                        </td>
+                        <td>${actions}</td>
                     </tr>
                 `;
             }).join('');
         }
 
-        function handleSSEMessage(evt) {
-            const eventName = evt.detail.type || evt.detail.eventName;
-            const eventData = evt.detail.data;
+        function renderUsersFromCache(tab) {
+            const tbody = document.getElementById('users-tbody');
+            if (!tbody) return;
+
+            const users = cachedUsers[tab] || [];
+            tbody.innerHTML = generateUsersHTML(users, tab);
+        }
+
+        // SSE: interceptar ANTES del swap para transformar JSON a HTML
+        document.body.addEventListener('htmx:sseBeforeMessage', function(evt) {
+            const eventName = evt.detail.type;
             
-            console.log('SSE event received:', eventName, eventData);
+            console.log('SSE BeforeMessage:', eventName);
             
             if (eventName === 'init' || eventName === 'users_updated') {
                 try {
-                    const data = JSON.parse(eventData);
+                    // 1. Parsear JSON del servidor
+                    const data = JSON.parse(evt.detail.data);
+                    
+                    // 2. Guardar en cache
                     if (data.n8n) cachedUsers.n8n = data.n8n;
                     if (data.librechat) cachedUsers.librechat = data.librechat;
                     
                     console.log('Cache updated:', cachedUsers);
                     
+                    // 3. Generar HTML para el tab actual
+                    const html = generateUsersHTML(cachedUsers[currentTab], currentTab);
+                    
+                    // 4. Reemplazar data con HTML para que htmx haga el swap
+                    evt.detail.data = html;
+                    
                     isInitialized = true;
-                    renderUsersFromCache(currentTab);
 
                     if (eventName === 'users_updated') {
                         showToast('Usuarios actualizados', 'success');
                     }
                 } catch (e) {
                     console.error('SSE: failed to parse message', e);
+                    evt.preventDefault(); // Evitar swap si hay error
                 }
             }
-        }
-
-        document.getElementById('sse-container').addEventListener('htmx:sseMessage', handleSSEMessage);
-        document.body.addEventListener('htmx:sseMessage', handleSSEMessage);
+        });
 
         document.body.addEventListener('htmx:afterSwap', function(evt) {
             if (!evt.detail.target) return;
