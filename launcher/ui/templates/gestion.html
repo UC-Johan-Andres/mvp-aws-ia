@@ -726,41 +726,6 @@
             }
         });
 
-        document.body.addEventListener('htmx:afterSwap', function(evt) {
-            if (!evt.detail.target) return;
-            if (evt.detail.target.id === 'main-content') {
-                const hasError = evt.detail.target.querySelector('.error-banner');
-                if (hasError) {
-                    showToast(hasError.textContent.trim(), 'error');
-                }
-                renderUsersFromCache(currentTab);
-            }
-        });
-
-        document.body.addEventListener('htmx:beforeSwap', function(evt) {
-            if (!evt.detail.target) return;
-            if (evt.detail.target.id === 'main-content' && evt.detail.serverResponse && evt.detail.serverResponse.headers) {
-                const contentType = evt.detail.serverResponse.headers.get('content-type');
-                if (contentType && contentType.includes('application/json')) {
-                    evt.detail.serverResponse.text().then(text => {
-                        try {
-                            const data = JSON.parse(text);
-                            if (data.error) {
-                                showToast(data.error, 'error');
-                            } else if (Array.isArray(data)) {
-                                const errors = data.filter(d => !d.created && d.error).map(d => d.email + ': ' + d.error);
-                                if (errors.length > 0) {
-                                    showToast('Algunos fallaron: ' + errors.join(', '), 'error');
-                                } else {
-                                    showToast('Usuario(s) creado(s) exitosamente', 'success');
-                                }
-                            }
-                        } catch (e) {}
-                    });
-                }
-            }
-        });
-
         function openInviteModalDirect(email, inviteUrl) {
             currentInviteLink = inviteUrl;
             document.getElementById('invite-link-box').textContent = inviteUrl;
@@ -890,6 +855,8 @@
             .then(data => {
                 showToast('Usuario actualizado', 'success');
                 closeEditModal();
+                saveBtn.disabled = false;
+                saveBtn.textContent = 'Guardar';
                 updateUserInLocalStorage(tab, { email: email, name: name, role: role });
             })
             .catch(error => {
