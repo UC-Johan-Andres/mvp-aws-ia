@@ -610,7 +610,7 @@
                     </button>
                     <button type="button" class="btn-small btn-delete" 
                             data-tab="${tab}" data-id="${escapeHtml(userId)}" data-email="${escapeHtml(u.email)}"
-                            onclick="deleteUser(this)">
+                            onclick="deleteUser(this)"
                         Eliminar
                     </button>
                 `;
@@ -833,14 +833,6 @@
                 showToast('Usuario actualizado', 'success');
                 closeEditModal();
                 refreshUsersTable();
-            })
-            .catch(error => {
-                showToast('Error: ' + error.message, 'error');
-                saveBtn.disabled = false;
-                saveBtn.textContent = 'Guardar';
-            });
-        }
-                }
             })
             .catch(error => {
                 showToast('Error: ' + error.message, 'error');
