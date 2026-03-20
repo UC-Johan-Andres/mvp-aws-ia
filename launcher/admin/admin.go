@@ -40,6 +40,33 @@ func HandleLibreChatDeleteUser(w http.ResponseWriter, r *http.Request) {
 	deleteLibreChatUser(w, r)
 }
 
+// HandleN8NDeleteUser handles DELETE /admin/n8n/users/{id}
+func HandleN8NDeleteUser(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodDelete {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	deleteN8NUser(w, r)
+}
+
+// HandleLibreChatUpdateUser handles PUT /admin/librechat/users/{email}
+func HandleLibreChatUpdateUser(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPut {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	updateLibreChatUser(w, r)
+}
+
+// HandleN8NUpdateUser handles PUT /admin/n8n/users/{id}
+func HandleN8NUpdateUser(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPut {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	updateN8NUser(w, r)
+}
+
 // HandleN8NUsers routes GET/POST
 func HandleN8NUsers(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {

@@ -168,3 +168,128 @@ func createN8NUsers(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.Write(data)
 }
+
+func deleteN8NUser(w http.ResponseWriter, r *http.Request) {
+	if config.N8NOwnerEmail == "" || config.N8NOwnerPass == "" {
+		jsonError(w, "n8n owner credentials not configured", http.StatusServiceUnavailable)
+		return
+	}
+
+	userID := r.PathValue("id")
+	if userID == "" {
+		jsonError(w, "user id path parameter is required", http.StatusBadRequest)
+		return
+	}
+
+	client := n8nHTTPClient()
+
+	cookies, err := n8nLogin(client)
+	if err != nil {
+		jsonError(w, "n8n authentication failed: "+err.Error(), http.StatusBadGateway)
+		return
+	}
+
+	req, err := http.NewRequest(http.MethodDelete, config.N8NInternalURL+"/rest/users/"+userID, nil)
+	if err != nil {
+		jsonError(w, "failed to create request: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	req.Header.Set("Content-Type", "application/json")
+	if config.N8NBasicUser != "" {
+		req.SetBasicAuth(config.N8NBasicUser, config.N8NBasicPass)
+	}
+	for _, c := range cookies {
+		req.AddCookie(c)
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		jsonError(w, "failed to delete n8n user: "+err.Error(), http.StatusBadGateway)
+		return
+	}
+	defer resp.Body.Close()
+
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		jsonError(w, "failed to read n8n response: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
+		jsonError(w, fmt.Sprintf("n8n returned status %d: %s", resp.StatusCode, string(data)), http.StatusBadGateway)
+		return
+	}
+
+	jsonOK(w, map[string]string{"deleted": userID})
+}
+
+type n8nUserUpdateRequest struct {
+	FirstName string `json:"firstName"`
+	Role      string `json:"role"`
+}
+
+func updateN8NUser(w http.ResponseWriter, r *http.Request) {
+	if config.N8NOwnerEmail == "" || config.N8NOwnerPass == "" {
+		jsonError(w, "n8n owner credentials not configured", http.StatusServiceUnavailable)
+		return
+	}
+
+	userID := r.PathValue("id")
+	if userID == "" {
+		jsonError(w, "user id path parameter is required", http.StatusBadRequest)
+		return
+	}
+
+	var reqBody n8nUserUpdateRequest
+	if err := json.NewDecoder(r.Body).Decode(&reqBody); err != nil {
+		jsonError(w, "invalid JSON body: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if reqBody.Role != "global:admin" && reqBody.Role != "global:member" {
+		jsonError(w, "invalid role: must be global:admin or global:member", http.StatusBadRequest)
+		return
+	}
+
+	client := n8nHTTPClient()
+
+	cookies, err := n8nLogin(client)
+	if err != nil {
+		jsonError(w, "n8n authentication failed: "+err.Error(), http.StatusBadGateway)
+		return
+	}
+
+	body, _ := json.Marshal(reqBody)
+	req, err := http.NewRequest(http.MethodPut, config.N8NInternalURL+"/rest/users/"+userID, bytes.NewReader(body))
+	if err != nil {
+		jsonError(w, "failed to create request: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	req.Header.Set("Content-Type", "application/json")
+	if config.N8NBasicUser != "" {
+		req.SetBasicAuth(config.N8NBasicUser, config.N8NBasicPass)
+	}
+	for _, c := range cookies {
+		req.AddCookie(c)
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		jsonError(w, "failed to update n8n user: "+err.Error(), http.StatusBadGateway)
+		return
+	}
+	defer resp.Body.Close()
+
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		jsonError(w, "failed to read n8n response: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
+		jsonError(w, fmt.Sprintf("n8n returned status %d: %s", resp.StatusCode, string(data)), http.StatusBadGateway)
+		return
+	}
+
+	jsonOK(w, map[string]string{"updated": userID})
+}

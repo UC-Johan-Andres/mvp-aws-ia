@@ -136,7 +136,18 @@
             color: white;
         }
         .btn-invite:hover { background: #0056b3; }
+        .btn-edit {
+            background: #28a745;
+            color: white;
+            margin-right: 4px;
+        }
+        .btn-edit:hover { background: #218838; }
         .btn-delete {
+            background: #dc3545;
+            color: white;
+        }
+        .btn-delete:hover { background: #c82333; }
+        .btn-delete:disabled {
             background: #e9ecef;
             color: #6c757d;
             cursor: not-allowed;
@@ -399,6 +410,45 @@
             border-radius: 50%;
             background: #28a745;
         }
+
+        #edit-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.5);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 2000;
+        }
+        #edit-modal.active { display: flex; }
+        .form-group {
+            margin-bottom: 16px;
+        }
+        .form-group label {
+            display: block;
+            margin-bottom: 6px;
+            font-weight: 500;
+            color: #495057;
+        }
+        .form-group input, .form-group select {
+            width: 100%;
+            padding: 8px 12px;
+            border: 1px solid #dee2e6;
+            border-radius: 6px;
+            font-size: 0.9rem;
+        }
+        .modal-save {
+            padding: 8px 16px;
+            background: #28a745;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+        }
+        .modal-save:hover { background: #218838; }
     </style>
 </head>
 <body>
@@ -442,6 +492,32 @@
             <div class="modal-actions">
                 <button class="modal-close" onclick="closeInviteModal()">Cerrar</button>
                 <button class="modal-copy" onclick="copyInviteLink()">Copiar enlace</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="edit-modal">
+        <div class="modal-content">
+            <h3>Editar Usuario</h3>
+            <input type="hidden" id="edit-user-id">
+            <input type="hidden" id="edit-user-tab">
+            <div class="form-group">
+                <label>Email</label>
+                <input type="email" id="edit-user-email" readonly style="background: #e9ecef;">
+            </div>
+            <div class="form-group">
+                <label>Nombre</label>
+                <input type="text" id="edit-user-name">
+            </div>
+            <div class="form-group">
+                <label>Rol</label>
+                <select id="edit-user-role">
+                    <!-- Opciones se llenan dinámicamente -->
+                </select>
+            </div>
+            <div class="modal-actions">
+                <button class="modal-close" onclick="closeEditModal()">Cancelar</button>
+                <button class="modal-save" onclick="saveUser()">Guardar</button>
             </div>
         </div>
     </div>
@@ -516,6 +592,7 @@
                 const name = u.firstName || u.name || '-';
                 const isPending = u.isPending === true;
                 const roleClass = getRoleClass(u.role);
+                const userId = u.id || u.email;
 
                 let actions = '';
                 if (tab === 'n8n' && u.inviteAcceptUrl) {
@@ -527,7 +604,13 @@
                     `;
                 }
                 actions += `
-                    <button type="button" class="btn-small btn-delete" disabled title="Próximamente">
+                    <button type="button" class="btn-small btn-edit" 
+                            onclick="openEditModal('${tab}', '${escapeHtml(userId)}', '${escapeHtml(u.email)}', '${escapeHtml(name)}', '${escapeHtml(u.role)}')">
+                        Editar
+                    </button>
+                    <button type="button" class="btn-small btn-delete" 
+                            data-tab="${tab}" data-id="${escapeHtml(userId)}" data-email="${escapeHtml(u.email)}"
+                            onclick="deleteUser(this)">
                         Eliminar
                     </button>
                 `;
@@ -650,6 +733,138 @@
             toast.textContent = message;
             container.appendChild(toast);
             setTimeout(() => toast.remove(), 4000);
+        }
+
+        function deleteUser(btn) {
+            const tab = btn.dataset.tab;
+            const userId = btn.dataset.id;
+            const email = btn.dataset.email;
+
+            if (!confirm('¿Estás seguro de eliminar al usuario ' + email + '?')) {
+                return;
+            }
+
+            btn.disabled = true;
+            btn.textContent = '...';
+
+            const endpoint = tab === 'n8n' 
+                ? '/admin/n8n/users/' + encodeURIComponent(userId)
+                : '/admin/librechat/users/' + encodeURIComponent(email);
+
+            fetch(endpoint, {
+                method: 'DELETE',
+                credentials: 'same-origin'
+            })
+            .then(response => {
+                if (!response.ok) {
+                    return response.json().then(err => { throw new Error(err.error || 'Error al eliminar'); });
+                }
+                return response.json();
+            })
+            .then(data => {
+                showToast('Usuario eliminado', 'success');
+                refreshUsersTable();
+            })
+            .catch(error => {
+                showToast('Error: ' + error.message, 'error');
+                btn.disabled = false;
+                btn.textContent = 'Eliminar';
+            });
+        }
+
+        function openEditModal(tab, userId, email, name, role) {
+            document.getElementById('edit-user-id').value = userId;
+            document.getElementById('edit-user-tab').value = tab;
+            document.getElementById('edit-user-email').value = email;
+            document.getElementById('edit-user-name').value = name;
+
+            const roleSelect = document.getElementById('edit-user-role');
+            roleSelect.innerHTML = '';
+
+            if (tab === 'n8n') {
+                roleSelect.innerHTML = `
+                    <option value="global:member" ${role === 'global:member' ? 'selected' : ''}>global:member</option>
+                    <option value="global:admin" ${role === 'global:admin' ? 'selected' : ''}>global:admin</option>
+                `;
+            } else {
+                roleSelect.innerHTML = `
+                    <option value="USER" ${role === 'USER' ? 'selected' : ''}>USER</option>
+                    <option value="ADMIN" ${role === 'ADMIN' ? 'selected' : ''}>ADMIN</option>
+                `;
+            }
+
+            document.getElementById('edit-modal').classList.add('active');
+        }
+
+        function closeEditModal() {
+            document.getElementById('edit-modal').classList.remove('active');
+        }
+
+        function saveUser() {
+            const userId = document.getElementById('edit-user-id').value;
+            const tab = document.getElementById('edit-user-tab').value;
+            const email = document.getElementById('edit-user-email').value;
+            const name = document.getElementById('edit-user-name').value;
+            const role = document.getElementById('edit-user-role').value;
+
+            const saveBtn = document.querySelector('.modal-save');
+            saveBtn.disabled = true;
+            saveBtn.textContent = '...';
+
+            const endpoint = tab === 'n8n'
+                ? '/admin/n8n/users/' + encodeURIComponent(userId)
+                : '/admin/librechat/users/' + encodeURIComponent(email);
+
+            const body = JSON.stringify({ name: name, role: role });
+
+            fetch(endpoint, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: body,
+                credentials: 'same-origin'
+            })
+            .then(response => {
+                if (!response.ok) {
+                    return response.json().then(err => { throw new Error(err.error || 'Error al guardar'); });
+                }
+                return response.json();
+            })
+            .then(data => {
+                showToast('Usuario actualizado', 'success');
+                closeEditModal();
+                if (typeof BroadcastUsersUpdate === 'function') {
+                    BroadcastUsersUpdate();
+                } else {
+                    window.location.reload();
+                }
+            })
+            .catch(error => {
+                showToast('Error: ' + error.message, 'error');
+                saveBtn.disabled = false;
+                saveBtn.textContent = 'Guardar';
+            });
+        }
+
+        function refreshUsersTable() {
+            fetch('/gestion/content?tab=' + currentTab, {
+                credentials: 'same-origin'
+            })
+            .then(response => response.text())
+            .then(html => {
+                const mainContent = document.getElementById('main-content');
+                if (mainContent) {
+                    mainContent.innerHTML = html;
+                    const tbody = document.getElementById('users-tbody');
+                    if (tbody) {
+                        isInitialized = false;
+                        cachedUsers = { n8n: [], librechat: [] };
+                    }
+                }
+            })
+            .catch(error => {
+                console.error('Error refreshing table:', error);
+                window.location.reload();
+            });
         }
     </script>
 </body>

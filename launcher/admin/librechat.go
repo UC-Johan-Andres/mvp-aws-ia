@@ -236,3 +236,68 @@ func deleteLibreChatUser(w http.ResponseWriter, r *http.Request) {
 
 	jsonOK(w, map[string]string{"deleted": email})
 }
+
+type librechatUpdateRequest struct {
+	Name string `json:"name"`
+	Role string `json:"role"`
+}
+
+func updateLibreChatUser(w http.ResponseWriter, r *http.Request) {
+	if config.MongoURI == "" {
+		jsonError(w, "MongoDB not configured", http.StatusServiceUnavailable)
+		return
+	}
+
+	email := r.PathValue("email")
+	if email == "" {
+		jsonError(w, "email path parameter is required", http.StatusBadRequest)
+		return
+	}
+
+	var reqBody librechatUpdateRequest
+	if err := json.NewDecoder(r.Body).Decode(&reqBody); err != nil {
+		jsonError(w, "invalid JSON body: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if reqBody.Role != "" && reqBody.Role != "USER" && reqBody.Role != "ADMIN" {
+		jsonError(w, "invalid role: must be USER or ADMIN", http.StatusBadRequest)
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	defer cancel()
+
+	coll, client, err := mongoCollection(ctx)
+	if err != nil {
+		jsonError(w, "failed to connect to MongoDB: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer client.Disconnect(ctx)
+
+	update := bson.M{}
+	if reqBody.Name != "" {
+		update["name"] = reqBody.Name
+	}
+	if reqBody.Role != "" {
+		update["role"] = reqBody.Role
+	}
+
+	if len(update) == 0 {
+		jsonError(w, "no fields to update", http.StatusBadRequest)
+		return
+	}
+
+	res, err := coll.UpdateOne(ctx, bson.M{"email": email}, bson.M{"$set": update})
+	if err != nil {
+		jsonError(w, "failed to update user: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	if res.MatchedCount == 0 {
+		jsonError(w, "user not found", http.StatusNotFound)
+		return
+	}
+
+	jsonOK(w, map[string]string{"updated": email})
+}
