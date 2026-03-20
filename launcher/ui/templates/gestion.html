@@ -288,6 +288,9 @@
         .btn-submit:hover { background: #0056b3; }
         .btn-submit:disabled { background: #cce5ff; cursor: not-allowed; }
 
+        .user-form { display: none; }
+        .user-form.active { display: block; }
+
         #toasts {
             position: fixed;
             bottom: 24px;
@@ -449,12 +452,27 @@
         let currentTab = 'n8n';
         let isInitialized = false;
 
+        // Inicializar formulario activo al cargar
+        document.addEventListener('DOMContentLoaded', function() {
+            const formN8n = document.getElementById('form-n8n');
+            const formLibrechat = document.getElementById('form-librechat');
+            if (formN8n && formLibrechat) {
+                formN8n.classList.add('active');
+                formLibrechat.classList.remove('active');
+            }
+        });
+
         function switchTab(tab) {
             // Actualizar UI de tabs
             document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
             document.querySelector(`[data-tab="${tab}"]`).classList.add('active');
             currentTab = tab;
             document.getElementById('footer-service').textContent = 'Conectado a ' + (tab === 'n8n' ? 'n8n' : 'LibreChat');
+            
+            // Mostrar/ocultar formulario correspondiente
+            document.querySelectorAll('.user-form').forEach(f => f.classList.remove('active'));
+            const form = document.getElementById('form-' + tab);
+            if (form) form.classList.add('active');
             
             // Si tenemos datos en cache, renderizar desde cache (sin petición)
             if (isInitialized && cachedUsers[tab]) {

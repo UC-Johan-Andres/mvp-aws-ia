@@ -71,12 +71,10 @@
             </label>
         </div>
 
-        <form id="form-method" hx-post="/gestion" hx-target="#main-content" hx-swap="innerHTML">
-            <input type="hidden" name="tab" value="{{.Tab}}">
-
-            <div class="dynamic-form {{.Tab}}-form">
+        <form id="form-n8n" class="user-form" hx-post="/gestion" hx-target="#main-content" hx-swap="innerHTML">
+            <input type="hidden" name="tab" value="n8n">
+            <div class="dynamic-form n8n-form">
                 <div class="rows-container">
-                    {{if eq .Tab "n8n"}}
                     <div class="form-row">
                         <input type="email" name="email" placeholder="email@ejemplo.com" required>
                         <select name="role">
@@ -85,7 +83,19 @@
                         </select>
                         <button type="button" class="btn-remove" onclick="this.parentElement.remove()">&times;</button>
                     </div>
-                    {{else}}
+                </div>
+                <button type="button" class="btn-add-row" onclick="addRow()">+ Agregar fila</button>
+            </div>
+            <div class="form-actions">
+                <button type="button" class="btn-cancel" onclick="resetForm()">Cancelar</button>
+                <button type="submit" class="btn-submit">Crear Usuario(s)</button>
+            </div>
+        </form>
+
+        <form id="form-librechat" class="user-form" hx-post="/gestion" hx-target="#main-content" hx-swap="innerHTML">
+            <input type="hidden" name="tab" value="librechat">
+            <div class="dynamic-form librechat-form">
+                <div class="rows-container">
                     <div class="form-row">
                         <input type="email" name="email" placeholder="email@ejemplo.com" required>
                         <input type="text" name="name" placeholder="Nombre">
@@ -96,11 +106,9 @@
                         </select>
                         <button type="button" class="btn-remove" onclick="this.parentElement.remove()">&times;</button>
                     </div>
-                    {{end}}
                 </div>
                 <button type="button" class="btn-add-row" onclick="addRow()">+ Agregar fila</button>
             </div>
-
             <div class="form-actions">
                 <button type="button" class="btn-cancel" onclick="resetForm()">Cancelar</button>
                 <button type="submit" class="btn-submit">Crear Usuario(s)</button>
@@ -153,12 +161,6 @@
         form.querySelector('.rows-container').appendChild(row);
     }
 
-    function toggleMethod(method) {
-        const formMethod = method === 'form';
-        document.getElementById('form-method').style.display = formMethod ? 'block' : 'none';
-        document.getElementById('csv-method').className = formMethod ? '' : 'csv-zone active';
-    }
-
     function handleCSVUpload(input) {
         const file = input.files[0];
         if (!file) return;
@@ -175,6 +177,14 @@
         reader.readAsText(file);
     }
 
+    function toggleMethod(method) {
+        const showForm = method === 'form';
+        document.querySelectorAll('.user-form').forEach(f => {
+            f.style.display = showForm ? 'block' : 'none';
+        });
+        document.getElementById('csv-method').className = showForm ? '' : 'csv-zone active';
+    }
+
     function resetForm() {
         const radio = document.querySelector('input[name="method"][value="form"]');
         if (radio) radio.checked = true;
@@ -182,12 +192,11 @@
         document.getElementById('csv-preview').style.display = 'none';
         document.getElementById('csv-data').value = '';
 
-        const form = document.getElementById('form-method');
-        const rowsContainer = form.querySelector('.rows-container');
-        rowsContainer.innerHTML = '';
-
-        if ('{{.Tab}}' === 'n8n') {
-            rowsContainer.innerHTML = `
+        // Resetear formulario n8n
+        const formN8n = document.getElementById('form-n8n');
+        if (formN8n) {
+            const rowsN8n = formN8n.querySelector('.rows-container');
+            rowsN8n.innerHTML = `
                 <div class="form-row">
                     <input type="email" name="email" placeholder="email@ejemplo.com" required>
                     <select name="role">
@@ -197,8 +206,13 @@
                     <button type="button" class="btn-remove" onclick="this.parentElement.remove()">&times;</button>
                 </div>
             `;
-        } else {
-            rowsContainer.innerHTML = `
+        }
+
+        // Resetear formulario librechat
+        const formLibrechat = document.getElementById('form-librechat');
+        if (formLibrechat) {
+            const rowsLibrechat = formLibrechat.querySelector('.rows-container');
+            rowsLibrechat.innerHTML = `
                 <div class="form-row">
                     <input type="email" name="email" placeholder="email@ejemplo.com" required>
                     <input type="text" name="name" placeholder="Nombre">
