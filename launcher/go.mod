@@ -3,6 +3,7 @@ module launcher
 go 1.22
 
 require (
+	github.com/lib/pq v1.10.9
 	go.mongodb.org/mongo-driver v1.15.0
 	golang.org/x/crypto v0.24.0
 )

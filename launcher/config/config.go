@@ -25,6 +25,8 @@ var (
 	N8NBasicPass   = getEnv("N8N_BASIC_AUTH_PASSWORD", "")
 	N8NOwnerEmail  = getEnv("N8N_OWNER_EMAIL", "")
 	N8NOwnerPass   = getEnv("N8N_OWNER_PASSWORD", "")
+	// DSN PostgreSQL de la instancia n8n (misma BD que usa el contenedor n8n), p. ej. postgres://n8n:pass@postgres:5432/n8n
+	N8NPostgresDSN = getEnv("N8N_POSTGRES_DSN", "")
 )
 
 var HostToService = map[string]string{

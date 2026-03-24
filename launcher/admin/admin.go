@@ -148,8 +148,7 @@ func getN8NUsers() ([]N8NUser, error) {
 	}
 
 	items := result.Data.Items
-	statsClient := n8nStatsHTTPClient()
-	enrichN8NUsersWithStats(statsClient, cookies, items)
+	enrichN8NUsersFromPostgres(items)
 
 	return items, nil
 }
@@ -206,10 +205,12 @@ type GestionUser struct {
 	InviteURL string
 	IsPending bool
 	CreatedAt string
-	// n8n: estadísticas del proyecto personal (si están disponibles)
-	WorkflowsTotal   int
-	WorkflowsActive  int
-	ExecutionsTotal  int64
+	// n8n: estadísticas desde PostgreSQL (misma consulta que en psql)
+	WorkflowsAccesibles  int64
+	ProdExecutions       int64
+	FailedProdExecutions int64
+	FailureRatePct       float64
+	RunTimeAvgSeconds    float64
 }
 
 // N8NProjectRelation is a user's membership in an n8n project (RBAC).
@@ -230,9 +231,11 @@ type N8NUser struct {
 	InviteAcceptURL  string `json:"inviteAcceptUrl"`
 	ProjectRelations []N8NProjectRelation `json:"projectRelations"`
 
-	WorkflowsTotal   int   `json:"workflowsTotal"`
-	WorkflowsActive  int   `json:"workflowsActive"`
-	ExecutionsTotal  int64 `json:"executionsTotal"`
+	WorkflowsAccesibles  int64   `json:"workflowsAccesibles"`
+	ProdExecutions       int64   `json:"prodExecutions"`
+	FailedProdExecutions int64   `json:"failedProdExecutions"`
+	FailureRatePct       float64 `json:"failureRatePct"`
+	RunTimeAvgSeconds    float64 `json:"runTimeAvgSeconds"`
 }
 
 // LibreChatUser represents a user from LibreChat.
@@ -290,9 +293,11 @@ func HandleGestionContent(w http.ResponseWriter, r *http.Request) {
 				Role:             u.Role,
 				InviteURL:        u.InviteAcceptURL,
 				IsPending:        u.IsPending,
-				WorkflowsTotal:   u.WorkflowsTotal,
-				WorkflowsActive:  u.WorkflowsActive,
-				ExecutionsTotal:  u.ExecutionsTotal,
+				WorkflowsAccesibles:  u.WorkflowsAccesibles,
+				ProdExecutions:       u.ProdExecutions,
+				FailedProdExecutions: u.FailedProdExecutions,
+				FailureRatePct:       u.FailureRatePct,
+				RunTimeAvgSeconds:    u.RunTimeAvgSeconds,
 			})
 		}
 	} else {
@@ -677,7 +682,7 @@ func HandleGestionUsersRows(w http.ResponseWriter, r *http.Request) {
 		n8nUsers, err := getN8NUsers()
 		if err != nil {
 			log.Printf("gestion users-rows n8n: %v", err)
-			ui.RenderGestionRows(w, tab, `<table><tbody><tr><td colspan="7" class="empty-state">No se pudieron cargar los usuarios.</td></tr></tbody></table>`)
+			ui.RenderGestionRows(w, tab, `<table><tbody><tr><td colspan="9" class="empty-state">No se pudieron cargar los usuarios.</td></tr></tbody></table>`)
 			return
 		}
 		ui.RenderGestionRows(w, tab, buildN8NUsersTableHTML(n8nUsers))
@@ -705,9 +710,10 @@ func fetchN8NUsers() ([]byte, error) {
 func buildN8NUsersTableHTML(users []N8NUser) string {
 	var b strings.Builder
 	b.WriteString(`<table><thead><tr><th>Email</th><th>Nombre</th><th>Rol</th>
-<th class="col-num">Workflows</th><th class="col-num">Activos</th><th class="col-num">Ejecuciones</th><th>Acciones</th></tr></thead><tbody>`)
+<th class="col-num">Workflows acc.</th><th class="col-num">Prod ejec.</th><th class="col-num">Fallidas</th>
+<th class="col-num">% fallo</th><th class="col-num">T. medio (s)</th><th>Acciones</th></tr></thead><tbody>`)
 	if len(users) == 0 {
-		b.WriteString(`<tr><td colspan="7" class="empty-state"><p>No hay usuarios registrados.</p></td></tr>`)
+		b.WriteString(`<tr><td colspan="9" class="empty-state"><p>No hay usuarios registrados.</p></td></tr>`)
 		b.WriteString(`</tbody></table>`)
 		return b.String()
 	}
@@ -737,14 +743,17 @@ func buildN8NUsersTableHTML(users []N8NUser) string {
 			uid = u.Email
 		}
 		fmt.Fprintf(&b, `<tr><td>%s</td><td>%s</td><td><span class="role-badge %s">%s</span></td>
-<td class="col-num">%d</td><td class="col-num">%d</td><td class="col-num">%d</td><td>%s<button type="button" class="btn-small btn-delete" data-tab="n8n" data-id="%s" data-email="%s" onclick="deleteUser(this)">Eliminar</button></td></tr>`,
+<td class="col-num">%d</td><td class="col-num">%d</td><td class="col-num">%d</td>
+<td class="col-num">%.2f</td><td class="col-num">%.2f</td><td>%s<button type="button" class="btn-small btn-delete" data-tab="n8n" data-id="%s" data-email="%s" onclick="deleteUser(this)">Eliminar</button></td></tr>`,
 			html.EscapeString(u.Email),
 			html.EscapeString(name),
 			roleClass,
 			html.EscapeString(roleLabel),
-			u.WorkflowsTotal,
-			u.WorkflowsActive,
-			u.ExecutionsTotal,
+			u.WorkflowsAccesibles,
+			u.ProdExecutions,
+			u.FailedProdExecutions,
+			u.FailureRatePct,
+			u.RunTimeAvgSeconds,
 			invite,
 			html.EscapeString(uid),
 			html.EscapeString(u.Email),

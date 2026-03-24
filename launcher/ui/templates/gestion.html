@@ -636,6 +636,13 @@
             return String(v);
         }
 
+        function fmtFloat2(v) {
+            if (v === undefined || v === null || Number.isNaN(Number(v))) {
+                return '—';
+            }
+            return Number(v).toFixed(2);
+        }
+
         function updateUsersTableHeader(tab) {
             const tr = document.querySelector('#users-table thead tr');
             if (!tr) {
@@ -646,9 +653,11 @@
                     <th>Email</th>
                     <th>Nombre</th>
                     <th>Rol</th>
-                    <th class="col-num">Workflows</th>
-                    <th class="col-num">Activos</th>
-                    <th class="col-num">Ejecuciones</th>
+                    <th class="col-num">Workflows acc.</th>
+                    <th class="col-num">Prod ejec.</th>
+                    <th class="col-num">Fallidas</th>
+                    <th class="col-num">% fallo</th>
+                    <th class="col-num">T. medio (s)</th>
                     <th>Acciones</th>
                 `;
             } else {
@@ -662,7 +671,7 @@
         }
 
         function generateUsersHTML(users, tab) {
-            const emptyCols = tab === 'n8n' ? 7 : 4;
+            const emptyCols = tab === 'n8n' ? 9 : 4;
             if (!users || users.length === 0) {
                 return `
                     <tr>
@@ -709,9 +718,11 @@
                 `;
 
                 const statsCells = tab === 'n8n' ? `
-                        <td class="col-num">${fmtStat(u.workflowsTotal)}</td>
-                        <td class="col-num">${fmtStat(u.workflowsActive)}</td>
-                        <td class="col-num">${fmtStat(u.executionsTotal)}</td>
+                        <td class="col-num">${fmtStat(u.workflowsAccesibles)}</td>
+                        <td class="col-num">${fmtStat(u.prodExecutions)}</td>
+                        <td class="col-num">${fmtStat(u.failedProdExecutions)}</td>
+                        <td class="col-num">${fmtFloat2(u.failureRatePct)}</td>
+                        <td class="col-num">${fmtFloat2(u.runTimeAvgSeconds)}</td>
                 ` : '';
 
                 return `

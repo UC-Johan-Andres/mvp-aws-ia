@@ -22,9 +22,11 @@
                     <th>Nombre</th>
                     <th>Rol</th>
                     {{if eq .Tab "n8n"}}
-                    <th class="col-num">Workflows</th>
-                    <th class="col-num">Activos</th>
-                    <th class="col-num">Ejecuciones</th>
+                    <th class="col-num">Workflows acc.</th>
+                    <th class="col-num">Prod ejec.</th>
+                    <th class="col-num">Fallidas</th>
+                    <th class="col-num">% fallo</th>
+                    <th class="col-num">T. medio (s)</th>
                     {{end}}
                     <th>Acciones</th>
                 </tr>
@@ -34,7 +36,7 @@
                 {{$users := .Users}}
                 {{if eq (len $users) 0}}
                 <tr>
-                    <td colspan="{{if eq .Tab "n8n"}}7{{else}}4{{end}}" class="empty-state">
+                    <td colspan="{{if eq .Tab "n8n"}}9{{else}}4{{end}}" class="empty-state">
                         <p>No hay usuarios registrados.</p>
                         <p>Usa el formulario abajo para crear usuarios.</p>
                     </td>
@@ -50,9 +52,11 @@
                         </span>
                     </td>
                     {{if eq $tab "n8n"}}
-                    <td class="col-num">{{.WorkflowsTotal}}</td>
-                    <td class="col-num">{{.WorkflowsActive}}</td>
-                    <td class="col-num">{{.ExecutionsTotal}}</td>
+                    <td class="col-num">{{.WorkflowsAccesibles}}</td>
+                    <td class="col-num">{{.ProdExecutions}}</td>
+                    <td class="col-num">{{.FailedProdExecutions}}</td>
+                    <td class="col-num">{{printf "%.2f" .FailureRatePct}}</td>
+                    <td class="col-num">{{printf "%.2f" .RunTimeAvgSeconds}}</td>
                     {{end}}
                     <td>
                         {{if and (eq $tab "n8n") .InviteURL}}

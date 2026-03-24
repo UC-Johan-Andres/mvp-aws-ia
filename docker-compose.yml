@@ -6,6 +6,13 @@ services:
   # BASE DE DATOS
   # =======================
 
+  # PostgreSQL (Chatwoot + puede alojar la BD de n8n según tu .env.n8n).
+  # DBeaver desde tu PC a EC2:
+  #   A) Túnel SSH (recomendado): puerto mapeado solo a 127.0.0.1 →
+  #      ssh -i tu.pem -L 5433:127.0.0.1:5432 ec2-user@IP_PUBLICA
+  #      En DBeaver: localhost:5433, usuario/contraseña de la BD n8n (p. ej. n8n/n8n).
+  #   B) Acceso directo: cambia el mapeo a "0.0.0.0:5432:5432" y en el Security Group de EC2
+  #      permite TCP 5432 solo desde tu IP (riesgo si expones credenciales).
   postgres:
     image: pgvector/pgvector:pg15
     container_name: postgres
@@ -22,6 +29,8 @@ services:
       -c effective_cache_size=128MB
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "0.0.0.0:${POSTGRES_PORT:-5432}:5432"
     networks:
       - ai_stack
     mem_limit: 200m
@@ -222,6 +231,7 @@ services:
       - N8N_BASIC_AUTH_PASSWORD=${N8N_BASIC_AUTH_PASSWORD}
       - N8N_OWNER_EMAIL=${BOLT_AUTH_USER}
       - N8N_OWNER_PASSWORD=${BOLT_AUTH_PASSWORD}
+      - N8N_POSTGRES_DSN=${N8N_POSTGRES_DSN:-}
     volumes:
       - /var/run/docker-agent.sock:/var/run/docker-agent.sock:ro
     networks:
