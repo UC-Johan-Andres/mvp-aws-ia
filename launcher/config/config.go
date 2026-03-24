@@ -1,7 +1,10 @@
 package config
 
 import (
+	"fmt"
+	"net/url"
 	"os"
+	"strings"
 	"time"
 )
 
@@ -25,9 +28,35 @@ var (
 	N8NBasicPass   = getEnv("N8N_BASIC_AUTH_PASSWORD", "")
 	N8NOwnerEmail  = getEnv("N8N_OWNER_EMAIL", "")
 	N8NOwnerPass   = getEnv("N8N_OWNER_PASSWORD", "")
-	// DSN PostgreSQL de la instancia n8n (misma BD que usa el contenedor n8n), p. ej. postgres://n8n:pass@postgres:5432/n8n
-	N8NPostgresDSN = getEnv("N8N_POSTGRES_DSN", "")
 )
+
+// N8NPostgresDSN devuelve la cadena de conexión a la BD de n8n.
+// 1) Si N8N_POSTGRES_DSN está definida, se usa (debe coincidir con la contraseña real del rol en PostgreSQL).
+// 2) Si no, se construye con DB_POSTGRESDB_* (las mismas variables que lee el contenedor n8n en .env.n8n).
+// Nota: psql dentro del contenedor postgres a veces usa socket Unix con trust; el launcher usa TCP y siempre exige contraseña.
+func N8NPostgresDSN() string {
+	if v := strings.TrimSpace(os.Getenv("N8N_POSTGRES_DSN")); v != "" {
+		return v
+	}
+	pass := strings.TrimSpace(os.Getenv("DB_POSTGRESDB_PASSWORD"))
+	if pass == "" {
+		return ""
+	}
+	user := getEnv("DB_POSTGRESDB_USER", "n8n")
+	host := getEnv("DB_POSTGRESDB_HOST", "postgres")
+	port := getEnv("DB_POSTGRESDB_PORT", "5432")
+	dbname := getEnv("DB_POSTGRESDB_DATABASE", "n8n")
+	u := &url.URL{
+		Scheme: "postgres",
+		User:   url.UserPassword(user, pass),
+		Host:   fmt.Sprintf("%s:%s", host, port),
+		Path:   "/" + strings.TrimPrefix(dbname, "/"),
+	}
+	q := u.Query()
+	q.Set("sslmode", "disable")
+	u.RawQuery = q.Encode()
+	return u.String()
+}
 
 var HostToService = map[string]string{
 	"marimo.soylideria.com":       "marimo",

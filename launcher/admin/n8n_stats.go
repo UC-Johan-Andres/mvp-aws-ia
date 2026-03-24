@@ -83,16 +83,17 @@ func loadN8NStatsMaps(ctx context.Context, db *sql.DB) (byUserID map[string]n8nD
 var warnedN8NNoDSN sync.Once
 
 func enrichN8NUsersFromPostgres(users []N8NUser) {
-	if config.N8NPostgresDSN == "" {
+	dsn := config.N8NPostgresDSN()
+	if dsn == "" {
 		warnedN8NNoDSN.Do(func() {
-			log.Print("n8n postgres: N8N_POSTGRES_DSN no está definido; las métricas (workflows, ejecuciones) quedan en 0. Defina en .env p. ej. N8N_POSTGRES_DSN=postgres://USUARIO:PASSWORD@postgres:5432/n8n?sslmode=disable")
+			log.Print("n8n postgres: sin DSN: defina DB_POSTGRESDB_PASSWORD en .env.n8n (o N8N_POSTGRES_DSN). Las métricas quedan en 0.")
 		})
 		return
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	db, err := sql.Open("postgres", config.N8NPostgresDSN)
+	db, err := sql.Open("postgres", dsn)
 	if err != nil {
 		log.Printf("n8n postgres: open: %v", err)
 		return
