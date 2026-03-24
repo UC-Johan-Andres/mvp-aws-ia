@@ -231,6 +231,8 @@ services:
       - N8N_BASIC_AUTH_PASSWORD=${N8N_BASIC_AUTH_PASSWORD}
       - N8N_OWNER_EMAIL=${BOLT_AUTH_USER}
       - N8N_OWNER_PASSWORD=${BOLT_AUTH_PASSWORD}
+      # Métricas n8n (workflows/ejecuciones): mismo usuario/BD que en psql. En .env raíz del compose:
+      # N8N_POSTGRES_DSN=postgres://n8n:PASSWORD@postgres:5432/n8n?sslmode=disable
       - N8N_POSTGRES_DSN=${N8N_POSTGRES_DSN:-}
     volumes:
       - /var/run/docker-agent.sock:/var/run/docker-agent.sock:ro

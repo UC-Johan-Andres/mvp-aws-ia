@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"log"
 	"strings"
+	"sync"
 	"time"
 
 	_ "github.com/lib/pq"
@@ -12,9 +13,11 @@ import (
 	"launcher/config"
 )
 
-// Equivalente a la consulta validada en psql sobre la BD n8n (execution_entity, modo <> 'manual' = prod).
+// Incluye u.id para cruzar con la API aunque el email difiera en mayúsculas/espacios.
+// ORDER BY usa la expresión (no alias) por compatibilidad entre versiones de PostgreSQL.
 const n8nUserStatsSQL = `
 SELECT 
+  u.id::text AS user_id,
   u.email AS usuario,
   COUNT(DISTINCT sw."workflowId")::bigint AS workflows_accesibles,
   COUNT(e.id) FILTER (WHERE e.mode <> 'manual')::bigint AS prod_executions,
@@ -34,8 +37,8 @@ FROM "user" u
 LEFT JOIN project_relation pr ON u.id = pr."userId"
 LEFT JOIN shared_workflow sw ON pr."projectId" = sw."projectId"
 LEFT JOIN execution_entity e ON sw."workflowId" = e."workflowId"
-GROUP BY u.email
-ORDER BY prod_executions DESC
+GROUP BY u.id, u.email
+ORDER BY COUNT(e.id) FILTER (WHERE e.mode <> 'manual') DESC
 `
 
 type n8nDBStatsRow struct {
@@ -46,18 +49,20 @@ type n8nDBStatsRow struct {
 	RunTimeAvgSeconds    float64
 }
 
-func loadN8NStatsByEmail(ctx context.Context, db *sql.DB) (map[string]n8nDBStatsRow, error) {
+func loadN8NStatsMaps(ctx context.Context, db *sql.DB) (byUserID map[string]n8nDBStatsRow, byEmail map[string]n8nDBStatsRow, err error) {
 	rows, err := db.QueryContext(ctx, n8nUserStatsSQL)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	defer rows.Close()
 
-	out := make(map[string]n8nDBStatsRow)
+	byUserID = make(map[string]n8nDBStatsRow)
+	byEmail = make(map[string]n8nDBStatsRow)
 	for rows.Next() {
-		var email string
+		var userID, email string
 		var r n8nDBStatsRow
 		if err := rows.Scan(
+			&userID,
 			&email,
 			&r.WorkflowsAccesibles,
 			&r.ProdExecutions,
@@ -65,15 +70,23 @@ func loadN8NStatsByEmail(ctx context.Context, db *sql.DB) (map[string]n8nDBStats
 			&r.FailureRatePct,
 			&r.RunTimeAvgSeconds,
 		); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
-		out[strings.TrimSpace(strings.ToLower(email))] = r
+		userID = strings.TrimSpace(userID)
+		em := strings.TrimSpace(strings.ToLower(email))
+		byUserID[userID] = r
+		byEmail[em] = r
 	}
-	return out, rows.Err()
+	return byUserID, byEmail, rows.Err()
 }
+
+var warnedN8NNoDSN sync.Once
 
 func enrichN8NUsersFromPostgres(users []N8NUser) {
 	if config.N8NPostgresDSN == "" {
+		warnedN8NNoDSN.Do(func() {
+			log.Print("n8n postgres: N8N_POSTGRES_DSN no está definido; las métricas (workflows, ejecuciones) quedan en 0. Defina en .env p. ej. N8N_POSTGRES_DSN=postgres://USUARIO:PASSWORD@postgres:5432/n8n?sslmode=disable")
+		})
 		return
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -87,19 +100,28 @@ func enrichN8NUsersFromPostgres(users []N8NUser) {
 	defer db.Close()
 
 	if err := db.PingContext(ctx); err != nil {
-		log.Printf("n8n postgres: ping: %v", err)
+		log.Printf("n8n postgres: ping: %v (compruebe DSN, red Docker y credenciales de la BD n8n)", err)
 		return
 	}
 
-	statsByEmail, err := loadN8NStatsByEmail(ctx, db)
+	byID, byEmail, err := loadN8NStatsMaps(ctx, db)
 	if err != nil {
-		log.Printf("n8n postgres: stats query: %v", err)
+		log.Printf("n8n postgres: consulta SQL: %v", err)
 		return
 	}
+
+	log.Printf("n8n postgres: %d filas de estadísticas en BD (fusionando por id/email)", len(byID))
 
 	for i := range users {
-		key := strings.TrimSpace(strings.ToLower(users[i].Email))
-		s, ok := statsByEmail[key]
+		var s n8nDBStatsRow
+		var ok bool
+		if uid := strings.TrimSpace(users[i].ID); uid != "" {
+			s, ok = byID[uid]
+		}
+		if !ok {
+			key := strings.TrimSpace(strings.ToLower(users[i].Email))
+			s, ok = byEmail[key]
+		}
 		if !ok {
 			continue
 		}
