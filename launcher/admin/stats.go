@@ -4,8 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"strings"
 	"time"
 
+	"launcher/config"
 	"launcher/ui"
 )
 
@@ -33,11 +35,13 @@ type N8NStatsTotals struct {
 	AvgRunTimeSeconds    float64 `json:"avgRunTimeSeconds"`
 }
 
-// GestionStatsLCSection reservado para futuras métricas (mensajes, tokens, sesiones, etc.).
+// GestionStatsLCSection métricas LibreChat desde MongoDB (conversations / messages).
 type GestionStatsLCSection struct {
-	Available bool   `json:"available"`
-	Message   string `json:"message,omitempty"`
-	// Users []LibreChatStatsUser `json:"users,omitempty"` // añadir cuando existan consultas
+	Available bool                     `json:"available"`
+	Error     string                   `json:"error,omitempty"`
+	Message   string                   `json:"message,omitempty"`
+	Users     []LibreChatStatsSeriesItem `json:"users,omitempty"`
+	Totals    LibreChatStatsTotals       `json:"totals,omitempty"`
 }
 
 func n8nTotalsFromSeries(users []N8NStatsSeriesItem) N8NStatsTotals {
@@ -77,10 +81,30 @@ func HandleGestionStatsAPI(w http.ResponseWriter, r *http.Request) {
 	out := GestionStatsAPIResponse{
 		Version:     1,
 		GeneratedAt: time.Now().UTC().Format(time.RFC3339),
-		LibreChat: GestionStatsLCSection{
+	}
+
+	if strings.TrimSpace(config.MongoURI) == "" {
+		out.LibreChat = GestionStatsLCSection{
 			Available: false,
-			Message:   "Integración pendiente: aquí se podrán exponer métricas por usuario de LibreChat (MongoDB u otros orígenes).",
-		},
+			Message:   "Define MONGO_URI (y opcionalmente LIBRECHAT_MONGO_DB) para métricas de LibreChat.",
+		}
+	} else {
+		lcUsers, lcTotals, err := FetchLibreChatStatsSeries(ctx)
+		if err != nil {
+			out.LibreChat = GestionStatsLCSection{
+				Available: false,
+				Error:     err.Error(),
+			}
+		} else {
+			out.LibreChat = GestionStatsLCSection{
+				Available: true,
+				Users:     lcUsers,
+				Totals:    lcTotals,
+			}
+			if len(lcUsers) == 0 {
+				out.LibreChat.Message = "Aún no hay conversaciones o mensajes enlazados a usuarios en esta base."
+			}
+		}
 	}
 
 	series, err := FetchN8NStatsSeries(ctx)

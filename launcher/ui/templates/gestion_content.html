@@ -1,12 +1,12 @@
 <style>
-    #users-table th.col-num, #users-table td.col-num {
+    #users-table .col-num, #users-table td.col-num {
         text-align: right;
         font-variant-numeric: tabular-nums;
         white-space: nowrap;
     }
 </style>
 <div class="card-body">
-    <h4 class="section-title">USUARIOS -  PRUEBA2</h4>
+    <h4 class="section-title">Usuarios</h4>
 
     {{if .Error}}
     <div class="error-banner">
@@ -14,8 +14,8 @@
     </div>
     {{end}}
 
-    <div id="users-table">
-        <table>
+    <div id="users-table" class="table-responsive-wrap">
+        <table class="data-table">
             <thead>
                 <tr>
                     <th>Email</th>
@@ -60,18 +60,18 @@
                     {{end}}
                     <td>
                         {{if and (eq $tab "n8n") .InviteURL}}
-                        <button type="button" class="btn-small btn-invite" 
+                        <button type="button" class="btn-small btn-invite"
                                 onclick="openInviteModalDirect('{{.Email}}', '{{.InviteURL}}')">
                             Invitar
                         </button>
                         {{end}}
                         {{if eq $tab "librechat"}}
-                        <button type="button" class="btn-small btn-edit" 
+                        <button type="button" class="btn-small btn-edit"
                                 onclick="openEditModal('{{$tab}}', '{{.ID}}', '{{.Email}}', '{{.Name}}', '{{.Role}}')">
                             Editar
                         </button>
                         {{end}}
-                        <button type="button" class="btn-small btn-delete" 
+                        <button type="button" class="btn-small btn-delete"
                                 data-tab="{{$tab}}" data-id="{{.ID}}" data-email="{{.Email}}"
                                 onclick="deleteUser(this)">
                             Eliminar
@@ -85,74 +85,45 @@
     </div>
 
     <div class="form-section">
-        <h4 class="section-title">CREAR USUARIO(S) - PRUEBA</h4>
-
-        <div class="toggle-group">
-            <label class="toggle-label">
-                <input type="radio" name="method" value="form" checked
-                       onclick="toggleMethod('form')">
-                Formulario
-            </label>
-            <label class="toggle-label">
-                <input type="radio" name="method" value="csv"
-                       onclick="toggleMethod('csv')">
-                CSV
-            </label>
-        </div>
+        <h4 class="section-title">Crear usuario(s)</h4>
 
         <form id="form-n8n" class="user-form" hx-post="/gestion" hx-target="#main-content" hx-swap="innerHTML">
             <input type="hidden" name="tab" value="n8n">
             <div class="dynamic-form n8n-form">
+                <p class="form-hint">n8n: solo invitaciones como <strong>global:member</strong> (sin propietarios ni CSV).</p>
                 <div class="rows-container">
                     <div class="form-row">
                         <input type="email" name="email" placeholder="email@ejemplo.com" required>
-                        <select name="role">
-                            <option value="global:member">global:member</option>
-                            <option value="global:owner">global:owner</option>
-                        </select>
-                        <button type="button" class="btn-remove" onclick="this.parentElement.remove()">&times;</button>
+                        <input type="hidden" name="role" value="global:member">
+                        <button type="button" class="btn-remove" onclick="this.parentElement.remove()" title="Quitar fila">&times;</button>
                     </div>
                 </div>
                 <button type="button" class="btn-add-row" onclick="addRow()">+ Agregar fila</button>
             </div>
             <div class="form-actions">
                 <button type="button" class="btn-cancel" onclick="resetForm()">Cancelar</button>
-                <button type="submit" class="btn-submit">Crear Usuario(s)</button>
+                <button type="submit" class="btn-submit">Crear usuario(s)</button>
             </div>
         </form>
 
         <form id="form-librechat" class="user-form" hx-post="/gestion" hx-target="#main-content" hx-swap="innerHTML">
             <input type="hidden" name="tab" value="librechat">
             <div class="dynamic-form librechat-form">
+                <p class="form-hint">LibreChat: nuevos usuarios con rol <strong>USER</strong> únicamente (sin CSV).</p>
                 <div class="rows-container">
                     <div class="form-row">
                         <input type="email" name="email" placeholder="email@ejemplo.com" required>
                         <input type="text" name="name" placeholder="Nombre">
                         <input type="password" name="password" placeholder="Contraseña" required>
-                        <select name="role">
-                            <option value="USER">USER</option>
-                            <option value="ADMIN">ADMIN</option>
-                        </select>
-                        <button type="button" class="btn-remove" onclick="this.parentElement.remove()">&times;</button>
+                        <input type="hidden" name="role" value="USER">
+                        <button type="button" class="btn-remove" onclick="this.parentElement.remove()" title="Quitar fila">&times;</button>
                     </div>
                 </div>
                 <button type="button" class="btn-add-row" onclick="addRow()">+ Agregar fila</button>
             </div>
             <div class="form-actions">
                 <button type="button" class="btn-cancel" onclick="resetForm()">Cancelar</button>
-                <button type="submit" class="btn-submit">Crear Usuario(s)</button>
-            </div>
-        </form>
-
-        <form id="csv-method" class="csv-zone" hx-post="/gestion" hx-target="#main-content" hx-swap="innerHTML">
-            <input type="hidden" name="tab" value="{{.Tab}}">
-            <p>Arrastra un archivo CSV aqui o selecciona:</p>
-            <input type="file" id="csv-file" accept=".csv" onchange="handleCSVUpload(this)">
-            <div id="csv-preview" class="csv-preview" style="display:none;"></div>
-            <input type="hidden" name="csv_data" id="csv-data">
-            <div class="form-actions">
-                <button type="button" class="btn-cancel" onclick="resetCSVForm()">Cancelar</button>
-                <button type="submit" class="btn-submit">Crear Usuario(s)</button>
+                <button type="submit" class="btn-submit">Crear usuario(s)</button>
             </div>
         </form>
     </div>
@@ -169,75 +140,34 @@
         if (isN8N) {
             row.innerHTML = `
                 <input type="email" name="email" placeholder="email@ejemplo.com" required>
-                <select name="role">
-                    <option value="global:member">global:member</option>
-                    <option value="global:owner">global:owner</option>
-                </select>
-                <button type="button" class="btn-remove" onclick="this.parentElement.remove()">&times;</button>
+                <input type="hidden" name="role" value="global:member">
+                <button type="button" class="btn-remove" onclick="this.parentElement.remove()" title="Quitar fila">&times;</button>
             `;
         } else {
             row.innerHTML = `
                 <input type="email" name="email" placeholder="email@ejemplo.com" required>
                 <input type="text" name="name" placeholder="Nombre">
                 <input type="password" name="password" placeholder="Contraseña" required>
-                <select name="role">
-                    <option value="USER">USER</option>
-                    <option value="ADMIN">ADMIN</option>
-                </select>
-                <button type="button" class="btn-remove" onclick="this.parentElement.remove()">&times;</button>
+                <input type="hidden" name="role" value="USER">
+                <button type="button" class="btn-remove" onclick="this.parentElement.remove()" title="Quitar fila">&times;</button>
             `;
         }
         form.querySelector('.rows-container').appendChild(row);
     }
 
-    function handleCSVUpload(input) {
-        const file = input.files[0];
-        if (!file) return;
-
-        const reader = new FileReader();
-        reader.onload = function(e) {
-            const content = e.target.result;
-            const lines = content.trim().split('\n');
-            const count = lines.length - 1;
-            document.getElementById('csv-preview').textContent = count + ' usuario(s) detectado(s)';
-            document.getElementById('csv-preview').style.display = 'block';
-            document.getElementById('csv-data').value = content;
-        };
-        reader.readAsText(file);
-    }
-
-    function toggleMethod(method) {
-        const showForm = method === 'form';
-        document.querySelectorAll('.user-form').forEach(f => {
-            f.style.display = showForm ? 'block' : 'none';
-        });
-        document.getElementById('csv-method').className = showForm ? '' : 'csv-zone active';
-    }
-
     function resetForm() {
-        const radio = document.querySelector('input[name="method"][value="form"]');
-        if (radio) radio.checked = true;
-        toggleMethod('form');
-        document.getElementById('csv-preview').style.display = 'none';
-        document.getElementById('csv-data').value = '';
-
-        // Resetear formulario n8n
         const formN8n = document.getElementById('form-n8n');
         if (formN8n) {
             const rowsN8n = formN8n.querySelector('.rows-container');
             rowsN8n.innerHTML = `
                 <div class="form-row">
                     <input type="email" name="email" placeholder="email@ejemplo.com" required>
-                    <select name="role">
-                        <option value="global:member">global:member</option>
-                        <option value="global:owner">global:owner</option>
-                    </select>
-                    <button type="button" class="btn-remove" onclick="this.parentElement.remove()">&times;</button>
+                    <input type="hidden" name="role" value="global:member">
+                    <button type="button" class="btn-remove" onclick="this.parentElement.remove()" title="Quitar fila">&times;</button>
                 </div>
             `;
         }
 
-        // Resetear formulario librechat
         const formLibrechat = document.getElementById('form-librechat');
         if (formLibrechat) {
             const rowsLibrechat = formLibrechat.querySelector('.rows-container');
@@ -246,20 +176,10 @@
                     <input type="email" name="email" placeholder="email@ejemplo.com" required>
                     <input type="text" name="name" placeholder="Nombre">
                     <input type="password" name="password" placeholder="Contraseña" required>
-                    <select name="role">
-                        <option value="USER">USER</option>
-                        <option value="ADMIN">ADMIN</option>
-                    </select>
-                    <button type="button" class="btn-remove" onclick="this.parentElement.remove()">&times;</button>
+                    <input type="hidden" name="role" value="USER">
+                    <button type="button" class="btn-remove" onclick="this.parentElement.remove()" title="Quitar fila">&times;</button>
                 </div>
             `;
         }
-    }
-
-    function resetCSVForm() {
-        document.getElementById('csv-file').value = '';
-        document.getElementById('csv-preview').style.display = 'none';
-        document.getElementById('csv-preview').textContent = '';
-        document.getElementById('csv-data').value = '';
     }
 </script>

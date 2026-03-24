@@ -28,7 +28,7 @@
                     <div class="kpi-value" id="kpi-avg-fail">—</div>
                 </div>
                 <div class="stats-kpi">
-                    <div class="kpi-label">T. medio medio (s)</div>
+                    <div class="kpi-label">Tiempo medio ejec. (s)</div>
                     <div class="kpi-value" id="kpi-avg-runtime">—</div>
                 </div>
             </div>
@@ -50,9 +50,37 @@
     </div>
 
     <div class="chart-section">
-        <h4 class="section-title">LibreChat</h4>
-        <div class="lc-stats-hint" id="lc-stats-message">
-            Cargando…
+        <h4 class="section-title">LibreChat — MongoDB</h4>
+        <p style="font-size:0.85rem;color:#6c757d;margin-bottom:16px;">
+            Agregaciones sobre <code>conversations</code> y <code>messages</code> (colección <code>users</code>), misma lógica que en mongosh.
+        </p>
+        <div id="lc-stats-error" class="empty-state" style="display:none;padding:20px;"></div>
+        <div class="lc-stats-hint" id="lc-stats-message" style="display:none;margin-bottom:16px;"></div>
+        <div id="lc-stats-body" style="display:none;">
+            <div class="stats-kpi-row">
+                <div class="stats-kpi">
+                    <div class="kpi-label">Usuarios con actividad</div>
+                    <div class="kpi-value" id="kpi-lc-users">—</div>
+                </div>
+                <div class="stats-kpi">
+                    <div class="kpi-label">Conversaciones</div>
+                    <div class="kpi-value" id="kpi-lc-conv">—</div>
+                </div>
+                <div class="stats-kpi">
+                    <div class="kpi-label">Mensajes</div>
+                    <div class="kpi-value" id="kpi-lc-msg">—</div>
+                </div>
+            </div>
+            <div class="chart-grid">
+                <div class="chart-card">
+                    <h4>Conversaciones por usuario</h4>
+                    <canvas id="chart-lc-conv" aria-label="Gráfico conversaciones LibreChat"></canvas>
+                </div>
+                <div class="chart-card">
+                    <h4>Mensajes por usuario</h4>
+                    <canvas id="chart-lc-msg" aria-label="Gráfico mensajes LibreChat"></canvas>
+                </div>
+            </div>
         </div>
     </div>
 </div>

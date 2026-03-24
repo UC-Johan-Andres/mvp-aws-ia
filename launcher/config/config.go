@@ -22,7 +22,10 @@ var (
 	SessionSecret = getEnv("SESSION_SECRET", "change_me")
 	AgentSocket   = getEnv("AGENT_SOCKET", "/var/run/docker-agent.sock")
 
-	MongoURI       = getEnv("MONGO_URI", "")
+	MongoURI = getEnv("MONGO_URI", "")
+	// LibreChatMongoDB nombre de la base en Mongo (colecciones users, conversations, messages).
+	// Debe coincidir con el path de MONGO_URI (p. ej. .../LibreChat?authSource=admin).
+	LibreChatMongoDB = getEnv("LIBRECHAT_MONGO_DB", "LibreChat")
 	N8NInternalURL = getEnv("N8N_INTERNAL_URL", "http://n8n:5678")
 	N8NBasicUser   = getEnv("N8N_BASIC_AUTH_USER", "")
 	N8NBasicPass   = getEnv("N8N_BASIC_AUTH_PASSWORD", "")
@@ -75,4 +78,9 @@ func getEnv(key, fallback string) string {
 		return v
 	}
 	return fallback
+}
+
+// LibreChatMongoDatabase devuelve el nombre de la BD LibreChat en MongoDB.
+func LibreChatMongoDatabase() string {
+	return LibreChatMongoDB
 }

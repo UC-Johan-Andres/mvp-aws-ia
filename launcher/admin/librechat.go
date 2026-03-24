@@ -41,7 +41,7 @@ func mongoCollection(ctx context.Context) (*mongo.Collection, *mongo.Client, err
 	if err != nil {
 		return nil, nil, err
 	}
-	coll := client.Database("LibreChat").Collection("users")
+	coll := client.Database(config.LibreChatMongoDatabase()).Collection("users")
 	return coll, client, nil
 }
 
@@ -139,12 +139,9 @@ func createLibreChatUsers(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 
-		role := req.Role
-		if role == "" {
-			role = "USER"
-		}
-		if role != "USER" && role != "ADMIN" {
-			results = append(results, result{Email: req.Email, Created: false, Error: "invalid role, must be USER or ADMIN"})
+		role := "USER"
+		if req.Role != "" && req.Role != "USER" {
+			results = append(results, result{Email: req.Email, Created: false, Error: "solo se permite crear usuarios con rol USER"})
 			continue
 		}
 

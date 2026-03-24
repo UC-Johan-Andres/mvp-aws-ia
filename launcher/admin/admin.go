@@ -182,6 +182,7 @@ func getLibreChatUsers() ([]LibreChatUser, error) {
 	result := make([]LibreChatUser, 0, len(users))
 	for _, u := range users {
 		result = append(result, LibreChatUser{
+			ID:        u.ID.Hex(),
 			Email:     u.Email,
 			Name:      u.Name,
 			Role:      u.Role,
@@ -240,6 +241,7 @@ type N8NUser struct {
 
 // LibreChatUser represents a user from LibreChat.
 type LibreChatUser struct {
+	ID        string `json:"id"`
 	Email     string `json:"email"`
 	Name      string `json:"name"`
 	Role      string `json:"role"`
@@ -307,8 +309,12 @@ func HandleGestionContent(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		for _, u := range lcUsers {
+			id := u.ID
+			if id == "" {
+				id = u.Email
+			}
 			users = append(users, GestionUser{
-				ID:        u.Email,
+				ID:        id,
 				Email:     u.Email,
 				Name:      u.Name,
 				Role:      u.Role,
@@ -332,7 +338,7 @@ func HandleGestionSubmit(w http.ResponseWriter, r *http.Request) {
 	var err error
 
 	if r.FormValue("csv_data") != "" {
-		_, err = createUsersFromCSV(tab, r.FormValue("csv_data"))
+		err = fmt.Errorf("la creación por CSV está deshabilitada")
 	} else if r.FormValue("users_json") != "" {
 		_, err = createUsersFromJSON(tab, r.FormValue("users_json"))
 	} else if tab == "n8n" {
@@ -402,14 +408,7 @@ func createUsersFromJSON(tab string, usersJSON string) ([]byte, error) {
 		requests := make([]n8nUserRequest, 0, len(rawUsers))
 		for _, u := range rawUsers {
 			email := u["email"]
-			role := u["role"]
-			if role == "" {
-				role = "global:member"
-			}
-			if role == "global:admin" {
-				role = "global:owner"
-			}
-			requests = append(requests, n8nUserRequest{Email: email, Role: role})
+			requests = append(requests, n8nUserRequest{Email: email, Role: "global:member"})
 		}
 
 		body, _ := json.Marshal(requests)
@@ -472,9 +471,7 @@ func createUsersFromJSON(tab string, usersJSON string) ([]byte, error) {
 			results = append(results, result{Email: email, Created: false, Error: "password is required"})
 			continue
 		}
-		if role == "" {
-			role = "USER"
-		}
+		role = "USER"
 
 		count, err := coll.CountDocuments(ctx, bson.M{"email": email})
 		if err != nil {
@@ -646,6 +643,7 @@ func fetchLibreChatUsersStruct() ([]GestionUser, error) {
 	users := make([]GestionUser, 0, len(lcUsers))
 	for _, u := range lcUsers {
 		users = append(users, GestionUser{
+			ID:    u.ID.Hex(),
 			Email: u.Email,
 			Name:  u.Name,
 			Role:  u.Role,
@@ -682,19 +680,28 @@ func HandleGestionUsersRows(w http.ResponseWriter, r *http.Request) {
 		n8nUsers, err := getN8NUsers()
 		if err != nil {
 			log.Printf("gestion users-rows n8n: %v", err)
-			ui.RenderGestionRows(w, tab, `<table><tbody><tr><td colspan="9" class="empty-state">No se pudieron cargar los usuarios.</td></tr></tbody></table>`)
+			ui.RenderGestionRows(w, tab, `<div class="table-responsive-wrap"><table class="data-table"><tbody><tr><td colspan="9" class="empty-state">No se pudieron cargar los usuarios.</td></tr></tbody></table></div>`)
 			return
 		}
 		ui.RenderGestionRows(w, tab, buildN8NUsersTableHTML(n8nUsers))
 		return
 	}
 
-	users, err := fetchLibreChatUsers()
+	lcList, err := getLibreChatUsers()
 	if err != nil {
-		users = []byte("[]")
+		log.Printf("gestion users-rows librechat: %v", err)
+		ui.RenderGestionRows(w, tab, `<div class="table-responsive-wrap"><table class="data-table"><tbody><tr><td colspan="4" class="empty-state">No se pudieron cargar los usuarios.</td></tr></tbody></table></div>`)
+		return
 	}
-
-	ui.RenderGestionRows(w, tab, string(users))
+	gu := make([]GestionUser, 0, len(lcList))
+	for _, u := range lcList {
+		id := u.ID
+		if id == "" {
+			id = u.Email
+		}
+		gu = append(gu, GestionUser{ID: id, Email: u.Email, Name: u.Name, Role: u.Role})
+	}
+	ui.RenderGestionRows(w, tab, buildLibreChatUsersTableHTML(gu))
 }
 
 // Helper: fetch n8n users (with per-user stats) as JSON for HTMX fragments.
@@ -709,12 +716,12 @@ func fetchN8NUsers() ([]byte, error) {
 // buildN8NUsersTableHTML renders the users table for HTMX (tab n8n).
 func buildN8NUsersTableHTML(users []N8NUser) string {
 	var b strings.Builder
-	b.WriteString(`<table><thead><tr><th>Email</th><th>Nombre</th><th>Rol</th>
+	b.WriteString(`<div class="table-responsive-wrap"><table class="data-table"><thead><tr><th>Email</th><th>Nombre</th><th>Rol</th>
 <th class="col-num">Workflows acc.</th><th class="col-num">Prod ejec.</th><th class="col-num">Fallidas</th>
 <th class="col-num">% fallo</th><th class="col-num">T. medio (s)</th><th>Acciones</th></tr></thead><tbody>`)
 	if len(users) == 0 {
 		b.WriteString(`<tr><td colspan="9" class="empty-state"><p>No hay usuarios registrados.</p></td></tr>`)
-		b.WriteString(`</tbody></table>`)
+		b.WriteString(`</tbody></table></div>`)
 		return b.String()
 	}
 	for _, u := range users {
@@ -759,61 +766,62 @@ func buildN8NUsersTableHTML(users []N8NUser) string {
 			html.EscapeString(u.Email),
 		)
 	}
-	b.WriteString(`</tbody></table>`)
+	b.WriteString(`</tbody></table></div>`)
 	return b.String()
 }
 
-// Helper: fetch librechat users by calling the internal handler logic
-func fetchLibreChatUsers() ([]byte, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
-	coll, client, err := mongoCollection(ctx)
-	if err != nil {
-		return nil, err
+// buildLibreChatUsersTableHTML renders the users table for HTMX (tab librechat).
+func buildLibreChatUsersTableHTML(users []GestionUser) string {
+	var b strings.Builder
+	b.WriteString(`<div class="table-responsive-wrap"><table class="data-table"><thead><tr><th>Email</th><th>Nombre</th><th>Rol</th><th>Acciones</th></tr></thead><tbody>`)
+	if len(users) == 0 {
+		b.WriteString(`<tr><td colspan="4" class="empty-state"><p>No hay usuarios registrados.</p></td></tr>`)
+		b.WriteString(`</tbody></table></div>`)
+		return b.String()
 	}
-	defer client.Disconnect(ctx)
-
-	cursor, err := coll.Find(ctx, bson.D{})
-	if err != nil {
-		return nil, err
-	}
-	defer cursor.Close(ctx)
-
-	var users []lcUser
-	if err := cursor.All(ctx, &users); err != nil {
-		return nil, err
-	}
-
-	result := make([]lcUserPublic, 0, len(users))
 	for _, u := range users {
-		result = append(result, lcUserPublic{
-			Email:     u.Email,
-			Name:      u.Name,
-			Role:      u.Role,
-			CreatedAt: u.CreatedAt,
-		})
+		name := strings.TrimSpace(u.Name)
+		if name == "" {
+			name = "-"
+		}
+		roleClass := "role-user"
+		if u.Role == "ADMIN" {
+			roleClass = "role-admin"
+		}
+		uid := u.ID
+		if uid == "" {
+			uid = u.Email
+		}
+		fmt.Fprintf(&b, `<tr><td>%s</td><td>%s</td><td><span class="role-badge %s">%s</span></td><td>
+<button type="button" class="btn-small btn-edit" onclick="openEditModal('librechat','%s','%s','%s','%s')">Editar</button>
+<button type="button" class="btn-small btn-delete" data-tab="librechat" data-id="%s" data-email="%s" onclick="deleteUser(this)">Eliminar</button></td></tr>`,
+			html.EscapeString(u.Email),
+			html.EscapeString(name),
+			roleClass,
+			html.EscapeString(u.Role),
+			html.EscapeString(uid),
+			html.EscapeString(u.Email),
+			html.EscapeString(name),
+			html.EscapeString(u.Role),
+			html.EscapeString(uid),
+			html.EscapeString(u.Email),
+		)
 	}
-
-	return json.Marshal(result)
+	b.WriteString(`</tbody></table></div>`)
+	return b.String()
 }
 
 // Helper: create n8n users from form submission
 func createN8NUsersFromForm(r *http.Request) ([]byte, error) {
 	emails := r.Form["email"]
-	roles := r.Form["role"]
 
 	if len(emails) == 0 {
 		return nil, fmt.Errorf("no users to create")
 	}
 
 	requests := make([]n8nUserRequest, 0, len(emails))
-	for i, email := range emails {
-		role := "global:member"
-		if i < len(roles) && (roles[i] == "global:owner" || roles[i] == "global:admin") {
-			role = "global:owner"
-		}
-		requests = append(requests, n8nUserRequest{Email: email, Role: role})
+	for _, email := range emails {
+		requests = append(requests, n8nUserRequest{Email: email, Role: "global:member"})
 	}
 
 	body, _ := json.Marshal(requests)
@@ -851,7 +859,6 @@ func createLibreChatUsersFromForm(r *http.Request) ([]byte, error) {
 	emails := r.Form["email"]
 	names := r.Form["name"]
 	passwords := r.Form["password"]
-	roles := r.Form["role"]
 
 	if len(emails) == 0 {
 		return nil, fmt.Errorf("no users to create")
@@ -875,9 +882,6 @@ func createLibreChatUsersFromForm(r *http.Request) ([]byte, error) {
 			password = passwords[i]
 		}
 		role := "USER"
-		if i < len(roles) && roles[i] == "ADMIN" {
-			role = "ADMIN"
-		}
 		requests = append(requests, createReq{Email: email, Name: name, Password: password, Role: role})
 	}
 
@@ -905,12 +909,8 @@ func createLibreChatUsersFromForm(r *http.Request) ([]byte, error) {
 			continue
 		}
 
-		role := req.Role
-		if role == "" {
-			role = "USER"
-		}
-		if role != "USER" && role != "ADMIN" {
-			results = append(results, result{Email: req.Email, Created: false, Error: "invalid role"})
+		if req.Role != "" && req.Role != "USER" {
+			results = append(results, result{Email: req.Email, Created: false, Error: "solo se permite rol USER"})
 			continue
 		}
 
@@ -942,7 +942,7 @@ func createLibreChatUsersFromForm(r *http.Request) ([]byte, error) {
 			Username:      username,
 			Email:         req.Email,
 			Password:      string(hash),
-			Role:          role,
+			Role:          "USER",
 			Provider:      "local",
 			EmailVerified: true,
 			CreatedAt:     now,
