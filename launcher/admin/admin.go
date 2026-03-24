@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"html"
 	"io"
 	"log"
 	"net/http"
@@ -146,7 +147,11 @@ func getN8NUsers() ([]N8NUser, error) {
 		return nil, err
 	}
 
-	return result.Data.Items, nil
+	items := result.Data.Items
+	statsClient := n8nStatsHTTPClient()
+	enrichN8NUsersWithStats(statsClient, cookies, items)
+
+	return items, nil
 }
 
 // getLibreChatUsers fetches users from LibreChat MongoDB.
@@ -201,17 +206,33 @@ type GestionUser struct {
 	InviteURL string
 	IsPending bool
 	CreatedAt string
+	// n8n: estadísticas del proyecto personal (si están disponibles)
+	WorkflowsTotal   int
+	WorkflowsActive  int
+	ExecutionsTotal  int64
+}
+
+// N8NProjectRelation is a user's membership in an n8n project (RBAC).
+type N8NProjectRelation struct {
+	ID   string `json:"id"`
+	Role string `json:"role"`
+	Name string `json:"name"`
 }
 
 // N8NUser represents a user from n8n API.
 type N8NUser struct {
-	ID              string `json:"id"`
-	Email           string `json:"email"`
-	FirstName       string `json:"firstName"`
-	LastName        string `json:"lastName"`
-	Role            string `json:"role"`
-	IsPending       bool   `json:"isPending"`
-	InviteAcceptURL string `json:"inviteAcceptUrl"`
+	ID               string `json:"id"`
+	Email            string `json:"email"`
+	FirstName        string `json:"firstName"`
+	LastName         string `json:"lastName"`
+	Role             string `json:"role"`
+	IsPending        bool   `json:"isPending"`
+	InviteAcceptURL  string `json:"inviteAcceptUrl"`
+	ProjectRelations []N8NProjectRelation `json:"projectRelations"`
+
+	WorkflowsTotal   int   `json:"workflowsTotal"`
+	WorkflowsActive  int   `json:"workflowsActive"`
+	ExecutionsTotal  int64 `json:"executionsTotal"`
 }
 
 // LibreChatUser represents a user from LibreChat.
@@ -263,12 +284,15 @@ func HandleGestionContent(w http.ResponseWriter, r *http.Request) {
 				name = "-"
 			}
 			users = append(users, GestionUser{
-				ID:        u.ID,
-				Email:     u.Email,
-				Name:      name,
-				Role:      u.Role,
-				InviteURL: u.InviteAcceptURL,
-				IsPending: u.IsPending,
+				ID:               u.ID,
+				Email:            u.Email,
+				Name:             name,
+				Role:             u.Role,
+				InviteURL:        u.InviteAcceptURL,
+				IsPending:        u.IsPending,
+				WorkflowsTotal:   u.WorkflowsTotal,
+				WorkflowsActive:  u.WorkflowsActive,
+				ExecutionsTotal:  u.ExecutionsTotal,
 			})
 		}
 	} else {
@@ -649,15 +673,18 @@ func HandleGestionUsersRows(w http.ResponseWriter, r *http.Request) {
 		tab = "n8n"
 	}
 
-	var users []byte
-	var err error
-
 	if tab == "n8n" {
-		users, err = fetchN8NUsers()
-	} else {
-		users, err = fetchLibreChatUsers()
+		n8nUsers, err := getN8NUsers()
+		if err != nil {
+			log.Printf("gestion users-rows n8n: %v", err)
+			ui.RenderGestionRows(w, tab, `<table><tbody><tr><td colspan="7" class="empty-state">No se pudieron cargar los usuarios.</td></tr></tbody></table>`)
+			return
+		}
+		ui.RenderGestionRows(w, tab, buildN8NUsersTableHTML(n8nUsers))
+		return
 	}
 
+	users, err := fetchLibreChatUsers()
 	if err != nil {
 		users = []byte("[]")
 	}
@@ -665,40 +692,66 @@ func HandleGestionUsersRows(w http.ResponseWriter, r *http.Request) {
 	ui.RenderGestionRows(w, tab, string(users))
 }
 
-// Helper: fetch n8n users by calling the internal handler logic
+// Helper: fetch n8n users (with per-user stats) as JSON for HTMX fragments.
 func fetchN8NUsers() ([]byte, error) {
-	type n8nUser struct {
-		Email string `json:"email"`
-		Name  string `json:"firstName"`
-		Role  string `json:"role"`
-	}
-
-	client := &http.Client{Timeout: 15 * time.Second}
-
-	cookies, err := n8nLogin(client)
+	users, err := getN8NUsers()
 	if err != nil {
 		return nil, err
 	}
+	return json.Marshal(users)
+}
 
-	req, err := http.NewRequest(http.MethodGet, config.N8NInternalURL+"/rest/users", nil)
-	if err != nil {
-		return nil, err
+// buildN8NUsersTableHTML renders the users table for HTMX (tab n8n).
+func buildN8NUsersTableHTML(users []N8NUser) string {
+	var b strings.Builder
+	b.WriteString(`<table><thead><tr><th>Email</th><th>Nombre</th><th>Rol</th>
+<th class="col-num">Workflows</th><th class="col-num">Activos</th><th class="col-num">Ejecuciones</th><th>Acciones</th></tr></thead><tbody>`)
+	if len(users) == 0 {
+		b.WriteString(`<tr><td colspan="7" class="empty-state"><p>No hay usuarios registrados.</p></td></tr>`)
+		b.WriteString(`</tbody></table>`)
+		return b.String()
 	}
-	req.Header.Set("Content-Type", "application/json")
-	if config.N8NBasicUser != "" {
-		req.SetBasicAuth(config.N8NBasicUser, config.N8NBasicPass)
+	for _, u := range users {
+		name := u.FirstName
+		if u.LastName != "" {
+			name += " " + u.LastName
+		}
+		if strings.TrimSpace(name) == "" {
+			name = "-"
+		}
+		roleClass := "role-user"
+		if u.Role == "ADMIN" || u.Role == "global:admin" || u.Role == "global:owner" {
+			roleClass = "role-admin"
+		}
+		roleLabel := u.Role
+		if u.IsPending {
+			roleLabel += " (pendiente)"
+		}
+		invite := ""
+		if u.InviteAcceptURL != "" {
+			invite = fmt.Sprintf(`<button type="button" class="btn-small btn-invite" onclick="openInviteModalDirect('%s','%s')">Invitar</button> `,
+				html.EscapeString(u.Email), html.EscapeString(u.InviteAcceptURL))
+		}
+		uid := u.ID
+		if uid == "" {
+			uid = u.Email
+		}
+		fmt.Fprintf(&b, `<tr><td>%s</td><td>%s</td><td><span class="role-badge %s">%s</span></td>
+<td class="col-num">%d</td><td class="col-num">%d</td><td class="col-num">%d</td><td>%s<button type="button" class="btn-small btn-delete" data-tab="n8n" data-id="%s" data-email="%s" onclick="deleteUser(this)">Eliminar</button></td></tr>`,
+			html.EscapeString(u.Email),
+			html.EscapeString(name),
+			roleClass,
+			html.EscapeString(roleLabel),
+			u.WorkflowsTotal,
+			u.WorkflowsActive,
+			u.ExecutionsTotal,
+			invite,
+			html.EscapeString(uid),
+			html.EscapeString(u.Email),
+		)
 	}
-	for _, c := range cookies {
-		req.AddCookie(c)
-	}
-
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	return io.ReadAll(resp.Body)
+	b.WriteString(`</tbody></table>`)
+	return b.String()
 }
 
 // Helper: fetch librechat users by calling the internal handler logic

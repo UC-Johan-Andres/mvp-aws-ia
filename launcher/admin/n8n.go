@@ -52,47 +52,19 @@ func listN8NUsers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	client := n8nHTTPClient()
-
-	cookies, err := n8nLogin(client)
-	if err != nil {
-		jsonError(w, "n8n authentication failed: "+err.Error(), http.StatusBadGateway)
-		return
-	}
-
-	req, err := http.NewRequest(http.MethodGet, config.N8NInternalURL+"/rest/users", nil)
-	if err != nil {
-		jsonError(w, "failed to create request: "+err.Error(), http.StatusInternalServerError)
-		return
-	}
-	req.Header.Set("Content-Type", "application/json")
-	if config.N8NBasicUser != "" {
-		req.SetBasicAuth(config.N8NBasicUser, config.N8NBasicPass)
-	}
-	for _, c := range cookies {
-		req.AddCookie(c)
-	}
-
-	resp, err := client.Do(req)
+	users, err := getN8NUsers()
 	if err != nil {
 		jsonError(w, "failed to list n8n users: "+err.Error(), http.StatusBadGateway)
 		return
 	}
-	defer resp.Body.Close()
-
-	data, err := io.ReadAll(resp.Body)
-	if err != nil {
-		jsonError(w, "failed to read n8n response: "+err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		jsonError(w, fmt.Sprintf("n8n returned status %d: %s", resp.StatusCode, string(data)), http.StatusBadGateway)
-		return
-	}
 
 	w.Header().Set("Content-Type", "application/json")
-	w.Write(data)
+	_ = json.NewEncoder(w).Encode(map[string]interface{}{
+		"data": map[string]interface{}{
+			"count": len(users),
+			"items": users,
+		},
+	})
 }
 
 type n8nUserRequest struct {

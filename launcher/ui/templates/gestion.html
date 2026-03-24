@@ -113,6 +113,11 @@
             font-size: 0.9rem;
         }
         tr:last-child td { border-bottom: none; }
+        th.col-num, td.col-num {
+            text-align: right;
+            font-variant-numeric: tabular-nums;
+            white-space: nowrap;
+        }
         .role-badge {
             display: inline-block;
             padding: 2px 10px;
@@ -589,6 +594,8 @@
             document.querySelector(`[data-tab="${tab}"]`).classList.add('active');
             currentTab = tab;
             document.getElementById('footer-service').textContent = 'Conectado a ' + (tab === 'n8n' ? 'n8n' : 'LibreChat');
+
+            updateUsersTableHeader(tab);
             
             // Mostrar/ocultar formulario correspondiente
             document.querySelectorAll('.user-form').forEach(f => f.classList.remove('active'));
@@ -622,11 +629,44 @@
             return 'role-user';
         }
 
+        function fmtStat(v) {
+            if (v === undefined || v === null) {
+                return '—';
+            }
+            return String(v);
+        }
+
+        function updateUsersTableHeader(tab) {
+            const tr = document.querySelector('#users-table thead tr');
+            if (!tr) {
+                return;
+            }
+            if (tab === 'n8n') {
+                tr.innerHTML = `
+                    <th>Email</th>
+                    <th>Nombre</th>
+                    <th>Rol</th>
+                    <th class="col-num">Workflows</th>
+                    <th class="col-num">Activos</th>
+                    <th class="col-num">Ejecuciones</th>
+                    <th>Acciones</th>
+                `;
+            } else {
+                tr.innerHTML = `
+                    <th>Email</th>
+                    <th>Nombre</th>
+                    <th>Rol</th>
+                    <th>Acciones</th>
+                `;
+            }
+        }
+
         function generateUsersHTML(users, tab) {
+            const emptyCols = tab === 'n8n' ? 7 : 4;
             if (!users || users.length === 0) {
                 return `
                     <tr>
-                        <td colspan="4" class="empty-state">
+                        <td colspan="${emptyCols}" class="empty-state">
                             <p>No hay usuarios registrados.</p>
                             <p>Usa el formulario abajo para crear usuarios.</p>
                         </td>
@@ -668,6 +708,12 @@
                     </button>
                 `;
 
+                const statsCells = tab === 'n8n' ? `
+                        <td class="col-num">${fmtStat(u.workflowsTotal)}</td>
+                        <td class="col-num">${fmtStat(u.workflowsActive)}</td>
+                        <td class="col-num">${fmtStat(u.executionsTotal)}</td>
+                ` : '';
+
                 return `
                     <tr>
                         <td>${escapeHtml(u.email)}</td>
@@ -677,6 +723,7 @@
                                 ${escapeHtml(u.role)}${isPending ? ' (pendiente)' : ''}
                             </span>
                         </td>
+                        ${statsCells}
                         <td>${actions}</td>
                     </tr>
                 `;
@@ -685,8 +732,11 @@
 
         function renderUsersFromCache(tab) {
             const tbody = document.getElementById('users-tbody');
-            if (!tbody) return;
+            if (!tbody) {
+                return;
+            }
 
+            updateUsersTableHeader(tab);
             const data = getCachedUsers();
             const users = data[tab] || [];
             tbody.innerHTML = generateUsersHTML(users, tab);

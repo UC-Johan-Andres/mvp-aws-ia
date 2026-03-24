@@ -1,3 +1,10 @@
+<style>
+    #users-table th.col-num, #users-table td.col-num {
+        text-align: right;
+        font-variant-numeric: tabular-nums;
+        white-space: nowrap;
+    }
+</style>
 <div class="card-body">
     <h4 class="section-title">USUARIOS -  PRUEBA2</h4>
 
@@ -14,6 +21,11 @@
                     <th>Email</th>
                     <th>Nombre</th>
                     <th>Rol</th>
+                    {{if eq .Tab "n8n"}}
+                    <th class="col-num">Workflows</th>
+                    <th class="col-num">Activos</th>
+                    <th class="col-num">Ejecuciones</th>
+                    {{end}}
                     <th>Acciones</th>
                 </tr>
             </thead>
@@ -22,7 +34,7 @@
                 {{$users := .Users}}
                 {{if eq (len $users) 0}}
                 <tr>
-                    <td colspan="4" class="empty-state">
+                    <td colspan="{{if eq .Tab "n8n"}}7{{else}}4{{end}}" class="empty-state">
                         <p>No hay usuarios registrados.</p>
                         <p>Usa el formulario abajo para crear usuarios.</p>
                     </td>
@@ -37,6 +49,11 @@
                             {{.Role}}{{if .IsPending}} (pendiente){{end}}
                         </span>
                     </td>
+                    {{if eq $tab "n8n"}}
+                    <td class="col-num">{{.WorkflowsTotal}}</td>
+                    <td class="col-num">{{.WorkflowsActive}}</td>
+                    <td class="col-num">{{.ExecutionsTotal}}</td>
+                    {{end}}
                     <td>
                         {{if and (eq $tab "n8n") .InviteURL}}
                         <button type="button" class="btn-small btn-invite" 
