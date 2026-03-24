@@ -21,6 +21,7 @@ var (
 	tmplInviteModal *template.Template
 	tmplRows        *template.Template
 	tmplContent     *template.Template
+	tmplCharts      *template.Template
 )
 
 // fragmentTmpl uses the same CSS classes as queue.html so styles apply correctly
@@ -94,6 +95,11 @@ func init() {
 	tmplContent, err = template.ParseFS(templateFS, "templates/gestion_content.html")
 	if err != nil {
 		log.Fatalf("ui: parse gestion_content.html: %v", err)
+	}
+
+	tmplCharts, err = template.ParseFS(templateFS, "templates/gestion_charts.html")
+	if err != nil {
+		log.Fatalf("ui: parse gestion_charts.html: %v", err)
 	}
 }
 
@@ -202,5 +208,13 @@ func RenderGestionRows(w http.ResponseWriter, tab string, users string) {
 	}{Tab: tab, Users: users}
 	if err := tmplRows.Execute(w, data); err != nil {
 		log.Printf("ui: render gestion rows: %v", err)
+	}
+}
+
+// RenderGestionChartsContent renders the statistics / charts fragment for HTMX.
+func RenderGestionChartsContent(w http.ResponseWriter) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if err := tmplCharts.Execute(w, nil); err != nil {
+		log.Printf("ui: render gestion charts: %v", err)
 	}
 }

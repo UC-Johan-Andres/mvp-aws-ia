@@ -44,6 +44,8 @@ func main() {
 	mux.HandleFunc("GET /gestion/invite", auth.RequireAuth(admin.HandleInviteModal))
 	mux.HandleFunc("GET /gestion/users-rows", auth.RequireAuth(admin.HandleGestionUsersRows))
 	mux.HandleFunc("GET /gestion/stream", auth.RequireAuth(admin.HandleGestionStream))
+	mux.HandleFunc("GET /gestion/api/stats", auth.RequireAuth(admin.HandleGestionStatsAPI))
+	mux.HandleFunc("GET /gestion/charts-content", auth.RequireAuth(admin.HandleGestionChartsContent))
 
 	// Wake (catch-all — called by nginx @launcher on 502)
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {

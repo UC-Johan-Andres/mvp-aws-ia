@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <title>Gestión de Usuarios — AI Ecosystem</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.6/dist/chart.umd.min.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/htmx.org@2.0.8/dist/htmx.min.js" integrity="sha384-/TgkGk7p307TH7EXJDuUlgG3Ce1UVolAOFopFekQkkXihi5u/6OCvVKyz1W+idaz" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/htmx-ext-sse@2.2.4" integrity="sha384-A986SAtodyH8eg8x8irJnYUk7i9inVQqYigD6qZ9evobksGNIXfeFvDwLSHcp31N" crossorigin="anonymous"></script>
     <style>
@@ -454,6 +455,65 @@
             cursor: pointer;
         }
         .modal-save:hover { background: #218838; }
+
+        /* Módulo estadísticas / gráficos */
+        .charts-root { padding: 0; }
+        .charts-root .chart-section {
+            margin-bottom: 32px;
+        }
+        .charts-root .chart-section:last-child { margin-bottom: 0; }
+        .stats-kpi-row {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+        .stats-kpi {
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 12px 14px;
+            border: 1px solid #e9ecef;
+        }
+        .stats-kpi .kpi-label {
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            color: #6c757d;
+            margin-bottom: 4px;
+        }
+        .stats-kpi .kpi-value {
+            font-size: 1.15rem;
+            font-weight: 600;
+            color: #1a1a2e;
+            font-variant-numeric: tabular-nums;
+        }
+        .chart-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 20px;
+        }
+        .chart-card {
+            background: #fafbfc;
+            border: 1px solid #e9ecef;
+            border-radius: 10px;
+            padding: 16px;
+            min-height: 260px;
+        }
+        .chart-card h4 {
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: #495057;
+            margin-bottom: 12px;
+        }
+        .chart-card canvas { max-height: 220px; }
+        .lc-stats-hint {
+            background: #fff8e6;
+            border: 1px solid #ffe69c;
+            border-radius: 8px;
+            padding: 14px 16px;
+            font-size: 0.9rem;
+            color: #856404;
+        }
     </style>
 </head>
 <body>
@@ -474,6 +534,9 @@
                 </button>
                 <button class="tab" data-tab="librechat" onclick="switchTab('librechat')">
                     LibreChat
+                </button>
+                <button class="tab" data-tab="estadisticas" onclick="switchTab('estadisticas')">
+                    Estadísticas
                 </button>
             </div>
 
@@ -589,26 +652,204 @@
         });
 
         function switchTab(tab) {
-            // Actualizar UI de tabs
             document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-            document.querySelector(`[data-tab="${tab}"]`).classList.add('active');
+            const tabBtn = document.querySelector(`[data-tab="${tab}"]`);
+            if (tabBtn) tabBtn.classList.add('active');
             currentTab = tab;
-            document.getElementById('footer-service').textContent = 'Conectado a ' + (tab === 'n8n' ? 'n8n' : 'LibreChat');
 
-            updateUsersTableHeader(tab);
-            
-            // Mostrar/ocultar formulario correspondiente
-            document.querySelectorAll('.user-form').forEach(f => f.classList.remove('active'));
-            const form = document.getElementById('form-' + tab);
-            if (form) form.classList.add('active');
-            
-            // Renderizar desde localStorage (sin petición al servidor)
-            const cached = getCachedUsers();
-            if (cached[tab] && cached[tab].length > 0) {
-                isInitialized = true;
-                renderUsersFromCache(tab);
+            const footer = document.getElementById('footer-service');
+            if (tab === 'estadisticas') {
+                footer.textContent = 'Vista de estadísticas agregadas';
+                htmx.ajax('GET', '/gestion/charts-content', { target: '#main-content', swap: 'innerHTML' });
+                return;
             }
+            footer.textContent = 'Conectado a ' + (tab === 'n8n' ? 'n8n' : 'LibreChat');
+            htmx.ajax('GET', '/gestion/content?tab=' + encodeURIComponent(tab), { target: '#main-content', swap: 'innerHTML' });
         }
+
+        function syncGestionUserFormsAfterContentLoad() {
+            if (!document.getElementById('form-n8n')) {
+                return;
+            }
+            document.querySelectorAll('.user-form').forEach(f => f.classList.remove('active'));
+            const form = document.getElementById('form-' + currentTab);
+            if (form) {
+                form.classList.add('active');
+            }
+            updateUsersTableHeader(currentTab);
+        }
+
+        function destroyGestionCharts() {
+            if (!window.__gestionCharts) {
+                return;
+            }
+            window.__gestionCharts.forEach(function(ch) {
+                try { ch.destroy(); } catch (e) {}
+            });
+            window.__gestionCharts = [];
+        }
+
+        function shortChartLabel(s, maxLen) {
+            if (!s) return '';
+            var t = String(s).trim();
+            if (t.length <= maxLen) return t;
+            return t.slice(0, maxLen - 1) + '…';
+        }
+
+        function initGestionChartsPage() {
+            destroyGestionCharts();
+            window.__gestionCharts = [];
+
+            var errEl = document.getElementById('n8n-stats-error');
+            var bodyEl = document.getElementById('n8n-stats-body');
+            var lcMsg = document.getElementById('lc-stats-message');
+
+            if (typeof Chart === 'undefined') {
+                if (errEl) {
+                    errEl.style.display = 'block';
+                    errEl.textContent = 'Chart.js no está cargado.';
+                }
+                return;
+            }
+
+            fetch('/gestion/api/stats', { credentials: 'same-origin' })
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    if (lcMsg && data.librechat) {
+                        lcMsg.textContent = data.librechat.message || 'Sin datos de LibreChat por el momento.';
+                    }
+
+                    var n8n = data.n8n || {};
+                    if (!n8n.available) {
+                        if (bodyEl) bodyEl.style.display = 'none';
+                        if (errEl) {
+                            errEl.style.display = 'block';
+                            errEl.textContent = n8n.error || 'No hay datos de n8n.';
+                        }
+                        return;
+                    }
+
+                    if (errEl) errEl.style.display = 'none';
+                    if (bodyEl) bodyEl.style.display = 'block';
+
+                    var totals = n8n.totals || {};
+                    function setKpi(id, val) {
+                        var el = document.getElementById(id);
+                        if (el) el.textContent = val;
+                    }
+                    setKpi('kpi-users', String(totals.userCount != null ? totals.userCount : '0'));
+                    setKpi('kpi-workflows', String(totals.workflowsAccesibles != null ? totals.workflowsAccesibles : '0'));
+                    setKpi('kpi-exec', String(totals.prodExecutions != null ? totals.prodExecutions : '0'));
+                    setKpi('kpi-failed', String(totals.failedProdExecutions != null ? totals.failedProdExecutions : '0'));
+                    setKpi('kpi-avg-fail', (totals.avgFailureRatePct != null ? Number(totals.avgFailureRatePct).toFixed(2) : '0') + '%');
+                    setKpi('kpi-avg-runtime', (totals.avgRunTimeSeconds != null ? Number(totals.avgRunTimeSeconds).toFixed(2) : '0') + ' s');
+
+                    var users = n8n.users || [];
+                    var labels = users.map(function(u) { return shortChartLabel(u.email, 22); });
+                    var execData = users.map(function(u) { return Number(u.prodExecutions) || 0; });
+                    var wfData = users.map(function(u) { return Number(u.workflowsAccesibles) || 0; });
+                    var failRate = users.map(function(u) { return Number(u.failureRatePct) || 0; });
+
+                    var commonOpts = {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: { legend: { display: false } }
+                    };
+
+                    var elExec = document.getElementById('chart-n8n-exec');
+                    if (elExec && labels.length) {
+                        window.__gestionCharts.push(new Chart(elExec, {
+                            type: 'bar',
+                            data: {
+                                labels: labels,
+                                datasets: [{
+                                    label: 'Ejecuciones (no manual)',
+                                    data: execData,
+                                    backgroundColor: 'rgba(0, 123, 255, 0.55)',
+                                    borderColor: 'rgba(0, 86, 179, 0.9)',
+                                    borderWidth: 1
+                                }]
+                            },
+                            options: Object.assign({}, commonOpts, {
+                                scales: {
+                                    x: { ticks: { maxRotation: 45, minRotation: 0, font: { size: 10 } } },
+                                    y: { beginAtZero: true, ticks: { precision: 0 } }
+                                }
+                            })
+                        }));
+                    }
+
+                    var elWf = document.getElementById('chart-n8n-workflows');
+                    if (elWf && labels.length) {
+                        window.__gestionCharts.push(new Chart(elWf, {
+                            type: 'bar',
+                            data: {
+                                labels: labels,
+                                datasets: [{
+                                    label: 'Workflows accesibles',
+                                    data: wfData,
+                                    backgroundColor: 'rgba(40, 167, 69, 0.5)',
+                                    borderColor: 'rgba(25, 135, 84, 0.95)',
+                                    borderWidth: 1
+                                }]
+                            },
+                            options: Object.assign({}, commonOpts, {
+                                scales: {
+                                    x: { ticks: { maxRotation: 45, minRotation: 0, font: { size: 10 } } },
+                                    y: { beginAtZero: true, ticks: { precision: 0 } }
+                                }
+                            })
+                        }));
+                    }
+
+                    var elFr = document.getElementById('chart-n8n-failrate');
+                    if (elFr && labels.length) {
+                        window.__gestionCharts.push(new Chart(elFr, {
+                            type: 'bar',
+                            data: {
+                                labels: labels,
+                                datasets: [{
+                                    label: '% fallos (prod)',
+                                    data: failRate,
+                                    backgroundColor: 'rgba(220, 53, 69, 0.45)',
+                                    borderColor: 'rgba(176, 42, 55, 0.9)',
+                                    borderWidth: 1
+                                }]
+                            },
+                            options: Object.assign({}, commonOpts, {
+                                scales: {
+                                    x: { ticks: { maxRotation: 45, minRotation: 0, font: { size: 10 } } },
+                                    y: {
+                                        beginAtZero: true,
+                                        suggestedMax: 100,
+                                        ticks: {
+                                            callback: function(v) { return v + '%'; }
+                                        }
+                                    }
+                                }
+                            })
+                        }));
+                    }
+                })
+                .catch(function(e) {
+                    if (bodyEl) bodyEl.style.display = 'none';
+                    if (errEl) {
+                        errEl.style.display = 'block';
+                        errEl.textContent = 'Error al cargar estadísticas: ' + (e && e.message ? e.message : String(e));
+                    }
+                });
+        }
+
+        document.body.addEventListener('htmx:afterSwap', function(evt) {
+            if (!evt.detail.target || evt.detail.target.id !== 'main-content') {
+                return;
+            }
+            if (document.getElementById('gestion-charts-root')) {
+                initGestionChartsPage();
+                return;
+            }
+            syncGestionUserFormsAfterContentLoad();
+        });
 
         function setActiveTab(tab) {
             // Alias para compatibilidad

@@ -3,6 +3,7 @@ package admin
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"log"
 	"strings"
 	"sync"
@@ -12,6 +13,17 @@ import (
 
 	"launcher/config"
 )
+
+// N8NStatsSeriesItem is one user row from the stats query (orden útil para gráficos).
+type N8NStatsSeriesItem struct {
+	UserID               string  `json:"userId"`
+	Email                string  `json:"email"`
+	WorkflowsAccesibles  int64   `json:"workflowsAccesibles"`
+	ProdExecutions       int64   `json:"prodExecutions"`
+	FailedProdExecutions int64   `json:"failedProdExecutions"`
+	FailureRatePct       float64 `json:"failureRatePct"`
+	RunTimeAvgSeconds    float64 `json:"runTimeAvgSeconds"`
+}
 
 // Incluye u.id para cruzar con la API aunque el email difiera en mayúsculas/espacios.
 // ORDER BY usa la expresión (no alias) por compatibilidad entre versiones de PostgreSQL.
@@ -78,6 +90,51 @@ func loadN8NStatsMaps(ctx context.Context, db *sql.DB) (byUserID map[string]n8nD
 		byEmail[em] = r
 	}
 	return byUserID, byEmail, rows.Err()
+}
+
+func loadN8NStatsSeries(ctx context.Context, db *sql.DB) ([]N8NStatsSeriesItem, error) {
+	rows, err := db.QueryContext(ctx, n8nUserStatsSQL)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []N8NStatsSeriesItem
+	for rows.Next() {
+		var it N8NStatsSeriesItem
+		if err := rows.Scan(
+			&it.UserID,
+			&it.Email,
+			&it.WorkflowsAccesibles,
+			&it.ProdExecutions,
+			&it.FailedProdExecutions,
+			&it.FailureRatePct,
+			&it.RunTimeAvgSeconds,
+		); err != nil {
+			return nil, err
+		}
+		it.UserID = strings.TrimSpace(it.UserID)
+		it.Email = strings.TrimSpace(it.Email)
+		out = append(out, it)
+	}
+	return out, rows.Err()
+}
+
+// FetchN8NStatsSeries ejecuta la misma consulta que enriquece usuarios y devuelve filas ordenadas para APIs/gráficos.
+func FetchN8NStatsSeries(ctx context.Context) ([]N8NStatsSeriesItem, error) {
+	dsn := config.N8NPostgresDSN()
+	if dsn == "" {
+		return nil, fmt.Errorf("postgres DSN no configurado (N8N_POSTGRES_DSN o DB_POSTGRESDB_* en .env.n8n)")
+	}
+	db, err := sql.Open("postgres", dsn)
+	if err != nil {
+		return nil, err
+	}
+	defer db.Close()
+	if err := db.PingContext(ctx); err != nil {
+		return nil, err
+	}
+	return loadN8NStatsSeries(ctx, db)
 }
 
 var warnedN8NNoDSN sync.Once
