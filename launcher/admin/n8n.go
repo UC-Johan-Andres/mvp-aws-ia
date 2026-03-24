@@ -118,8 +118,8 @@ func createN8NUsers(w http.ResponseWriter, r *http.Request) {
 	}
 
 	for _, req := range requests {
-		if req.Role != "global:admin" && req.Role != "global:member" {
-			jsonError(w, fmt.Sprintf("invalid role %q: must be global:admin or global:member", req.Role), http.StatusBadRequest)
+		if req.Role != "global:owner" && req.Role != "global:member" {
+			jsonError(w, fmt.Sprintf("invalid role %q: must be global:owner or global:member", req.Role), http.StatusBadRequest)
 			return
 		}
 	}
@@ -254,8 +254,8 @@ func updateN8NUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if reqBody.Role != "global:admin" && reqBody.Role != "global:member" {
-		jsonError(w, "invalid role: must be global:admin or global:member", http.StatusBadRequest)
+	if reqBody.Role != "global:owner" && reqBody.Role != "global:member" {
+		jsonError(w, "invalid role: must be global:owner or global:member", http.StatusBadRequest)
 		return
 	}
 

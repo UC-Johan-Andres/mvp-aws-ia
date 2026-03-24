@@ -808,7 +808,7 @@
             if (tab === 'n8n') {
                 roleSelect.innerHTML = `
                     <option value="global:member" ${role === 'global:member' ? 'selected' : ''}>global:member</option>
-                    <option value="global:admin" ${role === 'global:admin' ? 'selected' : ''}>global:admin</option>
+                    <option value="global:owner" ${role === 'global:owner' || role === 'global:admin' ? 'selected' : ''}>global:owner</option>
                 `;
             } else {
                 roleSelect.innerHTML = `

@@ -377,6 +377,9 @@ func createUsersFromJSON(tab string, usersJSON string) ([]byte, error) {
 			if role == "" {
 				role = "global:member"
 			}
+			if role == "global:admin" {
+				role = "global:owner"
+			}
 			requests = append(requests, n8nUserRequest{Email: email, Role: role})
 		}
 
@@ -745,8 +748,8 @@ func createN8NUsersFromForm(r *http.Request) ([]byte, error) {
 	requests := make([]n8nUserRequest, 0, len(emails))
 	for i, email := range emails {
 		role := "global:member"
-		if i < len(roles) && roles[i] == "global:admin" {
-			role = "global:admin"
+		if i < len(roles) && (roles[i] == "global:owner" || roles[i] == "global:admin") {
+			role = "global:owner"
 		}
 		requests = append(requests, n8nUserRequest{Email: email, Role: role})
 	}
