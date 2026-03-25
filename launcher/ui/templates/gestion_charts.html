@@ -1,9 +1,11 @@
 <div id="gestion-charts-root" class="charts-root card-body">
     <div class="chart-section">
-        <h4 class="section-title">n8n — métricas por usuario</h4>
-        <p class="panel-muted">
-            Datos desde PostgreSQL de n8n (misma base que la tabla de usuarios). Los gráficos se actualizan al abrir esta pestaña.
-        </p>
+        <div class="chart-section-header">
+            <h4 class="chart-heading">n8n — métricas por usuario</h4>
+            <p class="chart-lede">
+                Datos desde PostgreSQL de n8n (misma base que la tabla de usuarios). Los gráficos se actualizan al abrir esta pestaña.
+            </p>
+        </div>
         <div id="n8n-stats-error" class="empty-state" style="display:none;"></div>
         <div id="n8n-stats-body" style="display:none;">
             <div class="chart-grid">
@@ -24,10 +26,12 @@
     </div>
 
     <div class="chart-section">
-        <h4 class="section-title">LibreChat — MongoDB</h4>
-        <p class="panel-muted">
-            Agregaciones sobre <code>conversations</code> y <code>messages</code> (colección <code>users</code>), misma lógica que en mongosh.
-        </p>
+        <div class="chart-section-header">
+            <h4 class="chart-heading">LibreChat — MongoDB</h4>
+            <p class="chart-lede">
+                Agregaciones sobre <code>conversations</code> y <code>messages</code> (colección <code>users</code>), misma lógica que en mongosh.
+            </p>
+        </div>
         <div id="lc-stats-error" class="empty-state" style="display:none;padding:20px;"></div>
         <div class="lc-stats-hint" id="lc-stats-message" style="display:none;margin-bottom:16px;"></div>
         <div id="lc-stats-body" style="display:none;">

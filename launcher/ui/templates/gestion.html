@@ -2,6 +2,17 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
+    <script>
+    (function () {
+        function resolveTheme() {
+            var m = localStorage.getItem('gestion-color-mode');
+            if (m === 'light') return 'light';
+            if (m === 'dark') return 'dark';
+            return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+        }
+        document.documentElement.setAttribute('data-theme', resolveTheme());
+    })();
+    </script>
     <title>Gestión de Usuarios — AI Ecosystem</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -13,6 +24,7 @@
     <style>
         :root {
             --bg: #f0f4f8;
+            --body-bg: linear-gradient(160deg, #f0f4f8 0%, #eef2ff 50%, #f8fafc 100%);
             --surface: #ffffff;
             --surface-muted: #f8fafc;
             --border: rgba(15, 23, 42, 0.08);
@@ -30,15 +42,39 @@
             --shadow: 0 4px 24px rgba(15, 23, 42, 0.07);
             --shadow-lg: 0 20px 50px rgba(15, 23, 42, 0.1);
             --font: "Plus Jakarta Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            --chart-tick: #64748b;
+            --chart-grid: rgba(148, 163, 184, 0.25);
+            --tab-hover-bg: rgba(255, 255, 255, 0.7);
+        }
+        [data-theme="dark"] {
+            --bg: #0f172a;
+            --body-bg: linear-gradient(165deg, #0f172a 0%, #1e1b4b 45%, #0f172a 100%);
+            --surface: #1e293b;
+            --surface-muted: #334155;
+            --border: rgba(148, 163, 184, 0.12);
+            --text: #f1f5f9;
+            --text-muted: #94a3b8;
+            --primary: #60a5fa;
+            --primary-hover: #93c5fd;
+            --primary-soft: rgba(96, 165, 250, 0.18);
+            --danger: #f87171;
+            --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.25);
+            --shadow: 0 4px 24px rgba(0, 0, 0, 0.35);
+            --shadow-lg: 0 20px 50px rgba(0, 0, 0, 0.45);
+            --chart-tick: #94a3b8;
+            --chart-grid: rgba(148, 163, 184, 0.12);
+            --tab-hover-bg: rgba(255, 255, 255, 0.06);
+            color-scheme: dark;
         }
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body {
             font-family: var(--font);
-            background: linear-gradient(160deg, #f0f4f8 0%, #eef2ff 50%, #f8fafc 100%);
+            background: var(--body-bg);
             background-attachment: fixed;
             min-height: 100vh;
             color: var(--text);
             -webkit-font-smoothing: antialiased;
+            transition: background 0.35s ease, color 0.2s ease;
         }
         .container {
             max-width: min(1140px, 100%);
@@ -82,9 +118,41 @@
         }
         .header-actions {
             display: flex;
-            gap: 12px;
+            gap: 10px;
             align-items: center;
             flex-wrap: wrap;
+        }
+        .btn-theme {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            padding: 8px 14px;
+            border-radius: 999px;
+            border: 1px solid var(--border);
+            background: var(--surface);
+            color: var(--text-muted);
+            font-family: inherit;
+            font-size: 0.8rem;
+            font-weight: 600;
+            cursor: pointer;
+            box-shadow: var(--shadow-sm);
+            transition: background 0.2s, border-color 0.2s, color 0.2s;
+        }
+        .btn-theme:hover {
+            color: var(--text);
+            border-color: rgba(37, 99, 235, 0.35);
+        }
+        [data-theme="dark"] .btn-theme:hover {
+            border-color: rgba(96, 165, 250, 0.4);
+        }
+        .btn-theme:focus-visible {
+            outline: 2px solid var(--primary);
+            outline-offset: 2px;
+        }
+        .btn-theme-icon {
+            font-size: 1rem;
+            line-height: 1;
         }
         .user-badge {
             display: inline-flex;
@@ -183,7 +251,7 @@
         }
         .tab:hover {
             color: var(--text);
-            background: rgba(255, 255, 255, 0.7);
+            background: var(--tab-hover-bg);
         }
         .tab.active {
             color: var(--primary);
@@ -583,22 +651,24 @@
         }
         .modal-content h3 {
             font-size: 1.1rem;
-            color: #1a1a2e;
+            color: var(--text);
             margin-bottom: 16px;
         }
         .modal-content p {
             font-size: 0.9rem;
-            color: #495057;
+            color: var(--text-muted);
             margin-bottom: 12px;
         }
         .invite-link-box {
-            background: #f8f9fa;
+            background: var(--surface-muted);
             padding: 12px;
             border-radius: 6px;
-            font-family: monospace;
+            font-family: ui-monospace, monospace;
             font-size: 0.85rem;
             word-break: break-all;
             margin: 12px 0;
+            border: 1px solid var(--border);
+            color: var(--text);
         }
         .modal-actions {
             display: flex;
@@ -617,7 +687,8 @@
             color: var(--text-muted);
             transition: background 0.2s;
         }
-        .modal-close:hover { background: #e2e8f0; }
+        .modal-close:hover { background: rgba(148, 163, 184, 0.2); }
+        [data-theme="light"] .modal-close:hover { background: #e2e8f0; }
         .modal-copy {
             padding: 10px 20px;
             background: linear-gradient(135deg, #2563eb, #4f46e5);
@@ -680,7 +751,7 @@
             display: block;
             margin-bottom: 6px;
             font-weight: 500;
-            color: #495057;
+            color: var(--text-muted);
         }
         .form-group input, .form-group select {
             width: 100%;
@@ -716,16 +787,60 @@
         .modal-save:hover { filter: brightness(1.06); }
 
         /* Módulo estadísticas / gráficos */
-        .charts-root { padding: 0; }
+        .charts-root {
+            padding: 8px 4px 4px;
+            max-width: 920px;
+            margin: 0 auto;
+        }
         .charts-root .chart-section {
-            margin-bottom: 32px;
+            margin-bottom: 40px;
         }
         .charts-root .chart-section:last-child { margin-bottom: 0; }
+        .chart-section-header {
+            text-align: center;
+            max-width: 38rem;
+            margin: 0 auto 28px;
+            padding: 0 12px;
+        }
+        .chart-heading {
+            font-size: 1.15rem;
+            font-weight: 700;
+            letter-spacing: -0.02em;
+            color: var(--text);
+            margin-bottom: 12px;
+            line-height: 1.3;
+        }
+        .chart-heading::after {
+            content: "";
+            display: block;
+            width: 48px;
+            height: 3px;
+            margin: 16px auto 0;
+            border-radius: 3px;
+            background: linear-gradient(90deg, var(--primary), #a855f7);
+        }
+        .chart-lede {
+            font-size: 0.9rem;
+            color: var(--text-muted);
+            line-height: 1.65;
+            margin: 0 auto;
+            max-width: 36rem;
+        }
+        .chart-lede code {
+            font-size: 0.82em;
+            padding: 2px 7px;
+            border-radius: 6px;
+            background: var(--surface-muted);
+            border: 1px solid var(--border);
+            color: var(--text);
+        }
         .stats-kpi-row {
             display: grid;
             grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
             gap: 12px;
-            margin-bottom: 20px;
+            margin: 0 auto 24px;
+            max-width: 52rem;
+            justify-content: center;
         }
         .stats-kpi {
             background: var(--surface);
@@ -733,6 +848,7 @@
             padding: 14px 16px;
             border: 1px solid var(--border);
             box-shadow: var(--shadow-sm);
+            text-align: center;
         }
         .stats-kpi .kpi-label {
             font-size: 0.68rem;
@@ -753,9 +869,11 @@
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
             gap: 20px;
+            max-width: 100%;
+            margin: 0 auto;
         }
         .chart-card {
-            background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+            background: linear-gradient(180deg, var(--surface) 0%, var(--surface-muted) 100%);
             border: 1px solid var(--border);
             border-radius: var(--radius-sm);
             padding: 18px;
@@ -765,12 +883,16 @@
         .chart-card:hover {
             box-shadow: 0 8px 30px rgba(15, 23, 42, 0.08);
         }
+        [data-theme="dark"] .chart-card:hover {
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35);
+        }
         .chart-card h4 {
             font-size: 0.82rem;
             font-weight: 700;
             color: var(--text);
             margin-bottom: 14px;
             letter-spacing: -0.01em;
+            text-align: center;
         }
         .chart-card canvas { max-height: 220px; }
         .lc-stats-hint {
@@ -808,6 +930,10 @@
                 </div>
             </div>
             <div class="header-actions">
+                <button type="button" class="btn-theme" id="theme-cycle" title="Cambiar tema" aria-label="Tema: automático, claro u oscuro">
+                    <span class="btn-theme-icon" id="theme-cycle-icon" aria-hidden="true">◐</span>
+                    <span id="theme-cycle-label">Auto</span>
+                </button>
                 <span class="user-badge"><span class="user-badge-dot" aria-hidden="true"></span> admin</span>
                 <a href="/auth/logout" class="btn-logout">Cerrar sesión</a>
             </div>
@@ -884,6 +1010,47 @@
         let currentTab = 'n8n';
         let isInitialized = false;
 
+        var THEME_MODE_KEY = 'gestion-color-mode';
+        var THEME_MODES = ['system', 'light', 'dark'];
+
+        function resolveDataTheme() {
+            var m = localStorage.getItem(THEME_MODE_KEY) || 'system';
+            if (m === 'light') return 'light';
+            if (m === 'dark') return 'dark';
+            return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+        }
+
+        function applyResolvedTheme() {
+            document.documentElement.setAttribute('data-theme', resolveDataTheme());
+        }
+
+        function syncThemeButton() {
+            var mode = localStorage.getItem(THEME_MODE_KEY) || 'system';
+            var icon = document.getElementById('theme-cycle-icon');
+            var label = document.getElementById('theme-cycle-label');
+            if (!icon || !label) return;
+            if (mode === 'system') {
+                icon.textContent = '\u25D0';
+                label.textContent = 'Auto';
+            } else if (mode === 'light') {
+                icon.textContent = '\u2600';
+                label.textContent = 'Claro';
+            } else {
+                icon.textContent = '\u263E';
+                label.textContent = 'Oscuro';
+            }
+        }
+
+        function cycleThemeMode() {
+            var cur = localStorage.getItem(THEME_MODE_KEY) || 'system';
+            var i = THEME_MODES.indexOf(cur);
+            if (i < 0) i = 0;
+            localStorage.setItem(THEME_MODE_KEY, THEME_MODES[(i + 1) % THEME_MODES.length]);
+            applyResolvedTheme();
+            syncThemeButton();
+            window.dispatchEvent(new CustomEvent('gestion-theme-change'));
+        }
+
         // Funciones para localStorage
         function getCachedUsers() {
             const stored = localStorage.getItem('gestionUsers');
@@ -925,14 +1092,24 @@
 
         // Inicializar formulario activo al cargar
         document.addEventListener('DOMContentLoaded', function() {
+            applyResolvedTheme();
+            syncThemeButton();
+            var tbtn = document.getElementById('theme-cycle');
+            if (tbtn) tbtn.addEventListener('click', cycleThemeMode);
+            window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', function() {
+                if ((localStorage.getItem(THEME_MODE_KEY) || 'system') !== 'system') return;
+                applyResolvedTheme();
+                syncThemeButton();
+                window.dispatchEvent(new CustomEvent('gestion-theme-change'));
+            });
+
             const formN8n = document.getElementById('form-n8n');
             const formLibrechat = document.getElementById('form-librechat');
             if (formN8n && formLibrechat) {
                 formN8n.classList.add('active');
                 formLibrechat.classList.remove('active');
             }
-            
-            // Si hay datos en localStorage, renderizar
+
             const cached = getCachedUsers();
             if (cached.n8n.length > 0 || cached.librechat.length > 0) {
                 isInitialized = true;
@@ -1026,6 +1203,33 @@
                         maintainAspectRatio: false,
                         plugins: { legend: { display: false } }
                     };
+                    var st = getComputedStyle(document.documentElement);
+                    var tickC = (st.getPropertyValue('--chart-tick').trim() || '#64748b');
+                    var gridC = (st.getPropertyValue('--chart-grid').trim() || 'rgba(148,163,184,0.2)');
+                    function chartSx() {
+                        return {
+                            ticks: { maxRotation: 45, minRotation: 0, font: { size: 10 }, color: tickC },
+                            grid: { color: gridC }
+                        };
+                    }
+                    function chartSyNum() {
+                        return {
+                            beginAtZero: true,
+                            ticks: { precision: 0, color: tickC },
+                            grid: { color: gridC }
+                        };
+                    }
+                    function chartSyPct() {
+                        return {
+                            beginAtZero: true,
+                            suggestedMax: 100,
+                            ticks: {
+                                color: tickC,
+                                callback: function(v) { return v + '%'; }
+                            },
+                            grid: { color: gridC }
+                        };
+                    }
 
                     var n8n = data.n8n || {};
                     if (!n8n.available) {
@@ -1060,8 +1264,8 @@
                                 },
                                 options: Object.assign({}, commonOpts, {
                                     scales: {
-                                        x: { ticks: { maxRotation: 45, minRotation: 0, font: { size: 10 } } },
-                                        y: { beginAtZero: true, ticks: { precision: 0 } }
+                                        x: chartSx(),
+                                        y: chartSyNum()
                                     }
                                 })
                             }));
@@ -1083,8 +1287,8 @@
                                 },
                                 options: Object.assign({}, commonOpts, {
                                     scales: {
-                                        x: { ticks: { maxRotation: 45, minRotation: 0, font: { size: 10 } } },
-                                        y: { beginAtZero: true, ticks: { precision: 0 } }
+                                        x: chartSx(),
+                                        y: chartSyNum()
                                     }
                                 })
                             }));
@@ -1106,12 +1310,8 @@
                                 },
                                 options: Object.assign({}, commonOpts, {
                                     scales: {
-                                        x: { ticks: { maxRotation: 45, minRotation: 0, font: { size: 10 } } },
-                                        y: {
-                                            beginAtZero: true,
-                                            suggestedMax: 100,
-                                            ticks: { callback: function(v) { return v + '%'; } }
-                                        }
+                                        x: chartSx(),
+                                        y: chartSyPct()
                                     }
                                 })
                             }));
@@ -1163,8 +1363,8 @@
                                 },
                                 options: Object.assign({}, commonOpts, {
                                     scales: {
-                                        x: { ticks: { maxRotation: 45, minRotation: 0, font: { size: 10 } } },
-                                        y: { beginAtZero: true, ticks: { precision: 0 } }
+                                        x: chartSx(),
+                                        y: chartSyNum()
                                     }
                                 })
                             }));
@@ -1186,8 +1386,8 @@
                                 },
                                 options: Object.assign({}, commonOpts, {
                                     scales: {
-                                        x: { ticks: { maxRotation: 45, minRotation: 0, font: { size: 10 } } },
-                                        y: { beginAtZero: true, ticks: { precision: 0 } }
+                                        x: chartSx(),
+                                        y: chartSyNum()
                                     }
                                 })
                             }));
@@ -1208,6 +1408,12 @@
                     }
                 });
         }
+
+        window.addEventListener('gestion-theme-change', function() {
+            if (document.getElementById('gestion-charts-root')) {
+                initGestionChartsPage();
+            }
+        });
 
         document.body.addEventListener('htmx:afterSwap', function(evt) {
             if (!evt.detail.target || evt.detail.target.id !== 'main-content') {
