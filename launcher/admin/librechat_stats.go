@@ -209,7 +209,7 @@ func attachLibreChatCompanies(ctx context.Context, db *mongo.Database, items []L
 		if cur.Decode(&doc) != nil {
 			continue
 		}
-		k := key(doc.Email)
+		k := normEmail(doc.Email)
 		if k == "" {
 			continue
 		}
@@ -221,7 +221,7 @@ func attachLibreChatCompanies(ctx context.Context, db *mongo.Database, items []L
 	}
 	def := config.GestionDefaultCompany()
 	for i := range items {
-		k := key(items[i].Email)
+		k := normEmail(items[i].Email)
 		if c, ok := emailToCompany[k]; ok {
 			items[i].Company = c
 		} else {
