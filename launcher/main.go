@@ -12,6 +12,10 @@ import (
 )
 
 func main() {
+	if err := admin.InitCompanyStore(); err != nil {
+		log.Printf("gestión empresas (JSON): %v", err)
+	}
+
 	mux := http.NewServeMux()
 
 	// Auth

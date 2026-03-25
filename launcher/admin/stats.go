@@ -68,6 +68,42 @@ func round2(v float64) float64 {
 	return float64(int64(v*100+0.5)) / 100
 }
 
+func filterN8NStatsByCompany(series []N8NStatsSeriesItem, company string) []N8NStatsSeriesItem {
+	if company == "" {
+		return series
+	}
+	out := make([]N8NStatsSeriesItem, 0, len(series))
+	for _, row := range series {
+		if N8NUserCompany(row.UserID, row.Email) == company {
+			out = append(out, row)
+		}
+	}
+	return out
+}
+
+func filterLCStatsByCompany(series []LibreChatStatsSeriesItem, company string) []LibreChatStatsSeriesItem {
+	if company == "" {
+		return series
+	}
+	out := make([]LibreChatStatsSeriesItem, 0, len(series))
+	for _, row := range series {
+		if row.Company == company {
+			out = append(out, row)
+		}
+	}
+	return out
+}
+
+func lcTotalsFromFiltered(users []LibreChatStatsSeriesItem) LibreChatStatsTotals {
+	var t LibreChatStatsTotals
+	for _, v := range users {
+		t.TotalConversations += v.TotalConversations
+		t.TotalMessages += v.TotalMessages
+	}
+	t.UsersWithActivity = len(users)
+	return t
+}
+
 // HandleGestionStatsAPI devuelve JSON para la pestaña Estadísticas.
 func HandleGestionStatsAPI(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
@@ -115,6 +151,24 @@ func HandleGestionStatsAPI(w http.ResponseWriter, r *http.Request) {
 		out.N8N.Available = true
 		out.N8N.Users = series
 		out.N8N.Totals = n8nTotalsFromSeries(series)
+	}
+
+	q := strings.TrimSpace(r.URL.Query().Get("company"))
+	showAll := q == "" || strings.EqualFold(q, "all")
+	if !showAll {
+		canon, ok := config.CanonicalGestionCompany(q)
+		if !ok {
+			http.Error(w, "empresa inválida", http.StatusBadRequest)
+			return
+		}
+		if out.N8N.Available {
+			out.N8N.Users = filterN8NStatsByCompany(out.N8N.Users, canon)
+			out.N8N.Totals = n8nTotalsFromSeries(out.N8N.Users)
+		}
+		if out.LibreChat.Available {
+			out.LibreChat.Users = filterLCStatsByCompany(out.LibreChat.Users, canon)
+			out.LibreChat.Totals = lcTotalsFromFiltered(out.LibreChat.Users)
+		}
 	}
 
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")

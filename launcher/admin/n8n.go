@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
+	"strings"
 	"time"
 
 	"launcher/config"
@@ -68,6 +70,12 @@ func listN8NUsers(w http.ResponseWriter, r *http.Request) {
 }
 
 type n8nUserRequest struct {
+	Email   string `json:"email"`
+	Role    string `json:"role"`
+	Company string `json:"company,omitempty"` // no se envía a n8n; solo store local
+}
+
+type n8nInviteAPIItem struct {
 	Email string `json:"email"`
 	Role  string `json:"role"`
 }
@@ -95,6 +103,13 @@ func createN8NUsers(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	for _, req := range requests {
+		c := strings.TrimSpace(req.Company)
+		if c != "" && !config.IsValidGestionCompany(c) {
+			jsonError(w, fmt.Sprintf("empresa no válida: %q", req.Company), http.StatusBadRequest)
+			return
+		}
+	}
 
 	client := n8nHTTPClient()
 
@@ -104,7 +119,11 @@ func createN8NUsers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	body, _ := json.Marshal(requests)
+	apiPayload := make([]n8nInviteAPIItem, len(requests))
+	for i, req := range requests {
+		apiPayload[i] = n8nInviteAPIItem{Email: req.Email, Role: req.Role}
+	}
+	body, _ := json.Marshal(apiPayload)
 
 	req, err := http.NewRequest(http.MethodPost, config.N8NInternalURL+"/rest/invitations", bytes.NewReader(body))
 	if err != nil {
@@ -135,6 +154,14 @@ func createN8NUsers(w http.ResponseWriter, r *http.Request) {
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
 		jsonError(w, fmt.Sprintf("n8n returned status %d: %s", resp.StatusCode, string(data)), http.StatusBadGateway)
 		return
+	}
+
+	rows := make([]N8NEmailCompanyRow, 0, len(requests))
+	for _, req := range requests {
+		rows = append(rows, N8NEmailCompanyRow{Email: req.Email, Company: req.Company})
+	}
+	if err := PersistN8NEmailCompanies(rows); err != nil {
+		log.Printf("gestion: persistir empresa n8n (API): %v", err)
 	}
 
 	w.Header().Set("Content-Type", "application/json")

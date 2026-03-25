@@ -4,7 +4,9 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -78,6 +80,80 @@ func getEnv(key, fallback string) string {
 		return v
 	}
 	return fallback
+}
+
+var (
+	gestionCompaniesOnce sync.Once
+	gestionCompaniesMemo []string
+)
+
+// GestionCompaniesList lista permitida (GESTION_COMPANIES separado por comas). Por defecto solo "default".
+func GestionCompaniesList() []string {
+	gestionCompaniesOnce.Do(func() {
+		raw := getEnv("GESTION_COMPANIES", "default")
+		parts := strings.Split(raw, ",")
+		seen := make(map[string]bool)
+		out := make([]string, 0, len(parts))
+		for _, p := range parts {
+			s := strings.TrimSpace(p)
+			if s == "" {
+				continue
+			}
+			k := strings.ToLower(s)
+			if seen[k] {
+				continue
+			}
+			seen[k] = true
+			out = append(out, s)
+		}
+		if len(out) == 0 {
+			out = []string{"default"}
+		}
+		gestionCompaniesMemo = out
+	})
+	return gestionCompaniesMemo
+}
+
+// GestionDefaultCompany es la empresa asignada a usuarios sin dato (GESTION_DEFAULT_COMPANY o la primera de la lista).
+func GestionDefaultCompany() string {
+	list := GestionCompaniesList()
+	d := strings.TrimSpace(os.Getenv("GESTION_DEFAULT_COMPANY"))
+	if d != "" {
+		for _, c := range list {
+			if strings.EqualFold(c, d) {
+				return c
+			}
+		}
+	}
+	return list[0]
+}
+
+// GestionCompanyStorePath ruta del JSON con asignaciones n8n (email/id → empresa).
+func GestionCompanyStorePath() string {
+	if v := strings.TrimSpace(os.Getenv("GESTION_COMPANY_STORE")); v != "" {
+		return v
+	}
+	return filepath.Join(os.TempDir(), "gestion_company_store.json")
+}
+
+// IsValidGestionCompany indica si el nombre está en la lista configurada.
+func IsValidGestionCompany(name string) bool {
+	_, ok := CanonicalGestionCompany(name)
+	return ok
+}
+
+// CanonicalGestionCompany devuelve el string tal como figura en GESTION_COMPANIES.
+func CanonicalGestionCompany(name string) (string, bool) {
+	s := strings.TrimSpace(name)
+	if s == "" {
+		return "", false
+	}
+	for _, c := range GestionCompaniesList() {
+		if strings.EqualFold(c, s) {
+			return c, true
+		}
+	}
+	return "", false
 }
 
 // LibreChatMongoDatabase devuelve el nombre de la BD LibreChat en MongoDB.

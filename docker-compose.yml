@@ -270,8 +270,14 @@ services:
       #   N8N_POSTGRES_DSN=postgres://n8n:n8n@postgres:5432/n8n?sslmode=disable
       # Si la contraseña tiene @ : # / etc., codifícala (ej. @ -> %40) o deja N8N_POSTGRES_DSN vacío y usa solo DB_POSTGRESDB_PASSWORD en .env.n8n.
       - N8N_POSTGRES_DSN=${N8N_POSTGRES_DSN:-}
+      # Empresas (LibreChat + asignación n8n en JSON local). Separadas por comas; default = primera de la lista.
+      - GESTION_COMPANIES=${GESTION_COMPANIES:-default}
+      - GESTION_DEFAULT_COMPANY=${GESTION_DEFAULT_COMPANY:-default}
+      # Persistir el mapa email→empresa de n8n (sin esto, en contenedor suele usarse /tmp y se pierde al reiniciar).
+      - GESTION_COMPANY_STORE=/data/gestion_company_store.json
     volumes:
       - /var/run/docker-agent.sock:/var/run/docker-agent.sock:ro
+      - launcher_company_store:/data
     networks:
       - ai_stack
     mem_limit: 128m
@@ -308,6 +314,7 @@ volumes:
   postgres_data:
   redis_data:
   mongo_data:
+  launcher_company_store:
   n8n_data:
   librechat-images:
   librechat-logs:

@@ -18,6 +18,7 @@ import (
 type LibreChatStatsSeriesItem struct {
 	Email                string     `json:"email"`
 	Name                 string     `json:"name"`
+	Company              string     `json:"company,omitempty"`
 	TotalConversations   int64      `json:"totalConversations"`
 	TotalMessages        int64      `json:"totalMessages"`
 	LastActivity         *time.Time `json:"lastActivity,omitempty"`
@@ -179,6 +180,8 @@ func FetchLibreChatStatsSeries(ctx context.Context) ([]LibreChatStatsSeriesItem,
 	}
 	totals.UsersWithActivity = len(out)
 
+	attachLibreChatCompanies(ctx, db, out)
+
 	sort.Slice(out, func(i, j int) bool {
 		if out[i].TotalMessages != out[j].TotalMessages {
 			return out[i].TotalMessages > out[j].TotalMessages
@@ -187,4 +190,42 @@ func FetchLibreChatStatsSeries(ctx context.Context) ([]LibreChatStatsSeriesItem,
 	})
 
 	return out, totals, nil
+}
+
+func attachLibreChatCompanies(ctx context.Context, db *mongo.Database, items []LibreChatStatsSeriesItem) {
+	userColl := db.Collection("users")
+	cur, err := userColl.Find(ctx, bson.D{}, options.Find().SetProjection(bson.M{"email": 1, "company": 1}))
+	if err != nil {
+		return
+	}
+	defer cur.Close(ctx)
+
+	emailToCompany := make(map[string]string)
+	for cur.Next(ctx) {
+		var doc struct {
+			Email   string `bson:"email"`
+			Company string `bson:"company"`
+		}
+		if cur.Decode(&doc) != nil {
+			continue
+		}
+		k := key(doc.Email)
+		if k == "" {
+			continue
+		}
+		co := strings.TrimSpace(doc.Company)
+		if co == "" {
+			co = config.GestionDefaultCompany()
+		}
+		emailToCompany[k] = co
+	}
+	def := config.GestionDefaultCompany()
+	for i := range items {
+		k := key(items[i].Email)
+		if c, ok := emailToCompany[k]; ok {
+			items[i].Company = c
+		} else {
+			items[i].Company = def
+		}
+	}
 }

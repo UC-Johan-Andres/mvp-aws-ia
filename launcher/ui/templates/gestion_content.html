@@ -21,6 +21,7 @@
                     <th>Email</th>
                     <th>Nombre</th>
                     <th>Rol</th>
+                    <th>Empresa</th>
                     <th>Acciones</th>
                 </tr>
             </thead>
@@ -29,7 +30,7 @@
                 {{$users := .Users}}
                 {{if eq (len $users) 0}}
                 <tr>
-                    <td colspan="4" class="empty-state">
+                    <td colspan="5" class="empty-state">
                         <p>No hay usuarios registrados.</p>
                         <p>Pulsa <strong>Nuevo usuario</strong> arriba a la derecha para dar de alta cuentas.</p>
                     </td>
@@ -44,6 +45,7 @@
                             {{.Role}}{{if .IsPending}} (pendiente){{end}}
                         </span>
                     </td>
+                    <td>{{.Company}}</td>
                     <td>
                         {{if and (eq $tab "n8n") .InviteURL}}
                         <button type="button" class="btn-small btn-invite"
@@ -53,7 +55,7 @@
                         {{end}}
                         {{if eq $tab "librechat"}}
                         <button type="button" class="btn-small btn-edit"
-                                onclick="openEditModal('{{$tab}}', '{{.ID}}', '{{.Email}}', '{{.Name}}', '{{.Role}}')">
+                                onclick="openEditModal('{{$tab}}', '{{.ID}}', '{{.Email}}', '{{.Name}}', '{{.Role}}', '{{.Company}}')">
                             Editar
                         </button>
                         {{end}}

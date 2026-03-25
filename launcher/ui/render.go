@@ -1,11 +1,13 @@
 package ui
 
 import (
+	"encoding/json"
 	"embed"
 	"html/template"
 	"log"
 	"net/http"
 
+	"launcher/config"
 	"launcher/services"
 )
 
@@ -160,16 +162,24 @@ func RenderQueueFragment(w http.ResponseWriter, status services.Status) {
 // ─────────────────────────────────────────────────────────────────
 
 type GestionData struct {
-	Tab            string
-	Users          interface{}
-	Error          string
-	ShowInviteSent bool
+	Tab             string
+	Users           interface{}
+	Error           string
+	ShowInviteSent  bool
+	GestionMetaJSON template.JS
 }
 
 // RenderGestion renders the full gestion dashboard page shell.
 func RenderGestion(w http.ResponseWriter, tab string) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	data := GestionData{Tab: tab}
+	meta, err := json.Marshal(map[string]any{
+		"companies":        config.GestionCompaniesList(),
+		"defaultCompany": config.GestionDefaultCompany(),
+	})
+	if err != nil {
+		meta = []byte(`{"companies":["default"],"defaultCompany":"default"}`)
+	}
+	data := GestionData{Tab: tab, GestionMetaJSON: template.JS(meta)}
 	if err := tmplGestion.Execute(w, data); err != nil {
 		log.Printf("ui: render gestion: %v", err)
 	}

@@ -23,6 +23,7 @@ type lcUser struct {
 	Email         string             `bson:"email"`
 	Password      string             `bson:"password"`
 	Role          string             `bson:"role"`
+	Company       string             `bson:"company,omitempty"`
 	Provider      string             `bson:"provider"`
 	EmailVerified bool               `bson:"emailVerified"`
 	CreatedAt     time.Time          `bson:"createdAt"`
@@ -33,6 +34,7 @@ type lcUserPublic struct {
 	Email     string    `json:"email"`
 	Name      string    `json:"name"`
 	Role      string    `json:"role"`
+	Company   string    `json:"company,omitempty"`
 	CreatedAt time.Time `json:"createdAt"`
 }
 
@@ -74,12 +76,18 @@ func listLibreChatUsers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	defCo := config.GestionDefaultCompany()
 	result := make([]lcUserPublic, 0, len(users))
 	for _, u := range users {
+		co := strings.TrimSpace(u.Company)
+		if co == "" {
+			co = defCo
+		}
 		result = append(result, lcUserPublic{
 			Email:     u.Email,
 			Name:      u.Name,
 			Role:      u.Role,
+			Company:   co,
 			CreatedAt: u.CreatedAt,
 		})
 	}
@@ -92,6 +100,7 @@ type createUserRequest struct {
 	Name     string `json:"name"`
 	Password string `json:"password"`
 	Role     string `json:"role"`
+	Company  string `json:"company"`
 }
 
 func createLibreChatUsers(w http.ResponseWriter, r *http.Request) {
@@ -172,6 +181,15 @@ func createLibreChatUsers(w http.ResponseWriter, r *http.Request) {
 			name = username
 		}
 
+		co := strings.TrimSpace(req.Company)
+		if co == "" {
+			co = config.GestionDefaultCompany()
+		}
+		if !config.IsValidGestionCompany(co) {
+			results = append(results, result{Email: req.Email, Created: false, Error: "empresa no válida"})
+			continue
+		}
+
 		now := time.Now()
 		u := lcUser{
 			ID:            primitive.NewObjectID(),
@@ -180,6 +198,7 @@ func createLibreChatUsers(w http.ResponseWriter, r *http.Request) {
 			Email:         req.Email,
 			Password:      string(hash),
 			Role:          role,
+			Company:       co,
 			Provider:      "local",
 			EmailVerified: true,
 			CreatedAt:     now,
@@ -243,9 +262,10 @@ func deleteLibreChatUser(w http.ResponseWriter, r *http.Request) {
 }
 
 type librechatUpdateRequest struct {
-	Email string `json:"email"`
-	Name  string `json:"name"`
-	Role  string `json:"role"`
+	Email   string `json:"email"`
+	Name    string `json:"name"`
+	Role    string `json:"role"`
+	Company string `json:"company"`
 }
 
 func updateLibreChatUser(w http.ResponseWriter, r *http.Request) {
@@ -286,6 +306,14 @@ func updateLibreChatUser(w http.ResponseWriter, r *http.Request) {
 	}
 	if reqBody.Role != "" {
 		update["role"] = reqBody.Role
+	}
+	if reqBody.Company != "" {
+		if !config.IsValidGestionCompany(reqBody.Company) {
+			jsonError(w, "empresa no válida", http.StatusBadRequest)
+			return
+		}
+		canon, _ := config.CanonicalGestionCompany(reqBody.Company)
+		update["company"] = canon
 	}
 
 	if len(update) == 0 {

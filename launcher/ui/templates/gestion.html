@@ -812,6 +812,42 @@
             border-color: var(--primary);
             box-shadow: 0 0 0 3px var(--primary-soft);
         }
+        select.input-like-select {
+            width: 100%;
+            max-width: 100%;
+            padding: 10px 14px;
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            font-size: 0.9rem;
+            font-family: inherit;
+            background: var(--surface);
+            color: var(--text);
+        }
+        .stats-filter-bar {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 20px;
+            padding: 12px 14px;
+            background: var(--surface-muted);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+        }
+        .stats-filter-bar label {
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: var(--text-muted);
+        }
+        .stats-filter-bar select {
+            min-width: 160px;
+            padding: 8px 12px;
+            border-radius: var(--radius-sm);
+            border: 1px solid var(--border);
+            font-family: inherit;
+            background: var(--surface);
+            color: var(--text);
+        }
         .input-readonly {
             background: var(--surface-muted) !important;
             color: var(--text-muted);
@@ -964,6 +1000,7 @@
     </style>
 </head>
 <body>
+    <script>window.__GESTION_META = {{.GestionMetaJSON}};</script>
     <div hx-ext="sse" sse-connect="/gestion/stream" sse-swap="init,users_updated" id="sse-container"></div>
     <div class="container" id="app-container">
         <header class="header">
@@ -1048,6 +1085,10 @@
                     <input type="hidden" name="tab" value="n8n">
                     <div class="dynamic-form n8n-form">
                         <p class="form-hint">Solo miembros (<strong>global:member</strong>), no owners.</p>
+                        <div class="form-group" style="margin-bottom:14px;">
+                            <label style="display:block;margin-bottom:6px;font-size:0.85rem;color:var(--text-muted);font-weight:600;">Empresa</label>
+                            <select name="company" class="input-like-select" data-company-select required></select>
+                        </div>
                         <div class="rows-container" id="modal-n8n-rows">
                             <div class="form-row">
                                 <input type="email" name="email" placeholder="email@ejemplo.com" required autocomplete="email">
@@ -1069,6 +1110,10 @@
                     <input type="hidden" name="tab" value="librechat">
                     <div class="dynamic-form librechat-form">
                         <p class="form-hint">Rol <strong>USER</strong> (fijo aquí).</p>
+                        <div class="form-group" style="margin-bottom:14px;">
+                            <label style="display:block;margin-bottom:6px;font-size:0.85rem;color:var(--text-muted);font-weight:600;">Empresa</label>
+                            <select name="company" class="input-like-select" data-company-select required></select>
+                        </div>
                         <div class="rows-container" id="modal-lc-rows">
                             <div class="form-row">
                                 <input type="email" name="email" placeholder="email@ejemplo.com" required autocomplete="email">
@@ -1107,6 +1152,10 @@
                 <select id="edit-user-role">
                     <!-- Opciones se llenan dinámicamente -->
                 </select>
+            </div>
+            <div class="form-group" id="edit-user-company-wrap" style="display:none;">
+                <label>Empresa</label>
+                <select id="edit-user-company" data-company-select></select>
             </div>
             <div class="modal-actions">
                 <button class="modal-close" onclick="closeEditModal()">Cancelar</button>
@@ -1214,6 +1263,7 @@
             });
 
             updateCreateUserButtonVisibility();
+            fillCompanySelects();
 
             const cached = getCachedUsers();
             if (cached.n8n.length > 0 || cached.librechat.length > 0) {
@@ -1273,6 +1323,8 @@
                 if (lede) lede.textContent = 'Invitación como miembro (no owner).';
             }
             resetCreateUserModalForms();
+            fillCompanySelects();
+            setModalCompanyDefaults();
             document.getElementById('create-user-modal').classList.add('active');
         }
 
@@ -1356,6 +1408,13 @@
         function initGestionChartsPage() {
             destroyGestionCharts();
             window.__gestionCharts = [];
+            initStatsCompanyFilterUI();
+
+            var statsQ = '';
+            var sf = document.getElementById('stats-company-filter');
+            if (sf && sf.value && sf.value !== 'all') {
+                statsQ = '?company=' + encodeURIComponent(sf.value);
+            }
 
             var errEl = document.getElementById('n8n-stats-error');
             var bodyEl = document.getElementById('n8n-stats-body');
@@ -1380,7 +1439,7 @@
                 return;
             }
 
-            fetch('/gestion/api/stats', { credentials: 'same-origin' })
+            fetch('/gestion/api/stats' + statsQ, { credentials: 'same-origin' })
                 .then(function(r) { return r.json(); })
                 .then(function(data) {
                     var commonOpts = {
@@ -1629,6 +1688,53 @@
             return div.innerHTML;
         }
 
+        function gestionMeta() {
+            return window.__GESTION_META || { companies: ['default'], defaultCompany: 'default' };
+        }
+
+        function fillCompanySelects() {
+            const meta = gestionMeta();
+            const opts = meta.companies.map(function(c) {
+                return '<option value="' + escapeHtml(c) + '">' + escapeHtml(c) + '</option>';
+            }).join('');
+            document.querySelectorAll('[data-company-select]').forEach(function(sel) {
+                sel.innerHTML = opts;
+                if (meta.defaultCompany) {
+                    const ok = Array.from(sel.options).some(function(o) { return o.value === meta.defaultCompany; });
+                    if (ok) sel.value = meta.defaultCompany;
+                }
+            });
+        }
+
+        function setModalCompanyDefaults() {
+            const d = gestionMeta().defaultCompany;
+            document.querySelectorAll('#create-user-modal [data-company-select]').forEach(function(s) {
+                const ok = Array.from(s.options).some(function(o) { return o.value === d; });
+                if (ok) s.value = d;
+            });
+        }
+
+        function initStatsCompanyFilterUI() {
+            const sel = document.getElementById('stats-company-filter');
+            if (!sel) return;
+            const meta = gestionMeta();
+            let html = '<option value="all">Todas</option>';
+            meta.companies.forEach(function(c) {
+                html += '<option value="' + escapeHtml(c) + '">' + escapeHtml(c) + '</option>';
+            });
+            sel.innerHTML = html;
+            const saved = localStorage.getItem('gestion-stats-company');
+            if (saved === 'all' || meta.companies.indexOf(saved) >= 0) {
+                sel.value = saved;
+            } else {
+                sel.value = 'all';
+            }
+            sel.onchange = function() {
+                localStorage.setItem('gestion-stats-company', sel.value);
+                initGestionChartsPage();
+            };
+        }
+
         function getRoleClass(role) {
             if (role === 'ADMIN' || role === 'global:admin' || role === 'global:owner') {
                 return 'role-admin';
@@ -1645,6 +1751,7 @@
                 <th>Email</th>
                 <th>Nombre</th>
                 <th>Rol</th>
+                <th>Empresa</th>
                 <th>Acciones</th>
             `;
         }
@@ -1653,7 +1760,7 @@
             if (!users || users.length === 0) {
                 return `
                     <tr>
-                        <td colspan="4" class="empty-state">
+                        <td colspan="5" class="empty-state">
                             <p>No hay usuarios registrados.</p>
                             <p>Pulsa <strong>Nuevo usuario</strong> arriba a la derecha para dar de alta cuentas.</p>
                         </td>
@@ -1666,6 +1773,7 @@
                 const isPending = u.isPending === true;
                 const roleClass = getRoleClass(u.role);
                 const userId = u.id || u.email;
+                const co = u.company || gestionMeta().defaultCompany || '';
 
                 let actions = '';
                 if (tab === 'n8n' && u.inviteAcceptUrl) {
@@ -1681,7 +1789,7 @@
                 if (tab === 'librechat') {
                     actions += `
                         <button type="button" class="btn-small btn-edit" 
-                                onclick="openEditModal('${tab}', '${escapeHtml(userId)}', '${escapeHtml(u.email)}', '${escapeHtml(name)}', '${escapeHtml(u.role)}')">
+                                onclick="openEditModal('${tab}', '${escapeHtml(userId)}', '${escapeHtml(u.email)}', '${escapeHtml(name)}', '${escapeHtml(u.role)}', '${escapeHtml(co)}')">
                             Editar
                         </button>
                     `;
@@ -1704,6 +1812,7 @@
                                 ${escapeHtml(u.role)}${isPending ? ' (pendiente)' : ''}
                             </span>
                         </td>
+                        <td>${escapeHtml(co)}</td>
                         <td>${actions}</td>
                     </tr>
                 `;
@@ -1829,11 +1938,14 @@
             });
         }
 
-        function openEditModal(tab, userId, email, name, role) {
+        function openEditModal(tab, userId, email, name, role, company) {
             if (tab === 'n8n') {
                 showToast('En n8n no se edita desde aquí; borra e invita de nuevo.', 'error');
                 return;
             }
+
+            const cw = document.getElementById('edit-user-company-wrap');
+            if (cw) cw.style.display = 'block';
             
             document.getElementById('edit-user-id').value = userId;
             document.getElementById('edit-user-tab').value = tab;
@@ -1843,16 +1955,18 @@
             const roleSelect = document.getElementById('edit-user-role');
             roleSelect.innerHTML = '';
 
-            if (tab === 'n8n') {
-                roleSelect.innerHTML = `
-                    <option value="global:member" ${role === 'global:member' ? 'selected' : ''}>global:member</option>
-                    <option value="global:owner" ${role === 'global:owner' || role === 'global:admin' ? 'selected' : ''}>global:owner</option>
-                `;
-            } else {
-                roleSelect.innerHTML = `
-                    <option value="USER" ${role === 'USER' ? 'selected' : ''}>USER</option>
-                    <option value="ADMIN" ${role === 'ADMIN' ? 'selected' : ''}>ADMIN</option>
-                `;
+            roleSelect.innerHTML = `
+                <option value="USER" ${role === 'USER' ? 'selected' : ''}>USER</option>
+                <option value="ADMIN" ${role === 'ADMIN' ? 'selected' : ''}>ADMIN</option>
+            `;
+
+            fillCompanySelects();
+            const cs = document.getElementById('edit-user-company');
+            if (cs) {
+                const d = company || gestionMeta().defaultCompany;
+                if (Array.from(cs.options).some(function(o) { return o.value === d; })) {
+                    cs.value = d;
+                }
             }
 
             document.getElementById('edit-modal').classList.add('active');
@@ -1868,6 +1982,8 @@
             const email = document.getElementById('edit-user-email').value;
             const name = document.getElementById('edit-user-name').value;
             const role = document.getElementById('edit-user-role').value;
+            const companyEl = document.getElementById('edit-user-company');
+            const company = companyEl ? companyEl.value : '';
 
             const saveBtn = document.querySelector('.modal-save');
             saveBtn.disabled = true;
@@ -1876,7 +1992,7 @@
             const endpoint = tab === 'n8n' ? '/admin/n8n/users' : '/admin/librechat/users';
             const body = tab === 'n8n' 
                 ? JSON.stringify({ id: userId, firstName: name, role: role })
-                : JSON.stringify({ email: email, name: name, role: role });
+                : JSON.stringify({ email: email, name: name, role: role, company: company });
 
             fetch(endpoint, {
                 method: 'PUT',
@@ -1895,7 +2011,7 @@
                 closeEditModal();
                 saveBtn.disabled = false;
                 saveBtn.textContent = 'Guardar';
-                updateUserInLocalStorage(tab, { email: email, name: name, role: role });
+                updateUserInLocalStorage(tab, { email: email, name: name, role: role, company: company });
             })
             .catch(error => {
                 showToast('Error: ' + error.message, 'error');
