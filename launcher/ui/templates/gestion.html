@@ -154,6 +154,29 @@
             font-size: 1rem;
             line-height: 1;
         }
+        .btn-header-new {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            padding: 8px 18px;
+            border-radius: 999px;
+            border: none;
+            background: linear-gradient(135deg, #2563eb, #4f46e5);
+            color: #fff;
+            font-family: inherit;
+            font-size: 0.85rem;
+            font-weight: 600;
+            cursor: pointer;
+            box-shadow: 0 4px 14px rgba(37, 99, 235, 0.35);
+            transition: filter 0.2s, transform 0.15s;
+        }
+        .btn-header-new:hover { filter: brightness(1.06); }
+        .btn-header-new:active { transform: scale(0.98); }
+        .btn-header-new:focus-visible {
+            outline: 2px solid var(--primary);
+            outline-offset: 2px;
+        }
         .user-badge {
             display: inline-flex;
             align-items: center;
@@ -579,9 +602,6 @@
         .btn-submit:active { transform: scale(0.98); }
         .btn-submit:disabled { opacity: 0.55; cursor: not-allowed; filter: none; }
 
-        .user-form { display: none; }
-        .user-form.active { display: block; }
-
         #toasts {
             position: fixed;
             bottom: 24px;
@@ -620,7 +640,8 @@
             to { transform: translateX(0); opacity: 1; }
         }
 
-        #invite-modal {
+        #invite-modal,
+        #invite-sent-modal {
             position: fixed;
             top: 0;
             left: 0;
@@ -634,7 +655,8 @@
             z-index: 2000;
             padding: 20px;
         }
-        #invite-modal.active { display: flex; }
+        #invite-modal.active,
+        #invite-sent-modal.active { display: flex; }
         .modal-content {
             background: var(--surface);
             border-radius: var(--radius);
@@ -658,6 +680,15 @@
             font-size: 0.9rem;
             color: var(--text-muted);
             margin-bottom: 12px;
+        }
+        .modal-content code {
+            font-family: ui-monospace, monospace;
+            font-size: 0.88em;
+            padding: 2px 6px;
+            border-radius: 4px;
+            background: var(--surface-muted);
+            border: 1px solid var(--border);
+            color: var(--text);
         }
         .invite-link-box {
             background: var(--surface-muted);
@@ -729,7 +760,8 @@
             50% { opacity: 0.65; }
         }
 
-        #edit-modal {
+        #edit-modal,
+        #create-user-modal {
             position: fixed;
             top: 0;
             left: 0;
@@ -743,7 +775,20 @@
             z-index: 2000;
             padding: 20px;
         }
-        #edit-modal.active { display: flex; }
+        #edit-modal.active,
+        #create-user-modal.active { display: flex; }
+        #create-user-modal .modal-content {
+            max-width: 520px;
+            width: 100%;
+            max-height: 85vh;
+            overflow-y: auto;
+        }
+        .create-modal-lede {
+            font-size: 0.88rem;
+            color: var(--text-muted);
+            margin-bottom: 18px;
+            line-height: 1.55;
+        }
         .form-group {
             margin-bottom: 16px;
         }
@@ -930,6 +975,10 @@
                 </div>
             </div>
             <div class="header-actions">
+                <button type="button" class="btn-header-new" id="btn-new-user" onclick="openCreateUserModal()"
+                        title="Crear usuario" aria-label="Crear nuevo usuario">
+                    + Nuevo usuario
+                </button>
                 <button type="button" class="btn-theme" id="theme-cycle" title="Cambiar tema" aria-label="Tema: automático, claro u oscuro">
                     <span class="btn-theme-icon" id="theme-cycle-icon" aria-hidden="true">◐</span>
                     <span id="theme-cycle-label">Auto</span>
@@ -975,6 +1024,68 @@
             <div class="modal-actions">
                 <button class="modal-close" onclick="closeInviteModal()">Cerrar</button>
                 <button class="modal-copy" onclick="copyInviteLink()">Copiar enlace</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="invite-sent-modal">
+        <div class="modal-content">
+            <h3>Invitación enviada</h3>
+            <p>n8n ha registrado la invitación. Si configuraste correo (p. ej. Amazon SES + SMTP en <code>.env.n8n</code>), el usuario recibirá el enlace por email.</p>
+            <p class="panel-muted" style="margin-top:8px;font-size:0.88rem;">Si el correo no está configurado, abre la tabla y usa <strong>Invitar</strong> en la fila del usuario para copiar el enlace manualmente.</p>
+            <div class="modal-actions">
+                <button type="button" class="modal-copy" onclick="closeInviteSentModal()">Entendido</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="create-user-modal" onclick="if (event.target === this) closeCreateUserModal()">
+        <div class="modal-content" role="dialog" aria-modal="true" aria-labelledby="create-modal-title">
+            <h3 id="create-modal-title">Nuevo usuario</h3>
+            <p id="create-modal-lede" class="create-modal-lede"></p>
+
+            <div id="create-modal-n8n-wrap" style="display:none">
+                <form id="modal-form-n8n" hx-post="/gestion" hx-target="#main-content" hx-swap="innerHTML">
+                    <input type="hidden" name="tab" value="n8n">
+                    <div class="dynamic-form n8n-form">
+                        <p class="form-hint">Solo invitaciones como <strong>global:member</strong> (sin propietarios ni CSV).</p>
+                        <div class="rows-container" id="modal-n8n-rows">
+                            <div class="form-row">
+                                <input type="email" name="email" placeholder="email@ejemplo.com" required autocomplete="email">
+                                <input type="hidden" name="role" value="global:member">
+                                <button type="button" class="btn-remove" onclick="this.parentElement.remove()" title="Quitar fila">&times;</button>
+                            </div>
+                        </div>
+                        <button type="button" class="btn-add-row" onclick="modalAddRowN8n()">+ Agregar correo</button>
+                    </div>
+                    <div class="modal-actions">
+                        <button type="button" class="modal-close" onclick="closeCreateUserModal()">Cancelar</button>
+                        <button type="submit" class="btn-submit">Crear invitación(es)</button>
+                    </div>
+                </form>
+            </div>
+
+            <div id="create-modal-lc-wrap" style="display:none">
+                <form id="modal-form-librechat" hx-post="/gestion" hx-target="#main-content" hx-swap="innerHTML">
+                    <input type="hidden" name="tab" value="librechat">
+                    <div class="dynamic-form librechat-form">
+                        <p class="form-hint">Nuevos usuarios con rol <strong>USER</strong> únicamente (sin CSV).</p>
+                        <div class="rows-container" id="modal-lc-rows">
+                            <div class="form-row">
+                                <input type="email" name="email" placeholder="email@ejemplo.com" required autocomplete="email">
+                                <input type="text" name="name" placeholder="Nombre" autocomplete="name">
+                                <input type="password" name="password" placeholder="Contraseña" required autocomplete="new-password">
+                                <input type="hidden" name="role" value="USER">
+                                <button type="button" class="btn-remove" onclick="this.parentElement.remove()" title="Quitar fila">&times;</button>
+                            </div>
+                        </div>
+                        <button type="button" class="btn-add-row" onclick="modalAddRowLibrechat()">+ Agregar fila</button>
+                    </div>
+                    <div class="modal-actions">
+                        <button type="button" class="modal-close" onclick="closeCreateUserModal()">Cancelar</button>
+                        <button type="submit" class="btn-submit">Crear usuario(s)</button>
+                    </div>
+                </form>
             </div>
         </div>
     </div>
@@ -1103,12 +1214,7 @@
                 window.dispatchEvent(new CustomEvent('gestion-theme-change'));
             });
 
-            const formN8n = document.getElementById('form-n8n');
-            const formLibrechat = document.getElementById('form-librechat');
-            if (formN8n && formLibrechat) {
-                formN8n.classList.add('active');
-                formLibrechat.classList.remove('active');
-            }
+            updateCreateUserButtonVisibility();
 
             const cached = getCachedUsers();
             if (cached.n8n.length > 0 || cached.librechat.length > 0) {
@@ -1118,6 +1224,7 @@
         });
 
         function switchTab(tab) {
+            closeCreateUserModal();
             document.querySelectorAll('.tab').forEach(t => {
                 t.classList.remove('active');
                 t.setAttribute('aria-selected', 'false');
@@ -1133,22 +1240,101 @@
             if (tab === 'estadisticas') {
                 footer.textContent = 'Vista de estadísticas agregadas';
                 htmx.ajax('GET', '/gestion/charts-content', { target: '#main-content', swap: 'innerHTML' });
+                updateCreateUserButtonVisibility();
                 return;
             }
             footer.textContent = 'Conectado a ' + (tab === 'n8n' ? 'n8n' : 'LibreChat');
             htmx.ajax('GET', '/gestion/content?tab=' + encodeURIComponent(tab), { target: '#main-content', swap: 'innerHTML' });
+            updateCreateUserButtonVisibility();
+        }
+
+        function updateCreateUserButtonVisibility() {
+            const btn = document.getElementById('btn-new-user');
+            if (!btn) return;
+            const show = (currentTab === 'n8n' || currentTab === 'librechat');
+            btn.style.display = show ? '' : 'none';
+            btn.setAttribute('aria-hidden', show ? 'false' : 'true');
+        }
+
+        function openCreateUserModal() {
+            if (currentTab !== 'n8n' && currentTab !== 'librechat') {
+                showToast('Selecciona la pestaña n8n o LibreChat', 'error');
+                return;
+            }
+            const lede = document.getElementById('create-modal-lede');
+            const wN8n = document.getElementById('create-modal-n8n-wrap');
+            const wLc = document.getElementById('create-modal-lc-wrap');
+            if (currentTab === 'librechat') {
+                wN8n.style.display = 'none';
+                wLc.style.display = 'block';
+                if (lede) lede.textContent = 'Alta en LibreChat (rol USER).';
+            } else {
+                wN8n.style.display = 'block';
+                wLc.style.display = 'none';
+                if (lede) lede.textContent = 'Invitación en n8n como miembro global.';
+            }
+            resetCreateUserModalForms();
+            document.getElementById('create-user-modal').classList.add('active');
+        }
+
+        function closeCreateUserModal() {
+            document.getElementById('create-user-modal').classList.remove('active');
+        }
+
+        function resetCreateUserModalForms() {
+            const n8nRows = document.getElementById('modal-n8n-rows');
+            if (n8nRows) {
+                n8nRows.innerHTML = `
+                    <div class="form-row">
+                        <input type="email" name="email" placeholder="email@ejemplo.com" required autocomplete="email">
+                        <input type="hidden" name="role" value="global:member">
+                        <button type="button" class="btn-remove" onclick="this.parentElement.remove()" title="Quitar fila">&times;</button>
+                    </div>`;
+            }
+            const lcRows = document.getElementById('modal-lc-rows');
+            if (lcRows) {
+                lcRows.innerHTML = `
+                    <div class="form-row">
+                        <input type="email" name="email" placeholder="email@ejemplo.com" required autocomplete="email">
+                        <input type="text" name="name" placeholder="Nombre" autocomplete="name">
+                        <input type="password" name="password" placeholder="Contraseña" required autocomplete="new-password">
+                        <input type="hidden" name="role" value="USER">
+                        <button type="button" class="btn-remove" onclick="this.parentElement.remove()" title="Quitar fila">&times;</button>
+                    </div>`;
+            }
+        }
+
+        function modalAddRowN8n() {
+            const c = document.getElementById('modal-n8n-rows');
+            if (!c) return;
+            const row = document.createElement('div');
+            row.className = 'form-row';
+            row.innerHTML = `
+                <input type="email" name="email" placeholder="email@ejemplo.com" required autocomplete="email">
+                <input type="hidden" name="role" value="global:member">
+                <button type="button" class="btn-remove" onclick="this.parentElement.remove()" title="Quitar fila">&times;</button>`;
+            c.appendChild(row);
+        }
+
+        function modalAddRowLibrechat() {
+            const c = document.getElementById('modal-lc-rows');
+            if (!c) return;
+            const row = document.createElement('div');
+            row.className = 'form-row';
+            row.innerHTML = `
+                <input type="email" name="email" placeholder="email@ejemplo.com" required autocomplete="email">
+                <input type="text" name="name" placeholder="Nombre" autocomplete="name">
+                <input type="password" name="password" placeholder="Contraseña" required autocomplete="new-password">
+                <input type="hidden" name="role" value="USER">
+                <button type="button" class="btn-remove" onclick="this.parentElement.remove()" title="Quitar fila">&times;</button>`;
+            c.appendChild(row);
         }
 
         function syncGestionUserFormsAfterContentLoad() {
-            if (!document.getElementById('form-n8n')) {
+            if (!document.getElementById('users-table')) {
                 return;
             }
-            document.querySelectorAll('.user-form').forEach(f => f.classList.remove('active'));
-            const form = document.getElementById('form-' + currentTab);
-            if (form) {
-                form.classList.add('active');
-            }
-            updateUsersTableHeader(currentTab);
+            updateUsersTableHeader();
         }
 
         function destroyGestionCharts() {
@@ -1419,6 +1605,7 @@
             if (!evt.detail.target || evt.detail.target.id !== 'main-content') {
                 return;
             }
+            closeCreateUserModal();
             if (document.getElementById('gestion-charts-root')) {
                 initGestionChartsPage();
                 return;
@@ -1445,55 +1632,26 @@
             return 'role-user';
         }
 
-        function fmtStat(v) {
-            if (v === undefined || v === null) {
-                return '—';
-            }
-            return String(v);
-        }
-
-        function fmtFloat2(v) {
-            if (v === undefined || v === null || Number.isNaN(Number(v))) {
-                return '—';
-            }
-            return Number(v).toFixed(2);
-        }
-
-        function updateUsersTableHeader(tab) {
+        function updateUsersTableHeader() {
             const tr = document.querySelector('#users-table thead tr');
             if (!tr) {
                 return;
             }
-            if (tab === 'n8n') {
-                tr.innerHTML = `
-                    <th>Email</th>
-                    <th>Nombre</th>
-                    <th>Rol</th>
-                    <th class="col-num">Workflows acc.</th>
-                    <th class="col-num">Prod ejec.</th>
-                    <th class="col-num">Fallidas</th>
-                    <th class="col-num">% fallo</th>
-                    <th class="col-num">T. medio (s)</th>
-                    <th>Acciones</th>
-                `;
-            } else {
-                tr.innerHTML = `
-                    <th>Email</th>
-                    <th>Nombre</th>
-                    <th>Rol</th>
-                    <th>Acciones</th>
-                `;
-            }
+            tr.innerHTML = `
+                <th>Email</th>
+                <th>Nombre</th>
+                <th>Rol</th>
+                <th>Acciones</th>
+            `;
         }
 
         function generateUsersHTML(users, tab) {
-            const emptyCols = tab === 'n8n' ? 9 : 4;
             if (!users || users.length === 0) {
                 return `
                     <tr>
-                        <td colspan="${emptyCols}" class="empty-state">
+                        <td colspan="4" class="empty-state">
                             <p>No hay usuarios registrados.</p>
-                            <p>Usa el formulario abajo para crear usuarios.</p>
+                            <p>Pulsa <strong>Nuevo usuario</strong> arriba a la derecha para dar de alta cuentas.</p>
                         </td>
                     </tr>
                 `;
@@ -1533,14 +1691,6 @@
                     </button>
                 `;
 
-                const statsCells = tab === 'n8n' ? `
-                        <td class="col-num">${fmtStat(u.workflowsAccesibles)}</td>
-                        <td class="col-num">${fmtStat(u.prodExecutions)}</td>
-                        <td class="col-num">${fmtStat(u.failedProdExecutions)}</td>
-                        <td class="col-num">${fmtFloat2(u.failureRatePct)}</td>
-                        <td class="col-num">${fmtFloat2(u.runTimeAvgSeconds)}</td>
-                ` : '';
-
                 return `
                     <tr>
                         <td>${escapeHtml(u.email)}</td>
@@ -1550,7 +1700,6 @@
                                 ${escapeHtml(u.role)}${isPending ? ' (pendiente)' : ''}
                             </span>
                         </td>
-                        ${statsCells}
                         <td>${actions}</td>
                     </tr>
                 `;
@@ -1563,7 +1712,7 @@
                 return;
             }
 
-            updateUsersTableHeader(tab);
+            updateUsersTableHeader();
             const data = getCachedUsers();
             const users = data[tab] || [];
             tbody.innerHTML = generateUsersHTML(users, tab);
@@ -1611,6 +1760,14 @@
 
         function closeInviteModal() {
             document.getElementById('invite-modal').classList.remove('active');
+        }
+
+        function openInviteSentModal() {
+            document.getElementById('invite-sent-modal').classList.add('active');
+        }
+
+        function closeInviteSentModal() {
+            document.getElementById('invite-sent-modal').classList.remove('active');
         }
 
         function copyInviteLink() {

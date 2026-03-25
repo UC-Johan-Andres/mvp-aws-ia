@@ -160,9 +160,10 @@ func RenderQueueFragment(w http.ResponseWriter, status services.Status) {
 // ─────────────────────────────────────────────────────────────────
 
 type GestionData struct {
-	Tab   string
-	Users interface{}
-	Error string
+	Tab            string
+	Users          interface{}
+	Error          string
+	ShowInviteSent bool
 }
 
 // RenderGestion renders the full gestion dashboard page shell.
@@ -177,8 +178,12 @@ func RenderGestion(w http.ResponseWriter, tab string) {
 // RenderGestionContent renders the inner content (table + form) for HTMX swaps.
 // Users are fetched server-side.
 func RenderGestionContent(w http.ResponseWriter, tab string, users interface{}) {
+	RenderGestionContentData(w, GestionData{Tab: tab, Users: users})
+}
+
+// RenderGestionContentData renders gestión inner content with optional flash (p. ej. invitación enviada).
+func RenderGestionContentData(w http.ResponseWriter, data GestionData) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	data := GestionData{Tab: tab, Users: users}
 	if err := tmplContent.Execute(w, data); err != nil {
 		log.Printf("ui: render gestion content: %v", err)
 	}
@@ -186,11 +191,7 @@ func RenderGestionContent(w http.ResponseWriter, tab string, users interface{}) 
 
 // RenderGestionContentWithError renders the inner content with an error message.
 func RenderGestionContentWithError(w http.ResponseWriter, tab string, errMsg string) {
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	data := GestionData{Tab: tab, Error: errMsg, Users: []interface{}{}}
-	if err := tmplContent.Execute(w, data); err != nil {
-		log.Printf("ui: render gestion content with error: %v", err)
-	}
+	RenderGestionContentData(w, GestionData{Tab: tab, Error: errMsg, Users: []interface{}{}})
 }
 
 // RenderInviteModal renders the n8n invitation modal fragment.

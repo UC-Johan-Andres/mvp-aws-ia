@@ -21,13 +21,6 @@
                     <th>Email</th>
                     <th>Nombre</th>
                     <th>Rol</th>
-                    {{if eq .Tab "n8n"}}
-                    <th class="col-num">Workflows acc.</th>
-                    <th class="col-num">Prod ejec.</th>
-                    <th class="col-num">Fallidas</th>
-                    <th class="col-num">% fallo</th>
-                    <th class="col-num">T. medio (s)</th>
-                    {{end}}
                     <th>Acciones</th>
                 </tr>
             </thead>
@@ -36,9 +29,9 @@
                 {{$users := .Users}}
                 {{if eq (len $users) 0}}
                 <tr>
-                    <td colspan="{{if eq .Tab "n8n"}}9{{else}}4{{end}}" class="empty-state">
+                    <td colspan="4" class="empty-state">
                         <p>No hay usuarios registrados.</p>
-                        <p>Usa el formulario abajo para crear usuarios.</p>
+                        <p>Pulsa <strong>Nuevo usuario</strong> arriba a la derecha para dar de alta cuentas.</p>
                     </td>
                 </tr>
                 {{else}}
@@ -51,13 +44,6 @@
                             {{.Role}}{{if .IsPending}} (pendiente){{end}}
                         </span>
                     </td>
-                    {{if eq $tab "n8n"}}
-                    <td class="col-num">{{.WorkflowsAccesibles}}</td>
-                    <td class="col-num">{{.ProdExecutions}}</td>
-                    <td class="col-num">{{.FailedProdExecutions}}</td>
-                    <td class="col-num">{{printf "%.2f" .FailureRatePct}}</td>
-                    <td class="col-num">{{printf "%.2f" .RunTimeAvgSeconds}}</td>
-                    {{end}}
                     <td>
                         {{if and (eq $tab "n8n") .InviteURL}}
                         <button type="button" class="btn-small btn-invite"
@@ -83,103 +69,12 @@
             </tbody>
         </table>
     </div>
-
-    <div class="form-section">
-        <h4 class="section-title">Crear usuario(s)</h4>
-
-        <form id="form-n8n" class="user-form" hx-post="/gestion" hx-target="#main-content" hx-swap="innerHTML">
-            <input type="hidden" name="tab" value="n8n">
-            <div class="dynamic-form n8n-form">
-                <p class="form-hint">n8n: solo invitaciones como <strong>global:member</strong> (sin propietarios ni CSV).</p>
-                <div class="rows-container">
-                    <div class="form-row">
-                        <input type="email" name="email" placeholder="email@ejemplo.com" required>
-                        <input type="hidden" name="role" value="global:member">
-                        <button type="button" class="btn-remove" onclick="this.parentElement.remove()" title="Quitar fila">&times;</button>
-                    </div>
-                </div>
-                <button type="button" class="btn-add-row" onclick="addRow()">+ Agregar fila</button>
-            </div>
-            <div class="form-actions">
-                <button type="button" class="btn-cancel" onclick="resetForm()">Cancelar</button>
-                <button type="submit" class="btn-submit">Crear usuario(s)</button>
-            </div>
-        </form>
-
-        <form id="form-librechat" class="user-form" hx-post="/gestion" hx-target="#main-content" hx-swap="innerHTML">
-            <input type="hidden" name="tab" value="librechat">
-            <div class="dynamic-form librechat-form">
-                <p class="form-hint">LibreChat: nuevos usuarios con rol <strong>USER</strong> únicamente (sin CSV).</p>
-                <div class="rows-container">
-                    <div class="form-row">
-                        <input type="email" name="email" placeholder="email@ejemplo.com" required>
-                        <input type="text" name="name" placeholder="Nombre">
-                        <input type="password" name="password" placeholder="Contraseña" required>
-                        <input type="hidden" name="role" value="USER">
-                        <button type="button" class="btn-remove" onclick="this.parentElement.remove()" title="Quitar fila">&times;</button>
-                    </div>
-                </div>
-                <button type="button" class="btn-add-row" onclick="addRow()">+ Agregar fila</button>
-            </div>
-            <div class="form-actions">
-                <button type="button" class="btn-cancel" onclick="resetForm()">Cancelar</button>
-                <button type="submit" class="btn-submit">Crear usuario(s)</button>
-            </div>
-        </form>
-    </div>
 </div>
 
+{{if .ShowInviteSent}}
 <script>
-    function addRow() {
-        const form = document.querySelector('.dynamic-form');
-        const isN8N = form.classList.contains('n8n-form');
-
-        const row = document.createElement('div');
-        row.className = 'form-row';
-
-        if (isN8N) {
-            row.innerHTML = `
-                <input type="email" name="email" placeholder="email@ejemplo.com" required>
-                <input type="hidden" name="role" value="global:member">
-                <button type="button" class="btn-remove" onclick="this.parentElement.remove()" title="Quitar fila">&times;</button>
-            `;
-        } else {
-            row.innerHTML = `
-                <input type="email" name="email" placeholder="email@ejemplo.com" required>
-                <input type="text" name="name" placeholder="Nombre">
-                <input type="password" name="password" placeholder="Contraseña" required>
-                <input type="hidden" name="role" value="USER">
-                <button type="button" class="btn-remove" onclick="this.parentElement.remove()" title="Quitar fila">&times;</button>
-            `;
-        }
-        form.querySelector('.rows-container').appendChild(row);
-    }
-
-    function resetForm() {
-        const formN8n = document.getElementById('form-n8n');
-        if (formN8n) {
-            const rowsN8n = formN8n.querySelector('.rows-container');
-            rowsN8n.innerHTML = `
-                <div class="form-row">
-                    <input type="email" name="email" placeholder="email@ejemplo.com" required>
-                    <input type="hidden" name="role" value="global:member">
-                    <button type="button" class="btn-remove" onclick="this.parentElement.remove()" title="Quitar fila">&times;</button>
-                </div>
-            `;
-        }
-
-        const formLibrechat = document.getElementById('form-librechat');
-        if (formLibrechat) {
-            const rowsLibrechat = formLibrechat.querySelector('.rows-container');
-            rowsLibrechat.innerHTML = `
-                <div class="form-row">
-                    <input type="email" name="email" placeholder="email@ejemplo.com" required>
-                    <input type="text" name="name" placeholder="Nombre">
-                    <input type="password" name="password" placeholder="Contraseña" required>
-                    <input type="hidden" name="role" value="USER">
-                    <button type="button" class="btn-remove" onclick="this.parentElement.remove()" title="Quitar fila">&times;</button>
-                </div>
-            `;
-        }
-    }
+(function () {
+    if (typeof openInviteSentModal === 'function') openInviteSentModal();
+})();
 </script>
+{{end}}

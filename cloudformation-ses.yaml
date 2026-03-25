@@ -1,0 +1,28 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  Solo Amazon SES: identidad de correo para invitaciones n8n. Despliégalo en un stack aparte
+  para no modificar el stack de EC2/VPC (no toca instancia, .env en el servidor ni parámetros existentes).
+  Coste: sin cargo fijo por identidad; paga por mensajes según región / capa gratuita.
+  Cuenta SES nueva: modo sandbox (solo destinatarios verificados hasta solicitar acceso de producción).
+
+Parameters:
+  SesIdentityEmail:
+    Type: String
+    Description: Email a registrar en SES (Amazon enviará un enlace de verificación a esta bandeja).
+
+Resources:
+  SesEmailIdentity:
+    Type: AWS::SES::EmailIdentity
+    Properties:
+      EmailIdentity: !Ref SesIdentityEmail
+
+Outputs:
+  SesIdentityArn:
+    Description: ARN de la identidad de correo
+    Value: !GetAtt SesEmailIdentity.Arn
+  SesSmtpHost:
+    Description: Host SMTP para n8n (puerto 587, STARTTLS)
+    Value: !Sub 'email-smtp.${AWS::Region}.amazonaws.com'
+  SesRegion:
+    Description: Región donde quedó creada la identidad
+    Value: !Ref AWS::Region

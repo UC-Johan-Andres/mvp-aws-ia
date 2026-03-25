@@ -1,5 +1,13 @@
 version: "3.9"
 
+# Por defecto: solo lo necesario para n8n + LibreChat + launcher + nginx (menor uso de RAM/CPU).
+#   docker compose up -d
+# Opcional Chatwoot (requiere Redis):
+#   docker compose --profile full up -d
+# Opcional Marimo y Bolt:
+#   docker compose --profile extras up -d
+# Combinar: docker compose --profile full --profile extras up -d
+
 services:
 
   # =======================
@@ -43,6 +51,8 @@ services:
       start_period: 10s
 
   redis:
+    profiles:
+      - full
     image: redis:7-alpine
     container_name: redis
     environment:
@@ -88,6 +98,8 @@ services:
   # APLICACIONES
 
   chatwoot:
+    profiles:
+      - full
     image: chatwoot/chatwoot:latest
     container_name: chatwoot
     env_file:
@@ -117,6 +129,8 @@ services:
         condition: service_healthy
 
   chatwoot_sidekiq:
+    profiles:
+      - full
     image: chatwoot/chatwoot:latest
     container_name: chatwoot_sidekiq
     env_file:
@@ -143,6 +157,14 @@ services:
     container_name: n8n
     env_file:
       - .env.n8n
+    # Invitaciones por email: verifica identidad en SES (p. ej. cloudformation-ses.yaml), crea
+    # credenciales SMTP en la consola SES y en .env.n8n define, por ejemplo:
+    #   N8N_EMAIL_MODE=smtp
+    #   N8N_SMTP_HOST=email-smtp.us-east-1.amazonaws.com
+    #   N8N_SMTP_PORT=587
+    #   N8N_SMTP_USER=<usuario SMTP de SES>
+    #   N8N_SMTP_PASS=<contraseña SMTP de SES>
+    #   N8N_SMTP_SENDER=no-reply@tu-dominio-verificado.com
     environment:
       - TZ=${TIMEZONE:-America/Bogota}
       - NODE_OPTIONS=--max-old-space-size=256
@@ -179,6 +201,8 @@ services:
   # =======================
 
   marimo:
+    profiles:
+      - extras
     build:
       context: ./marimo
       dockerfile: Dockerfile
@@ -198,6 +222,8 @@ services:
   # =======================
 
   bolt:
+    profiles:
+      - extras
     #build:
       #context: ./bolt
     image: bolt-ai:production
@@ -268,7 +294,6 @@ services:
       - /var/www/certbot:/var/www/certbot:ro
     depends_on:
       - postgres
-      - redis
       - mongo
       - launcher
     networks:

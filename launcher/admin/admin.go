@@ -248,6 +248,79 @@ type LibreChatUser struct {
 	CreatedAt string `json:"createdAt"`
 }
 
+// gestionTab reads tab from query (GET /gestion/content?tab=) or form field (POST /gestion).
+func gestionTab(r *http.Request) string {
+	tab := r.URL.Query().Get("tab")
+	if tab != "" {
+		if tab != "n8n" && tab != "librechat" {
+			return "n8n"
+		}
+		return tab
+	}
+	_ = r.ParseForm()
+	tab = r.FormValue("tab")
+	if tab != "n8n" && tab != "librechat" {
+		return "n8n"
+	}
+	if tab == "" {
+		return "n8n"
+	}
+	return tab
+}
+
+// gestionUsersForTab loads users for the gestión table.
+func gestionUsersForTab(tab string) ([]GestionUser, error) {
+	var users []GestionUser
+	if tab == "n8n" {
+		n8nUsers, err := getN8NUsers()
+		if err != nil {
+			return nil, err
+		}
+		for _, u := range n8nUsers {
+			name := u.FirstName
+			if u.LastName != "" {
+				name += " " + u.LastName
+			}
+			if name == "" {
+				name = "-"
+			}
+			users = append(users, GestionUser{
+				ID:                   u.ID,
+				Email:                u.Email,
+				Name:                 name,
+				Role:                 u.Role,
+				InviteURL:            u.InviteAcceptURL,
+				IsPending:            u.IsPending,
+				WorkflowsAccesibles:  u.WorkflowsAccesibles,
+				ProdExecutions:       u.ProdExecutions,
+				FailedProdExecutions: u.FailedProdExecutions,
+				FailureRatePct:       u.FailureRatePct,
+				RunTimeAvgSeconds:    u.RunTimeAvgSeconds,
+			})
+		}
+		return users, nil
+	}
+
+	lcUsers, err := getLibreChatUsers()
+	if err != nil {
+		return nil, err
+	}
+	for _, u := range lcUsers {
+		id := u.ID
+		if id == "" {
+			id = u.Email
+		}
+		users = append(users, GestionUser{
+			ID:        id,
+			Email:     u.Email,
+			Name:      u.Name,
+			Role:      u.Role,
+			CreatedAt: u.CreatedAt,
+		})
+	}
+	return users, nil
+}
+
 // HandleGestion renders the users management dashboard page shell.
 func HandleGestion(w http.ResponseWriter, r *http.Request) {
 	tab := r.URL.Query().Get("tab")
@@ -264,63 +337,15 @@ func HandleGestion(w http.ResponseWriter, r *http.Request) {
 // HandleGestionContent renders the inner content (table + form) for HTMX.
 // Users are fetched server-side and passed to the template.
 func HandleGestionContent(w http.ResponseWriter, r *http.Request) {
-	tab := r.URL.Query().Get("tab")
-	if tab == "" {
-		tab = "n8n"
-	}
-	if tab != "n8n" && tab != "librechat" {
-		tab = "n8n"
-	}
-
-	var users []GestionUser
-
-	if tab == "n8n" {
-		n8nUsers, err := getN8NUsers()
-		if err != nil {
-			ui.RenderGestionContentWithError(w, tab, "Error al obtener usuarios de n8n: "+err.Error())
-			return
+	tab := gestionTab(r)
+	users, err := gestionUsersForTab(tab)
+	if err != nil {
+		prefix := "Error al obtener usuarios de LibreChat: "
+		if tab == "n8n" {
+			prefix = "Error al obtener usuarios de n8n: "
 		}
-		for _, u := range n8nUsers {
-			name := u.FirstName
-			if u.LastName != "" {
-				name += " " + u.LastName
-			}
-			if name == "" {
-				name = "-"
-			}
-			users = append(users, GestionUser{
-				ID:               u.ID,
-				Email:            u.Email,
-				Name:             name,
-				Role:             u.Role,
-				InviteURL:        u.InviteAcceptURL,
-				IsPending:        u.IsPending,
-				WorkflowsAccesibles:  u.WorkflowsAccesibles,
-				ProdExecutions:       u.ProdExecutions,
-				FailedProdExecutions: u.FailedProdExecutions,
-				FailureRatePct:       u.FailureRatePct,
-				RunTimeAvgSeconds:    u.RunTimeAvgSeconds,
-			})
-		}
-	} else {
-		lcUsers, err := getLibreChatUsers()
-		if err != nil {
-			ui.RenderGestionContentWithError(w, tab, "Error al obtener usuarios de LibreChat: "+err.Error())
-			return
-		}
-		for _, u := range lcUsers {
-			id := u.ID
-			if id == "" {
-				id = u.Email
-			}
-			users = append(users, GestionUser{
-				ID:        id,
-				Email:     u.Email,
-				Name:      u.Name,
-				Role:      u.Role,
-				CreatedAt: u.CreatedAt,
-			})
-		}
+		ui.RenderGestionContentWithError(w, tab, prefix+err.Error())
+		return
 	}
 
 	ui.RenderGestionContent(w, tab, users)
@@ -332,6 +357,9 @@ func HandleGestionSubmit(w http.ResponseWriter, r *http.Request) {
 	r.ParseForm()
 	tab := r.FormValue("tab")
 	if tab == "" {
+		tab = "n8n"
+	}
+	if tab != "n8n" && tab != "librechat" {
 		tab = "n8n"
 	}
 
@@ -354,7 +382,22 @@ func HandleGestionSubmit(w http.ResponseWriter, r *http.Request) {
 
 	BroadcastUsersUpdate()
 
-	HandleGestionContent(w, r)
+	users, err2 := gestionUsersForTab(tab)
+	if err2 != nil {
+		prefix := "Error al obtener usuarios de LibreChat: "
+		if tab == "n8n" {
+			prefix = "Error al obtener usuarios de n8n: "
+		}
+		ui.RenderGestionContentWithError(w, tab, prefix+err2.Error())
+		return
+	}
+
+	showInviteSent := tab == "n8n"
+	ui.RenderGestionContentData(w, ui.GestionData{
+		Tab:            tab,
+		Users:          users,
+		ShowInviteSent: showInviteSent,
+	})
 }
 
 // createUsersFromCSV creates users from CSV string.
@@ -716,11 +759,9 @@ func fetchN8NUsers() ([]byte, error) {
 // buildN8NUsersTableHTML renders the users table for HTMX (tab n8n).
 func buildN8NUsersTableHTML(users []N8NUser) string {
 	var b strings.Builder
-	b.WriteString(`<div class="table-responsive-wrap"><table class="data-table"><thead><tr><th>Email</th><th>Nombre</th><th>Rol</th>
-<th class="col-num">Workflows acc.</th><th class="col-num">Prod ejec.</th><th class="col-num">Fallidas</th>
-<th class="col-num">% fallo</th><th class="col-num">T. medio (s)</th><th>Acciones</th></tr></thead><tbody>`)
+	b.WriteString(`<div class="table-responsive-wrap"><table class="data-table"><thead><tr><th>Email</th><th>Nombre</th><th>Rol</th><th>Acciones</th></tr></thead><tbody>`)
 	if len(users) == 0 {
-		b.WriteString(`<tr><td colspan="9" class="empty-state"><p>No hay usuarios registrados.</p></td></tr>`)
+		b.WriteString(`<tr><td colspan="4" class="empty-state"><p>No hay usuarios registrados.</p></td></tr>`)
 		b.WriteString(`</tbody></table></div>`)
 		return b.String()
 	}
@@ -749,18 +790,11 @@ func buildN8NUsersTableHTML(users []N8NUser) string {
 		if uid == "" {
 			uid = u.Email
 		}
-		fmt.Fprintf(&b, `<tr><td>%s</td><td>%s</td><td><span class="role-badge %s">%s</span></td>
-<td class="col-num">%d</td><td class="col-num">%d</td><td class="col-num">%d</td>
-<td class="col-num">%.2f</td><td class="col-num">%.2f</td><td>%s<button type="button" class="btn-small btn-delete" data-tab="n8n" data-id="%s" data-email="%s" onclick="deleteUser(this)">Eliminar</button></td></tr>`,
+		fmt.Fprintf(&b, `<tr><td>%s</td><td>%s</td><td><span class="role-badge %s">%s</span></td><td>%s<button type="button" class="btn-small btn-delete" data-tab="n8n" data-id="%s" data-email="%s" onclick="deleteUser(this)">Eliminar</button></td></tr>`,
 			html.EscapeString(u.Email),
 			html.EscapeString(name),
 			roleClass,
 			html.EscapeString(roleLabel),
-			u.WorkflowsAccesibles,
-			u.ProdExecutions,
-			u.FailedProdExecutions,
-			u.FailureRatePct,
-			u.RunTimeAvgSeconds,
 			invite,
 			html.EscapeString(uid),
 			html.EscapeString(u.Email),

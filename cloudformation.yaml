@@ -29,6 +29,17 @@ Parameters:
     Type: String
     Description: Allocation ID of the existing Elastic IP (eipalloc-xxxxxxxx) for 44.209.115.156
 
+  SesFromEmail:
+    Type: String
+    Default: ""
+    Description: >
+      Opcional. Si indicas una dirección, se crea AWS::SES::EmailIdentity para esa cuenta
+      (recibirás un correo de Amazon para verificar). Déjalo vacío para no añadir SES en este stack.
+      n8n envía invitaciones por SMTP; tras verificar, crea credenciales SMTP en la consola SES y configúralas en .env.n8n.
+
+Conditions:
+  CreateSesEmailIdentity: !Not [!Equals [!Ref SesFromEmail, ""]]
+
 Resources:
 
   VPC:
@@ -202,6 +213,14 @@ Resources:
       AllocationId: !Ref EIPAllocationId
       InstanceId: !Ref EC2Instance
 
+  # SES: sin coste fijo; uso dentro de límites de capa gratuita / precio por mensaje según región.
+  # Cuenta nueva = sandbox (solo destinatarios verificados hasta solicitar "Production access").
+  SesEmailIdentity:
+    Condition: CreateSesEmailIdentity
+    Type: AWS::SES::EmailIdentity
+    Properties:
+      EmailIdentity: !Ref SesFromEmail
+
 Outputs:
   InstanceID:
     Description: EC2 Instance ID
@@ -226,3 +245,13 @@ Outputs:
   SSHCommand:
     Description: Command to SSH into the instance via Elastic IP
     Value: !Sub 'ssh -i ${KeyName}.pem ec2-user@44.209.115.156'
+
+  SesIdentityArn:
+    Condition: CreateSesEmailIdentity
+    Description: ARN de la identidad SES (email verificado en la consola)
+    Value: !GetAtt SesEmailIdentity.Arn
+
+  SesSmtpEndpoint:
+    Condition: CreateSesEmailIdentity
+    Description: Host SMTP regional para n8n (puerto 587 STARTTLS; usuario/clave en consola SES SMTP)
+    Value: !Sub 'email-smtp.${AWS::Region}.amazonaws.com'
