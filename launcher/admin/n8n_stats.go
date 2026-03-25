@@ -14,7 +14,7 @@ import (
 	"launcher/config"
 )
 
-// N8NStatsSeriesItem is one user row from the stats query (orden útil para gráficos).
+// N8NStatsSeriesItem: una fila por usuario (consulta PostgreSQL).
 type N8NStatsSeriesItem struct {
 	UserID               string  `json:"userId"`
 	Email                string  `json:"email"`

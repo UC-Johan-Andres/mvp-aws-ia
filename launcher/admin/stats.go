@@ -11,7 +11,7 @@ import (
 	"launcher/ui"
 )
 
-// GestionStatsAPIResponse agrupa métricas por producto; ampliable para LibreChat u otros.
+// GestionStatsAPIResponse agrupa métricas por producto.
 type GestionStatsAPIResponse struct {
 	Version     int                    `json:"version"`
 	GeneratedAt string                 `json:"generatedAt"`
@@ -35,7 +35,7 @@ type N8NStatsTotals struct {
 	AvgRunTimeSeconds    float64 `json:"avgRunTimeSeconds"`
 }
 
-// GestionStatsLCSection métricas LibreChat desde MongoDB (conversations / messages).
+// GestionStatsLCSection métricas LibreChat (MongoDB).
 type GestionStatsLCSection struct {
 	Available bool                     `json:"available"`
 	Error     string                   `json:"error,omitempty"`
@@ -68,7 +68,7 @@ func round2(v float64) float64 {
 	return float64(int64(v*100+0.5)) / 100
 }
 
-// HandleGestionStatsAPI devuelve JSON agregado para gráficos y futuras integraciones.
+// HandleGestionStatsAPI devuelve JSON para la pestaña Estadísticas.
 func HandleGestionStatsAPI(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -86,7 +86,7 @@ func HandleGestionStatsAPI(w http.ResponseWriter, r *http.Request) {
 	if strings.TrimSpace(config.MongoURI) == "" {
 		out.LibreChat = GestionStatsLCSection{
 			Available: false,
-			Message:   "Define MONGO_URI (y opcionalmente LIBRECHAT_MONGO_DB) para métricas de LibreChat.",
+			Message:   "Sin MONGO_URI en el launcher no hay métricas de LibreChat.",
 		}
 	} else {
 		lcUsers, lcTotals, err := FetchLibreChatStatsSeries(ctx)
@@ -102,7 +102,7 @@ func HandleGestionStatsAPI(w http.ResponseWriter, r *http.Request) {
 				Totals:    lcTotals,
 			}
 			if len(lcUsers) == 0 {
-				out.LibreChat.Message = "Aún no hay conversaciones o mensajes enlazados a usuarios en esta base."
+				out.LibreChat.Message = "La base aún no tiene conversaciones ni mensajes asociados a usuarios."
 			}
 		}
 	}

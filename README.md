@@ -1,6 +1,6 @@
 # AI Ecosystem
 
-Plataforma de herramientas de IA integradas, desplegada en AWS EC2 con Docker Compose. Combina varios servicios open-source bajo un único reverse proxy nginx con HTTPS, activados bajo demanda para optimizar el uso de memoria en instancias pequeñas (t4g.small, Graviton2 ARM64).
+Repo `mvp-aws-ia`: EC2 + Docker Compose, nginx con HTTPS, y un launcher en Go que arranca servicios pesados solo cuando alguien entra (útil en máquinas chicas tipo t4g.small / ARM).
 
 ---
 
@@ -34,17 +34,24 @@ Nginx  —  puertos 80 / 443  —  Let's Encrypt SSL
          Launcher :8090
     (arranca el contenedor + página de espera)
 
-Bases de datos  —  siempre encendidas
-    ├── PostgreSQL  (compartida: Chatwoot + n8n)
+Bases de datos (según compose)
+    ├── PostgreSQL  (n8n; Chatwoot si usas perfil `full`)
     ├── MongoDB     (LibreChat)
-    └── Redis       (Chatwoot)
+    └── Redis       (solo con Chatwoot, perfil `full`)
 ```
 
-### Servicios siempre encendidos (`restart: unless-stopped`)
-`postgres` · `redis` · `mongo` · `nginx` · `launcher`
+### `docker compose up -d` (por defecto)
+Sube `postgres`, `mongo`, `nginx`, `launcher`, y on-demand `n8n` y `librechat`. **No** levanta Redis ni Chatwoot.
 
-### Servicios on-demand (`restart: "no"`)
-`n8n` · `librechat` · `chatwoot` · `chatwoot_sidekiq` · `marimo` · `bolt`
+### Perfil `full` (Chatwoot + Redis + sidekiq)
+```bash
+docker compose --profile full up -d
+```
+
+### Perfil `extras` (Marimo, Bolt)
+```bash
+docker compose --profile extras up -d
+```
 
 ---
 
@@ -281,7 +288,7 @@ base_url = "https://openrouter.ai/api/v1/"
 | Servicio | Límite | Modo |
 |---|---|---|
 | PostgreSQL | 200 MB | Siempre activo |
-| Redis | 64 MB | Siempre activo |
+| Redis | 64 MB | Solo con perfil `full` (Chatwoot) |
 | MongoDB | 256 MB | Siempre activo |
 | Launcher | 32 MB | Siempre activo |
 | nginx | ~30 MB | Siempre activo |
@@ -345,6 +352,6 @@ sudo docker system df
 
 ---
 
-## Known issues
+## Problemas conocidos
 
-Ninguno conocido actualmente.
+—

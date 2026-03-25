@@ -1,9 +1,7 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Description: >
-  Solo Amazon SES: identidad de correo para invitaciones n8n. Despliégalo en un stack aparte
-  para no modificar el stack de EC2/VPC (no toca instancia, .env en el servidor ni parámetros existentes).
-  Coste: sin cargo fijo por identidad; paga por mensajes según región / capa gratuita.
-  Cuenta SES nueva: modo sandbox (solo destinatarios verificados hasta solicitar acceso de producción).
+  SES: verificar un email para enviar desde n8n. Stack aparte del de EC2 para no tocar la instancia.
+  Cuenta nueva en SES = sandbox hasta que pidas salida a producción.
 
 Parameters:
   SesIdentityEmail:

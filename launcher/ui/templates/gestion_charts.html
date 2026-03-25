@@ -1,13 +1,27 @@
 <div id="gestion-charts-root" class="charts-root card-body">
     <div class="chart-section">
         <div class="chart-section-header">
-            <h4 class="chart-heading">n8n — métricas por usuario</h4>
+            <h4 class="chart-heading">n8n</h4>
             <p class="chart-lede">
-                Datos desde PostgreSQL de n8n (misma base que la tabla de usuarios). Los gráficos se actualizan al abrir esta pestaña.
+                Totales y desglose por usuario desde PostgreSQL. Se recarga al entrar en esta pestaña.
             </p>
         </div>
         <div id="n8n-stats-error" class="empty-state" style="display:none;"></div>
         <div id="n8n-stats-body" style="display:none;">
+            <div class="stats-kpi-row">
+                <div class="stats-kpi">
+                    <div class="kpi-label">Usuarios en el resumen</div>
+                    <div class="kpi-value" id="kpi-n8n-users">—</div>
+                </div>
+                <div class="stats-kpi">
+                    <div class="kpi-label">Ejecuciones (no manual)</div>
+                    <div class="kpi-value" id="kpi-n8n-exec">—</div>
+                </div>
+                <div class="stats-kpi">
+                    <div class="kpi-label">Fallidas en prod.</div>
+                    <div class="kpi-value" id="kpi-n8n-failed">—</div>
+                </div>
+            </div>
             <div class="chart-grid">
                 <div class="chart-card">
                     <h4>Ejecuciones en producción (por usuario)</h4>
@@ -27,9 +41,9 @@
 
     <div class="chart-section">
         <div class="chart-section-header">
-            <h4 class="chart-heading">LibreChat — MongoDB</h4>
+            <h4 class="chart-heading">LibreChat</h4>
             <p class="chart-lede">
-                Agregaciones sobre <code>conversations</code> y <code>messages</code> (colección <code>users</code>), misma lógica que en mongosh.
+                Lectura directa de MongoDB: <code>conversations</code>, <code>messages</code> y <code>users</code>.
             </p>
         </div>
         <div id="lc-stats-error" class="empty-state" style="display:none;padding:20px;"></div>

@@ -971,7 +971,7 @@
                 <div class="brand-mark" aria-hidden="true"></div>
                 <div class="header-titles">
                     <h1>Gestión de usuarios</h1>
-                    <p class="header-subtitle">n8n, LibreChat y estadísticas en un solo lugar</p>
+                    <p class="header-subtitle">Altas, bajas y números de uso</p>
                 </div>
             </div>
             <div class="header-actions">
@@ -1010,7 +1010,7 @@
 
         <div class="footer-status">
             <span class="status-dot"></span>
-            <span id="footer-service">Conectado a n8n</span>
+            <span id="footer-service">Pestaña: n8n</span>
         </div>
     </div>
 
@@ -1018,8 +1018,8 @@
 
     <div id="invite-modal">
         <div class="modal-content">
-            <h3>Invitación pendiente</h3>
-            <p>El usuario debe revisar su correo. Si no recibe el email, usa este enlace directo:</p>
+            <h3>Enlace de invitación</h3>
+            <p>Si el correo no llega, pásale este enlace:</p>
             <div id="invite-link-box" class="invite-link-box"></div>
             <div class="modal-actions">
                 <button class="modal-close" onclick="closeInviteModal()">Cerrar</button>
@@ -1030,9 +1030,8 @@
 
     <div id="invite-sent-modal">
         <div class="modal-content">
-            <h3>Invitación enviada</h3>
-            <p>n8n ha registrado la invitación. Si configuraste correo (p. ej. Amazon SES + SMTP en <code>.env.n8n</code>), el usuario recibirá el enlace por email.</p>
-            <p class="panel-muted" style="margin-top:8px;font-size:0.88rem;">Si el correo no está configurado, abre la tabla y usa <strong>Invitar</strong> en la fila del usuario para copiar el enlace manualmente.</p>
+            <h3>Listo</h3>
+            <p>La invitación quedó creada en n8n. Con SMTP en <code>.env.n8n</code> el correo sale solo; si no, usa <strong>Invitar</strong> en la tabla y copia el enlace.</p>
             <div class="modal-actions">
                 <button type="button" class="modal-copy" onclick="closeInviteSentModal()">Entendido</button>
             </div>
@@ -1048,7 +1047,7 @@
                 <form id="modal-form-n8n" hx-post="/gestion" hx-target="#main-content" hx-swap="innerHTML">
                     <input type="hidden" name="tab" value="n8n">
                     <div class="dynamic-form n8n-form">
-                        <p class="form-hint">Solo invitaciones como <strong>global:member</strong> (sin propietarios ni CSV).</p>
+                        <p class="form-hint">Solo miembros (<strong>global:member</strong>), no owners.</p>
                         <div class="rows-container" id="modal-n8n-rows">
                             <div class="form-row">
                                 <input type="email" name="email" placeholder="email@ejemplo.com" required autocomplete="email">
@@ -1069,7 +1068,7 @@
                 <form id="modal-form-librechat" hx-post="/gestion" hx-target="#main-content" hx-swap="innerHTML">
                     <input type="hidden" name="tab" value="librechat">
                     <div class="dynamic-form librechat-form">
-                        <p class="form-hint">Nuevos usuarios con rol <strong>USER</strong> únicamente (sin CSV).</p>
+                        <p class="form-hint">Rol <strong>USER</strong> (fijo aquí).</p>
                         <div class="rows-container" id="modal-lc-rows">
                             <div class="form-row">
                                 <input type="email" name="email" placeholder="email@ejemplo.com" required autocomplete="email">
@@ -1238,12 +1237,12 @@
 
             const footer = document.getElementById('footer-service');
             if (tab === 'estadisticas') {
-                footer.textContent = 'Vista de estadísticas agregadas';
+                footer.textContent = 'Estadísticas';
                 htmx.ajax('GET', '/gestion/charts-content', { target: '#main-content', swap: 'innerHTML' });
                 updateCreateUserButtonVisibility();
                 return;
             }
-            footer.textContent = 'Conectado a ' + (tab === 'n8n' ? 'n8n' : 'LibreChat');
+            footer.textContent = tab === 'n8n' ? 'Pestaña: n8n' : 'Pestaña: LibreChat';
             htmx.ajax('GET', '/gestion/content?tab=' + encodeURIComponent(tab), { target: '#main-content', swap: 'innerHTML' });
             updateCreateUserButtonVisibility();
         }
@@ -1258,7 +1257,7 @@
 
         function openCreateUserModal() {
             if (currentTab !== 'n8n' && currentTab !== 'librechat') {
-                showToast('Selecciona la pestaña n8n o LibreChat', 'error');
+                showToast('Abre primero la pestaña n8n o LibreChat', 'error');
                 return;
             }
             const lede = document.getElementById('create-modal-lede');
@@ -1267,11 +1266,11 @@
             if (currentTab === 'librechat') {
                 wN8n.style.display = 'none';
                 wLc.style.display = 'block';
-                if (lede) lede.textContent = 'Alta en LibreChat (rol USER).';
+                if (lede) lede.textContent = 'Rol USER.';
             } else {
                 wN8n.style.display = 'block';
                 wLc.style.display = 'none';
-                if (lede) lede.textContent = 'Invitación en n8n como miembro global.';
+                if (lede) lede.textContent = 'Invitación como miembro (no owner).';
             }
             resetCreateUserModalForms();
             document.getElementById('create-user-modal').classList.add('active');
@@ -1372,11 +1371,11 @@
             if (typeof Chart === 'undefined') {
                 if (errEl) {
                     errEl.style.display = 'block';
-                    errEl.textContent = 'Chart.js no está cargado.';
+                    errEl.textContent = 'Falta Chart.js (CDN).';
                 }
                 if (lcErr) {
                     lcErr.style.display = 'block';
-                    lcErr.textContent = 'Chart.js no está cargado.';
+                    lcErr.textContent = 'Falta Chart.js (CDN).';
                 }
                 return;
             }
@@ -1422,11 +1421,16 @@
                         if (bodyEl) bodyEl.style.display = 'none';
                         if (errEl) {
                             errEl.style.display = 'block';
-                            errEl.textContent = n8n.error || 'No hay datos de n8n.';
+                            errEl.textContent = n8n.error || 'No se pudo leer n8n.';
                         }
                     } else {
                         if (errEl) errEl.style.display = 'none';
                         if (bodyEl) bodyEl.style.display = 'block';
+
+                        var nt = n8n.totals || {};
+                        setKpi('kpi-n8n-users', String(nt.userCount != null ? nt.userCount : '0'));
+                        setKpi('kpi-n8n-exec', String(nt.prodExecutions != null ? nt.prodExecutions : '0'));
+                        setKpi('kpi-n8n-failed', String(nt.failedProdExecutions != null ? nt.failedProdExecutions : '0'));
 
                         var nu = n8n.users || [];
                         var nlabels = nu.map(function(u) { return shortChartLabel(u.email, 22); });
@@ -1510,7 +1514,7 @@
                         if (lcMsg) lcMsg.style.display = 'none';
                         if (lcErr) {
                             lcErr.style.display = 'block';
-                            lcErr.textContent = lc.error || lc.message || 'LibreChat: sin conexión a MongoDB.';
+                            lcErr.textContent = lc.error || lc.message || 'MongoDB no responde.';
                         }
                     } else {
                         if (lcErr) lcErr.style.display = 'none';
@@ -1584,13 +1588,13 @@
                     if (bodyEl) bodyEl.style.display = 'none';
                     if (errEl) {
                         errEl.style.display = 'block';
-                        errEl.textContent = 'Error al cargar estadísticas: ' + (e && e.message ? e.message : String(e));
+                        errEl.textContent = 'No se pudieron cargar las estadísticas: ' + (e && e.message ? e.message : String(e));
                     }
                     if (lcBody) lcBody.style.display = 'none';
                     if (lcMsg) lcMsg.style.display = 'none';
                     if (lcErr) {
                         lcErr.style.display = 'block';
-                        lcErr.textContent = 'Error al cargar estadísticas: ' + (e && e.message ? e.message : String(e));
+                        lcErr.textContent = 'No se pudieron cargar las estadísticas: ' + (e && e.message ? e.message : String(e));
                     }
                 });
         }
@@ -1740,7 +1744,7 @@
                     evt.preventDefault();
                     
                     if (eventName === 'users_updated') {
-                        showToast('Usuarios actualizados', 'success');
+                        showToast('Tabla actualizada', 'success');
                     }
                     
                     // Renderizar desde localStorage
@@ -1772,7 +1776,7 @@
 
         function copyInviteLink() {
             navigator.clipboard.writeText(currentInviteLink).then(() => {
-                showToast('Enlace copiado al portapapeles', 'success');
+                showToast('Copiado', 'success');
             }).catch(() => {
                 showToast('Error al copiar', 'error');
             });
@@ -1827,7 +1831,7 @@
 
         function openEditModal(tab, userId, email, name, role) {
             if (tab === 'n8n') {
-                showToast('Edición no disponible para n8n. Elimina y crea un nuevo usuario.', 'error');
+                showToast('En n8n no se edita desde aquí; borra e invita de nuevo.', 'error');
                 return;
             }
             
