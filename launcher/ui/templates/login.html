@@ -2,73 +2,166 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Acceso — AI Ecosystem</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
+        :root {
+            --text: #0f172a;
+            --text-muted: #64748b;
+            --primary: #2563eb;
+            --primary-soft: rgba(37, 99, 235, 0.12);
+            --danger: #dc2626;
+            --surface: #ffffff;
+            --border: rgba(15, 23, 42, 0.08);
+            --font: "Plus Jakarta Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        }
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-            background: #f0f2f5;
-            display: flex;
-            justify-content: center;
-            align-items: center;
+            font-family: var(--font);
             min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
+            background: linear-gradient(145deg, #0f172a 0%, #1e293b 40%, #312e81 100%);
+            position: relative;
+            overflow-x: hidden;
+        }
+        body::before {
+            content: "";
+            position: fixed;
+            inset: 0;
+            background:
+                radial-gradient(ellipse 80% 50% at 20% 10%, rgba(99, 102, 241, 0.35), transparent 55%),
+                radial-gradient(ellipse 60% 40% at 90% 80%, rgba(236, 72, 153, 0.2), transparent 50%);
+            pointer-events: none;
+        }
+        .login-shell {
+            position: relative;
+            width: 100%;
+            max-width: 420px;
+            z-index: 1;
+        }
+        .login-brand {
+            text-align: center;
+            margin-bottom: 28px;
+        }
+        .login-brand-mark {
+            width: 56px;
+            height: 56px;
+            margin: 0 auto 16px;
+            border-radius: 16px;
+            background: linear-gradient(135deg, #60a5fa 0%, #a78bfa 50%, #f472b6 100%);
+            box-shadow: 0 12px 40px rgba(96, 165, 250, 0.45);
+        }
+        .login-brand h1 {
+            font-size: 1.35rem;
+            font-weight: 700;
+            color: #f8fafc;
+            letter-spacing: -0.02em;
+        }
+        .login-brand p {
+            font-size: 0.9rem;
+            color: rgba(248, 250, 252, 0.65);
+            margin-top: 6px;
+            font-weight: 500;
         }
         .card {
-            background: white;
-            padding: 48px 64px;
-            border-radius: 16px;
-            box-shadow: 0 4px 24px rgba(0,0,0,0.08);
-            text-align: center;
-            max-width: 380px;
-            width: 90%;
+            background: var(--surface);
+            border-radius: 20px;
+            padding: 36px 32px 40px;
+            box-shadow: 0 24px 80px rgba(0, 0, 0, 0.35);
+            border: 1px solid rgba(255, 255, 255, 0.12);
         }
-        h2 { font-size: 1.4rem; color: #1a1a2e; margin-bottom: 28px; }
-        .field { margin-bottom: 16px; text-align: left; }
-        label { display: block; font-size: 0.85rem; color: #6c757d; margin-bottom: 6px; }
-        input {
+        .card h2 {
+            font-size: 1.05rem;
+            font-weight: 700;
+            color: var(--text);
+            margin-bottom: 22px;
+            letter-spacing: -0.01em;
+        }
+        .field { margin-bottom: 18px; text-align: left; }
+        label {
+            display: block;
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: var(--text-muted);
+            margin-bottom: 8px;
+            letter-spacing: 0.02em;
+        }
+        input[type="text"], input[type="password"] {
             width: 100%;
-            padding: 10px 14px;
-            border: 1px solid #dee2e6;
-            border-radius: 8px;
+            padding: 12px 14px;
+            border: 1px solid var(--border);
+            border-radius: 12px;
             font-size: 0.95rem;
-            outline: none;
-            transition: border-color 0.15s;
+            font-family: inherit;
+            background: #fafbfc;
+            transition: border-color 0.2s, box-shadow 0.2s, background 0.2s;
         }
-        input:focus { border-color: #007bff; }
-        button {
+        input:focus {
+            outline: none;
+            border-color: var(--primary);
+            background: var(--surface);
+            box-shadow: 0 0 0 4px var(--primary-soft);
+        }
+        button[type="submit"] {
             width: 100%;
-            padding: 11px;
-            background: #007bff;
+            padding: 13px;
+            margin-top: 8px;
+            background: linear-gradient(135deg, #2563eb, #4f46e5);
             color: white;
             border: none;
-            border-radius: 8px;
+            border-radius: 12px;
             font-size: 1rem;
+            font-weight: 600;
+            font-family: inherit;
             cursor: pointer;
-            margin-top: 8px;
-            transition: background 0.15s;
+            box-shadow: 0 8px 24px rgba(37, 99, 235, 0.4);
+            transition: filter 0.2s, transform 0.15s;
         }
-        button:hover { background: #0056b3; }
-        .error { color: #dc3545; font-size: 0.85rem; margin-bottom: 16px; }
+        button[type="submit"]:hover { filter: brightness(1.06); }
+        button[type="submit"]:active { transform: scale(0.99); }
+        .error {
+            background: rgba(220, 38, 38, 0.09);
+            color: #b91c1c;
+            font-size: 0.85rem;
+            padding: 12px 14px;
+            border-radius: 12px;
+            margin-bottom: 18px;
+            border: 1px solid rgba(220, 38, 38, 0.2);
+            font-weight: 500;
+        }
     </style>
 </head>
 <body>
-    <div class="card">
-        <h2>AI Ecosystem</h2>
-        {{if .Error}}<p class="error">{{.Error}}</p>{{end}}
-        <form method="POST" action="/auth/login">
-            {{if .Redirect}}
-            <input type="hidden" name="redirect" value="{{.Redirect}}">
-            {{end}}
-            <div class="field">
-                <label>Usuario</label>
-                <input type="text" name="user" autofocus autocomplete="username">
-            </div>
-            <div class="field">
-                <label>Contraseña</label>
-                <input type="password" name="pass" autocomplete="current-password">
-            </div>
-            <button type="submit">Entrar</button>
-        </form>
+    <div class="login-shell">
+        <div class="login-brand">
+            <div class="login-brand-mark" aria-hidden="true"></div>
+            <h1>AI Ecosystem</h1>
+            <p>Panel de administración</p>
+        </div>
+        <div class="card">
+            <h2>Iniciar sesión</h2>
+            {{if .Error}}<p class="error">{{.Error}}</p>{{end}}
+            <form method="POST" action="/auth/login">
+                {{if .Redirect}}
+                <input type="hidden" name="redirect" value="{{.Redirect}}">
+                {{end}}
+                <div class="field">
+                    <label for="user">Usuario</label>
+                    <input id="user" type="text" name="user" autofocus autocomplete="username" required>
+                </div>
+                <div class="field">
+                    <label for="pass">Contraseña</label>
+                    <input id="pass" type="password" name="pass" autocomplete="current-password" required>
+                </div>
+                <button type="submit">Entrar</button>
+            </form>
+        </div>
     </div>
 </body>
 </html>
