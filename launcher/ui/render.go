@@ -103,10 +103,16 @@ func init() {
 	}
 }
 
-// RenderLogin renders the login page with an optional error message.
-func RenderLogin(w http.ResponseWriter, errMsg string) {
+// LoginPageData is passed to login.html (error + return path after login).
+type LoginPageData struct {
+	Error    string
+	Redirect string // ruta relativa segura, p. ej. /gestion
+}
+
+// RenderLogin renders the login page.
+func RenderLogin(w http.ResponseWriter, data LoginPageData) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := tmplLogin.Execute(w, map[string]string{"Error": errMsg}); err != nil {
+	if err := tmplLogin.Execute(w, data); err != nil {
 		log.Printf("ui: render login: %v", err)
 	}
 }

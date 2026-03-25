@@ -794,13 +794,6 @@
                     } else {
                         if (errEl) errEl.style.display = 'none';
                         if (bodyEl) bodyEl.style.display = 'block';
-                        var totals = n8n.totals || {};
-                        setKpi('kpi-users', String(totals.userCount != null ? totals.userCount : '0'));
-                        setKpi('kpi-workflows', String(totals.workflowsAccesibles != null ? totals.workflowsAccesibles : '0'));
-                        setKpi('kpi-exec', String(totals.prodExecutions != null ? totals.prodExecutions : '0'));
-                        setKpi('kpi-failed', String(totals.failedProdExecutions != null ? totals.failedProdExecutions : '0'));
-                        setKpi('kpi-avg-fail', (totals.avgFailureRatePct != null ? Number(totals.avgFailureRatePct).toFixed(2) : '0') + '%');
-                        setKpi('kpi-avg-runtime', (totals.avgRunTimeSeconds != null ? Number(totals.avgRunTimeSeconds).toFixed(2) : '0') + ' s');
 
                         var nu = n8n.users || [];
                         var nlabels = nu.map(function(u) { return shortChartLabel(u.email, 22); });

@@ -56,6 +56,9 @@
         <h2>AI Ecosystem</h2>
         {{if .Error}}<p class="error">{{.Error}}</p>{{end}}
         <form method="POST" action="/auth/login">
+            {{if .Redirect}}
+            <input type="hidden" name="redirect" value="{{.Redirect}}">
+            {{end}}
             <div class="field">
                 <label>Usuario</label>
                 <input type="text" name="user" autofocus autocomplete="username">

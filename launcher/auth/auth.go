@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"launcher/config"
+	"launcher/ui"
 )
 
 // HandleCheck validates the session cookie. Used by nginx auth_request.
@@ -24,13 +25,42 @@ func HandleCheck(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
+// safeRedirectPath solo permite rutas relativas del mismo sitio (evita open redirect).
+func safeRedirectPath(s string) string {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return ""
+	}
+	if !strings.HasPrefix(s, "/") || strings.HasPrefix(s, "//") {
+		return ""
+	}
+	if strings.ContainsAny(s, "\r\n\\") {
+		return ""
+	}
+	return s
+}
+
+func loginRedirectTarget(r *http.Request) string {
+	if v := safeRedirectPath(r.FormValue("redirect")); v != "" {
+		return v
+	}
+	if v := safeRedirectPath(r.URL.Query().Get("redirect")); v != "" {
+		return v
+	}
+	return ""
+}
+
 // HandleLogin handles GET (show form) and POST (process credentials).
 // renderFn is injected to avoid a circular import with the ui package.
-func HandleLogin(w http.ResponseWriter, r *http.Request, renderFn func(http.ResponseWriter, string)) {
+func HandleLogin(w http.ResponseWriter, r *http.Request, renderFn func(http.ResponseWriter, ui.LoginPageData)) {
 	if r.Method == http.MethodPost {
 		r.ParseForm()
 		user := r.FormValue("user")
 		pass := r.FormValue("pass")
+		afterLogin := loginRedirectTarget(r)
+		if afterLogin == "" {
+			afterLogin = "/"
+		}
 		if config.AuthPassword != "" && user == config.AuthUser && pass == config.AuthPassword {
 			http.SetCookie(w, &http.Cookie{
 				Name:     config.CookieName,
@@ -42,17 +72,19 @@ func HandleLogin(w http.ResponseWriter, r *http.Request, renderFn func(http.Resp
 				SameSite: http.SameSiteLaxMode,
 				MaxAge:   int(config.CookieTTL.Seconds()),
 			})
-			redirectTo := "/"
-			if redir := r.URL.Query().Get("redirect"); redir != "" {
-				redirectTo = redir
-			}
-			http.Redirect(w, r, redirectTo, http.StatusSeeOther)
+			http.Redirect(w, r, afterLogin, http.StatusSeeOther)
 			return
 		}
-		renderFn(w, "Credenciales incorrectas")
+		// Conservar redirect en el formulario tras error
+		preserve := safeRedirectPath(r.FormValue("redirect"))
+		if preserve == "" {
+			preserve = safeRedirectPath(r.URL.Query().Get("redirect"))
+		}
+		renderFn(w, ui.LoginPageData{Error: "Credenciales incorrectas", Redirect: preserve})
 		return
 	}
-	renderFn(w, "")
+	redir := safeRedirectPath(r.URL.Query().Get("redirect"))
+	renderFn(w, ui.LoginPageData{Redirect: redir})
 }
 
 // HandleLogout clears the session cookie and redirects to login.
