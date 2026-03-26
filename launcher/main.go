@@ -40,6 +40,7 @@ func main() {
 	// Admin — user management
 	mux.HandleFunc("/admin/librechat/users", auth.RequireAuth(admin.HandleLibreChatUsers))
 	mux.HandleFunc("/admin/n8n/users", auth.RequireAuth(admin.HandleN8NUsers))
+	mux.HandleFunc("POST /admin/n8n/users/password-reset-link", auth.RequireAuth(admin.HandleN8NPasswordResetLink))
 
 	// Gestion dashboard
 	mux.HandleFunc("GET /gestion", auth.RequireAuth(admin.HandleGestion))

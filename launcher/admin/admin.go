@@ -213,6 +213,8 @@ type GestionUser struct {
 	ID        string
 	Email     string
 	Name      string
+	FirstName string
+	LastName  string
 	Role      string
 	Company   string
 	InviteURL string
@@ -303,6 +305,8 @@ func gestionUsersForTab(tab string) ([]GestionUser, error) {
 				ID:                   u.ID,
 				Email:                u.Email,
 				Name:                 name,
+				FirstName:            u.FirstName,
+				LastName:             u.LastName,
 				Role:                 u.Role,
 				Company:              u.Company,
 				InviteURL:            u.InviteAcceptURL,
@@ -812,7 +816,7 @@ func HandleGestionUsersRows(w http.ResponseWriter, r *http.Request) {
 		n8nUsers, err := getN8NUsers()
 		if err != nil {
 			log.Printf("gestion users-rows n8n: %v", err)
-			ui.RenderGestionRows(w, tab, `<div class="table-responsive-wrap"><table class="data-table"><tbody><tr><td colspan="5" class="empty-state">No se pudieron cargar los usuarios.</td></tr></tbody></table></div>`)
+			ui.RenderGestionRows(w, tab, `<div class="table-responsive-wrap"><table class="data-table"><tbody><tr><td colspan="6" class="empty-state empty-state-error"><p>No se pudieron cargar los usuarios.</p><p class="empty-state-sub">Comprueba credenciales de n8n y conectividad.</p></td></tr></tbody></table></div>`)
 			return
 		}
 		ui.RenderGestionRows(w, tab, buildN8NUsersTableHTML(n8nUsers))
@@ -822,7 +826,7 @@ func HandleGestionUsersRows(w http.ResponseWriter, r *http.Request) {
 	lcList, err := getLibreChatUsers()
 	if err != nil {
 		log.Printf("gestion users-rows librechat: %v", err)
-		ui.RenderGestionRows(w, tab, `<div class="table-responsive-wrap"><table class="data-table"><tbody><tr><td colspan="5" class="empty-state">No se pudieron cargar los usuarios.</td></tr></tbody></table></div>`)
+		ui.RenderGestionRows(w, tab, `<div class="table-responsive-wrap"><table class="data-table"><tbody><tr><td colspan="5" class="empty-state empty-state-error"><p>No se pudieron cargar los usuarios.</p><p class="empty-state-sub">Comprueba MongoDB y variables de entorno.</p></td></tr></tbody></table></div>`)
 		return
 	}
 	gu := make([]GestionUser, 0, len(lcList))
@@ -848,19 +852,20 @@ func fetchN8NUsers() ([]byte, error) {
 // buildN8NUsersTableHTML renders the users table for HTMX (tab n8n).
 func buildN8NUsersTableHTML(users []N8NUser) string {
 	var b strings.Builder
-	b.WriteString(`<div class="table-responsive-wrap"><table class="data-table"><thead><tr><th>Email</th><th>Nombre</th><th>Rol</th><th>Empresa</th><th>Acciones</th></tr></thead><tbody>`)
+	b.WriteString(`<div class="table-responsive-wrap"><table class="data-table gestion-table-n8n"><thead><tr><th>Email</th><th>Nombre</th><th>Apellido(s)</th><th>Rol</th><th>Empresa</th><th>Acciones</th></tr></thead><tbody>`)
 	if len(users) == 0 {
-		b.WriteString(`<tr><td colspan="5" class="empty-state"><p>No hay usuarios registrados.</p></td></tr>`)
+		b.WriteString(`<tr><td colspan="6" class="empty-state empty-state-soft"><div class="empty-state-icon" aria-hidden="true">👤</div><p>Aún no hay usuarios en n8n</p><p class="empty-state-sub">Crea invitaciones con <strong>Nuevo usuario</strong> o revisa la consola de n8n.</p></td></tr>`)
 		b.WriteString(`</tbody></table></div>`)
 		return b.String()
 	}
 	for _, u := range users {
-		name := u.FirstName
-		if u.LastName != "" {
-			name += " " + u.LastName
+		fn := strings.TrimSpace(u.FirstName)
+		if fn == "" {
+			fn = "—"
 		}
-		if strings.TrimSpace(name) == "" {
-			name = "-"
+		ln := strings.TrimSpace(u.LastName)
+		if ln == "" {
+			ln = "—"
 		}
 		roleClass := "role-user"
 		if u.Role == "ADMIN" || u.Role == "global:admin" || u.Role == "global:owner" {
@@ -879,13 +884,20 @@ func buildN8NUsersTableHTML(users []N8NUser) string {
 		if uid == "" {
 			uid = u.Email
 		}
-		fmt.Fprintf(&b, `<tr><td>%s</td><td>%s</td><td><span class="role-badge %s">%s</span></td><td>%s</td><td>%s<button type="button" class="btn-small btn-delete" data-tab="n8n" data-id="%s" data-email="%s" onclick="deleteUser(this)">Eliminar</button></td></tr>`,
+		fmt.Fprintf(&b, `<tr><td>%s</td><td>%s</td><td>%s</td><td><span class="role-badge %s">%s</span></td><td>%s</td><td>%s<button type="button" class="btn-small btn-edit" data-tab="n8n" data-id="%s" data-email="%s" data-firstname="%s" data-lastname="%s" data-role="%s" data-company="%s" onclick="openEditModalFromDataset(this)">Editar</button> <button type="button" class="btn-small btn-delete" data-tab="n8n" data-id="%s" data-email="%s" onclick="deleteUser(this)">Eliminar</button></td></tr>`,
 			html.EscapeString(u.Email),
-			html.EscapeString(name),
+			html.EscapeString(fn),
+			html.EscapeString(ln),
 			roleClass,
 			html.EscapeString(roleLabel),
 			html.EscapeString(u.Company),
 			invite,
+			html.EscapeString(uid),
+			html.EscapeString(u.Email),
+			html.EscapeString(u.FirstName),
+			html.EscapeString(u.LastName),
+			html.EscapeString(u.Role),
+			html.EscapeString(u.Company),
 			html.EscapeString(uid),
 			html.EscapeString(u.Email),
 		)
@@ -899,7 +911,7 @@ func buildLibreChatUsersTableHTML(users []GestionUser) string {
 	var b strings.Builder
 	b.WriteString(`<div class="table-responsive-wrap"><table class="data-table"><thead><tr><th>Email</th><th>Nombre</th><th>Rol</th><th>Empresa</th><th>Acciones</th></tr></thead><tbody>`)
 	if len(users) == 0 {
-		b.WriteString(`<tr><td colspan="5" class="empty-state"><p>No hay usuarios registrados.</p></td></tr>`)
+		b.WriteString(`<tr><td colspan="5" class="empty-state empty-state-soft"><div class="empty-state-icon" aria-hidden="true">💬</div><p>No hay cuentas de LibreChat</p><p class="empty-state-sub">Usa <strong>Nuevo usuario</strong> en esta pestaña para dar de alta el primer acceso.</p></td></tr>`)
 		b.WriteString(`</tbody></table></div>`)
 		return b.String()
 	}
@@ -917,7 +929,7 @@ func buildLibreChatUsersTableHTML(users []GestionUser) string {
 			uid = u.Email
 		}
 		fmt.Fprintf(&b, `<tr><td>%s</td><td>%s</td><td><span class="role-badge %s">%s</span></td><td>%s</td><td>
-<button type="button" class="btn-small btn-edit" onclick="openEditModal('librechat','%s','%s','%s','%s','%s')">Editar</button>
+<button type="button" class="btn-small btn-edit" data-tab="librechat" data-id="%s" data-email="%s" data-name="%s" data-role="%s" data-company="%s" onclick="openEditModalFromDataset(this)">Editar</button>
 <button type="button" class="btn-small btn-delete" data-tab="librechat" data-id="%s" data-email="%s" onclick="deleteUser(this)">Eliminar</button></td></tr>`,
 			html.EscapeString(u.Email),
 			html.EscapeString(name),

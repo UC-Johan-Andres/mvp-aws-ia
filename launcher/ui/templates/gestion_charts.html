@@ -12,6 +12,11 @@
         </div>
         <div id="n8n-stats-error" class="empty-state" style="display:none;"></div>
         <div id="n8n-stats-body" style="display:none;">
+            <div id="n8n-stats-empty" class="empty-state-panel" style="display:none;" role="status">
+                <div class="empty-state-icon" aria-hidden="true">📊</div>
+                <p class="empty-state-title">Sin datos para graficar</p>
+                <p class="empty-state-sub">No hay usuarios en el resumen de n8n o aún no registran ejecuciones. Los KPI arriba pueden seguir en cero.</p>
+            </div>
             <div class="stats-kpi-row">
                 <div class="stats-kpi">
                     <div class="kpi-label">Usuarios en el resumen</div>
@@ -26,7 +31,7 @@
                     <div class="kpi-value" id="kpi-n8n-failed">—</div>
                 </div>
             </div>
-            <div class="chart-grid">
+            <div id="n8n-charts-grid" class="chart-grid">
                 <div class="chart-card">
                     <h4>Ejecuciones en producción (por usuario)</h4>
                     <canvas id="chart-n8n-exec" aria-label="Gráfico ejecuciones"></canvas>
@@ -53,6 +58,11 @@
         <div id="lc-stats-error" class="empty-state" style="display:none;padding:20px;"></div>
         <div class="lc-stats-hint" id="lc-stats-message" style="display:none;margin-bottom:16px;"></div>
         <div id="lc-stats-body" style="display:none;">
+            <div id="lc-stats-empty" class="empty-state-panel" style="display:none;" role="status">
+                <div class="empty-state-icon" aria-hidden="true">📈</div>
+                <p class="empty-state-title">Sin serie de usuarios</p>
+                <p class="empty-state-sub">No hay conversaciones o mensajes asociados a usuarios en el periodo consultado. Prueba filtrar por otra empresa o espera a que haya actividad.</p>
+            </div>
             <div class="stats-kpi-row">
                 <div class="stats-kpi">
                     <div class="kpi-label">Usuarios con actividad</div>
@@ -67,7 +77,7 @@
                     <div class="kpi-value" id="kpi-lc-msg">—</div>
                 </div>
             </div>
-            <div class="chart-grid">
+            <div id="lc-charts-grid" class="chart-grid">
                 <div class="chart-card">
                     <h4>Conversaciones por usuario</h4>
                     <canvas id="chart-lc-conv" aria-label="Gráfico conversaciones LibreChat"></canvas>

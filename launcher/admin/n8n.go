@@ -7,6 +7,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -230,9 +231,78 @@ func deleteN8NUser(w http.ResponseWriter, r *http.Request) {
 	jsonOK(w, map[string]string{"deleted": reqBody.ID})
 }
 
+// HandleN8NPasswordResetLink POST {"id":"uuid"} → enlace de restablecimiento (API n8n).
+func HandleN8NPasswordResetLink(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if config.N8NOwnerEmail == "" || config.N8NOwnerPass == "" {
+		jsonError(w, "n8n owner credentials not configured", http.StatusServiceUnavailable)
+		return
+	}
+	var reqBody struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&reqBody); err != nil {
+		jsonError(w, "invalid JSON body: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+	if strings.TrimSpace(reqBody.ID) == "" {
+		jsonError(w, "user id is required", http.StatusBadRequest)
+		return
+	}
+	link, err := fetchN8NPasswordResetLink(strings.TrimSpace(reqBody.ID))
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusBadGateway)
+		return
+	}
+	jsonOK(w, map[string]string{"link": link})
+}
+
+func fetchN8NPasswordResetLink(userID string) (string, error) {
+	client := n8nHTTPClient()
+	cookies, err := n8nLogin(client)
+	if err != nil {
+		return "", fmt.Errorf("n8n authentication failed: %w", err)
+	}
+	u := strings.TrimRight(config.N8NInternalURL, "/") + "/rest/users/" + url.PathEscape(userID) + "/password-reset-link"
+	req, err := http.NewRequest(http.MethodGet, u, nil)
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	if config.N8NBasicUser != "" {
+		req.SetBasicAuth(config.N8NBasicUser, config.N8NBasicPass)
+	}
+	for _, c := range cookies {
+		req.AddCookie(c)
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("n8n request failed: %w", err)
+	}
+	defer resp.Body.Close()
+	data, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("n8n returned status %d: %s", resp.StatusCode, string(data))
+	}
+	var out struct {
+		Link string `json:"link"`
+	}
+	if err := json.Unmarshal(data, &out); err != nil {
+		return "", fmt.Errorf("invalid n8n response: %w", err)
+	}
+	if strings.TrimSpace(out.Link) == "" {
+		return "", fmt.Errorf("n8n no devolvió enlace (¿versión antigua sin /password-reset-link?)")
+	}
+	return out.Link, nil
+}
+
 type n8nUserUpdateRequest struct {
 	ID        string `json:"id"`
 	FirstName string `json:"firstName"`
+	LastName  string `json:"lastName"`
 	Role      string `json:"role"`
 }
 
@@ -253,8 +323,8 @@ func updateN8NUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if reqBody.Role != "global:owner" && reqBody.Role != "global:member" {
-		jsonError(w, "invalid role: must be global:owner or global:member", http.StatusBadRequest)
+	if reqBody.Role != "global:owner" && reqBody.Role != "global:member" && reqBody.Role != "global:admin" {
+		jsonError(w, "invalid role: must be global:owner, global:member or global:admin", http.StatusBadRequest)
 		return
 	}
 

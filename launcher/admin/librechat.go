@@ -262,10 +262,11 @@ func deleteLibreChatUser(w http.ResponseWriter, r *http.Request) {
 }
 
 type librechatUpdateRequest struct {
-	Email   string `json:"email"`
-	Name    string `json:"name"`
-	Role    string `json:"role"`
-	Company string `json:"company"`
+	Email    string `json:"email"`
+	Name     string `json:"name"`
+	Role     string `json:"role"`
+	Company  string `json:"company"`
+	Password string `json:"password,omitempty"`
 }
 
 func updateLibreChatUser(w http.ResponseWriter, r *http.Request) {
@@ -315,11 +316,24 @@ func updateLibreChatUser(w http.ResponseWriter, r *http.Request) {
 		canon, _ := CanonicalGestionCompany(reqBody.Company)
 		update["company"] = canon
 	}
+	if reqBody.Password != "" {
+		if len(reqBody.Password) < 8 {
+			jsonError(w, "la contraseña debe tener al menos 8 caracteres", http.StatusBadRequest)
+			return
+		}
+		hash, err := bcrypt.GenerateFromPassword([]byte(reqBody.Password), 12)
+		if err != nil {
+			jsonError(w, "failed to hash password", http.StatusInternalServerError)
+			return
+		}
+		update["password"] = string(hash)
+	}
 
 	if len(update) == 0 {
 		jsonError(w, "no fields to update", http.StatusBadRequest)
 		return
 	}
+	update["updatedAt"] = time.Now()
 
 	res, err := coll.UpdateOne(ctx, bson.M{"email": reqBody.Email}, bson.M{"$set": update})
 	if err != nil {

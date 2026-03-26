@@ -272,6 +272,12 @@
         .tab-icon-chart {
             background: linear-gradient(135deg, #059669, #14b8a6);
         }
+        .tab-icon-empresas {
+            background: linear-gradient(135deg, #d97706, #fbbf24);
+        }
+        .tab-icon-stats {
+            background: linear-gradient(135deg, #6366f1, #a855f7);
+        }
         .tab:hover {
             color: var(--text);
             background: var(--tab-hover-bg);
@@ -335,6 +341,9 @@
         .table-responsive-wrap .data-table {
             margin-bottom: 0;
             min-width: 680px;
+        }
+        .table-responsive-wrap .data-table.gestion-table-n8n {
+            min-width: 860px;
         }
         table.data-table {
             width: 100%;
@@ -423,6 +432,47 @@
         }
         .empty-state p { margin-bottom: 8px; font-size: 0.95rem; }
         .empty-state p:first-child { font-weight: 600; color: var(--text); }
+        .empty-state-soft {
+            padding: 40px 20px;
+            background: linear-gradient(180deg, var(--surface-muted) 0%, var(--surface) 100%);
+        }
+        .empty-state-error {
+            border-radius: var(--radius-sm);
+            background: rgba(220, 38, 38, 0.06);
+            border: 1px dashed rgba(220, 38, 38, 0.25);
+        }
+        .empty-state-icon {
+            font-size: 2rem;
+            line-height: 1;
+            margin-bottom: 12px;
+            opacity: 0.85;
+        }
+        .empty-state-sub {
+            font-size: 0.88rem !important;
+            color: var(--text-muted) !important;
+            font-weight: 400 !important;
+            max-width: 42ch;
+            margin-left: auto;
+            margin-right: auto;
+            line-height: 1.5;
+        }
+        .empty-state-title {
+            font-weight: 700 !important;
+            color: var(--text) !important;
+            font-size: 1rem !important;
+            margin-bottom: 6px !important;
+        }
+        .empty-state-panel {
+            text-align: center;
+            padding: 28px 20px 8px;
+            margin-bottom: 16px;
+            border-radius: var(--radius-sm);
+            border: 1px dashed var(--border);
+            background: var(--surface-muted);
+        }
+        .empty-state-panel .empty-state-sub {
+            margin-bottom: 0;
+        }
 
         .loading-spinner {
             display: flex;
@@ -640,8 +690,39 @@
             to { transform: translateX(0); opacity: 1; }
         }
 
+        #gestion-confirm-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(15, 23, 42, 0.45);
+            backdrop-filter: blur(6px);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 2100;
+            padding: 20px;
+        }
+        #gestion-confirm-modal.active { display: flex; }
+        #gestion-confirm-modal .modal-confirm-danger {
+            background: linear-gradient(135deg, #dc2626, #b91c1c);
+            color: #fff;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 999px;
+            font-family: inherit;
+            font-weight: 600;
+            font-size: 0.9rem;
+            cursor: pointer;
+            box-shadow: 0 4px 14px rgba(220, 38, 38, 0.35);
+        }
+        #gestion-confirm-modal .modal-confirm-danger:hover { filter: brightness(1.06); }
+        #gestion-confirm-modal .modal-confirm-danger:disabled { opacity: 0.6; cursor: not-allowed; }
+
         #invite-modal,
-        #invite-sent-modal {
+        #invite-sent-modal,
+        #n8n-password-modal {
             position: fixed;
             top: 0;
             left: 0;
@@ -656,7 +737,8 @@
             padding: 20px;
         }
         #invite-modal.active,
-        #invite-sent-modal.active { display: flex; }
+        #invite-sent-modal.active,
+        #n8n-password-modal.active { display: flex; }
         .modal-content {
             background: var(--surface);
             border-radius: var(--radius);
@@ -1036,11 +1118,11 @@
                     LibreChat
                 </button>
                 <button type="button" class="tab {{if eq .Tab "empresas"}}active{{end}}" data-tab="empresas" onclick="switchTab('empresas')" role="tab" aria-selected="{{if eq .Tab "empresas"}}true{{else}}false{{end}}">
-                    <span class="tab-icon tab-icon-chart" aria-hidden="true" style="opacity:0.85;"></span>
+                    <span class="tab-icon tab-icon-empresas" aria-hidden="true"></span>
                     Empresas
                 </button>
                 <button type="button" class="tab {{if eq .Tab "estadisticas"}}active{{end}}" data-tab="estadisticas" onclick="switchTab('estadisticas')" role="tab" aria-selected="{{if eq .Tab "estadisticas"}}true{{else}}false{{end}}">
-                    <span class="tab-icon tab-icon-chart" aria-hidden="true"></span>
+                    <span class="tab-icon tab-icon-stats" aria-hidden="true"></span>
                     Estadísticas
                 </button>
             </div>
@@ -1081,6 +1163,29 @@
             <p>La invitación quedó creada en n8n. Con SMTP en <code>.env.n8n</code> el correo sale solo; si no, usa <strong>Invitar</strong> en la tabla y copia el enlace.</p>
             <div class="modal-actions">
                 <button type="button" class="modal-copy" onclick="closeInviteSentModal()">Entendido</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="gestion-confirm-modal" onclick="if (event.target === this) closeGestionConfirmModal()">
+        <div class="modal-content" role="dialog" aria-modal="true" aria-labelledby="gestion-confirm-title">
+            <h3 id="gestion-confirm-title">Confirmar acción</h3>
+            <p id="gestion-confirm-message" class="panel-muted" style="margin-bottom:0;"></p>
+            <div class="modal-actions">
+                <button type="button" class="modal-close" id="gestion-confirm-cancel">Cancelar</button>
+                <button type="button" class="modal-confirm-danger" id="gestion-confirm-ok">Eliminar</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="n8n-password-modal" onclick="if (event.target === this) closeN8nPasswordModal()">
+        <div class="modal-content" role="dialog" aria-modal="true">
+            <h3>Enlace para nueva contraseña (n8n)</h3>
+            <p class="panel-muted">Comparte este enlace con el usuario; caduca según la configuración de n8n. No fija la contraseña desde aquí.</p>
+            <div id="n8n-password-link-box" class="invite-link-box"></div>
+            <div class="modal-actions">
+                <button type="button" class="modal-close" onclick="closeN8nPasswordModal()">Cerrar</button>
+                <button type="button" class="modal-copy" onclick="copyN8nPasswordLink()">Copiar enlace</button>
             </div>
         </div>
     </div>
@@ -1144,32 +1249,56 @@
         </div>
     </div>
 
-    <div id="edit-modal">
+    <div id="edit-modal" onclick="if (event.target === this) closeEditModal()">
         <div class="modal-content">
-            <h3>Editar Usuario</h3>
+            <h3 id="edit-modal-title">Editar usuario</h3>
             <input type="hidden" id="edit-user-id">
             <input type="hidden" id="edit-user-tab">
             <div class="form-group">
                 <label>Email</label>
                 <input type="email" id="edit-user-email" class="input-readonly" readonly>
             </div>
-            <div class="form-group">
+            <div id="edit-name-lc-wrap" class="form-group">
                 <label>Nombre</label>
-                <input type="text" id="edit-user-name">
+                <input type="text" id="edit-user-name" autocomplete="name">
+            </div>
+            <div id="edit-name-n8n-wrap" style="display:none;">
+                <div class="form-group">
+                    <label>Nombre</label>
+                    <input type="text" id="edit-n8n-first" autocomplete="given-name">
+                </div>
+                <div class="form-group">
+                    <label>Apellido(s)</label>
+                    <input type="text" id="edit-n8n-last" autocomplete="family-name">
+                </div>
             </div>
             <div class="form-group">
                 <label>Rol</label>
                 <select id="edit-user-role">
-                    <!-- Opciones se llenan dinámicamente -->
                 </select>
             </div>
             <div class="form-group" id="edit-user-company-wrap" style="display:none;">
                 <label>Empresa</label>
                 <select id="edit-user-company" data-company-select></select>
             </div>
+            <div id="edit-lc-password-wrap" style="display:none;">
+                <p class="form-hint" style="margin-bottom:10px;">Deja en blanco para no cambiar la contraseña de LibreChat.</p>
+                <div class="form-group">
+                    <label>Nueva contraseña</label>
+                    <input type="password" id="edit-lc-password" autocomplete="new-password" minlength="8">
+                </div>
+                <div class="form-group">
+                    <label>Confirmar contraseña</label>
+                    <input type="password" id="edit-lc-password2" autocomplete="new-password" minlength="8">
+                </div>
+            </div>
+            <div id="edit-n8n-password-actions" style="display:none;">
+                <p class="form-hint" style="margin-bottom:10px;">n8n no permite asignar una contraseña directamente. Obtén un enlace de restablecimiento.</p>
+                <button type="button" class="modal-copy" style="width:100%;margin-bottom:16px;" onclick="requestN8nPasswordResetLink()">Obtener enlace de restablecimiento</button>
+            </div>
             <div class="modal-actions">
-                <button class="modal-close" onclick="closeEditModal()">Cancelar</button>
-                <button class="modal-save" onclick="saveUser()">Guardar</button>
+                <button type="button" class="modal-close" onclick="closeEditModal()">Cancelar</button>
+                <button type="button" class="modal-save" onclick="saveUser()">Guardar</button>
             </div>
         </div>
     </div>
@@ -1189,6 +1318,69 @@
                     if (typeof fillCompanySelects === 'function') fillCompanySelects();
                 }
             } catch (e) { /* ignore */ }
+        }
+
+        var _gestionConfirmAction = null;
+        var currentN8nPasswordLink = '';
+
+        function openGestionConfirmModal(opts) {
+            var title = document.getElementById('gestion-confirm-title');
+            var msg = document.getElementById('gestion-confirm-message');
+            var ok = document.getElementById('gestion-confirm-ok');
+            if (title) title.textContent = opts.title || 'Confirmar';
+            if (msg) msg.textContent = opts.message || '';
+            if (ok) {
+                ok.textContent = opts.confirmText || 'Eliminar';
+                ok.className = opts.danger === false ? 'modal-copy' : 'modal-confirm-danger';
+            }
+            _gestionConfirmAction = opts.onConfirm;
+            var m = document.getElementById('gestion-confirm-modal');
+            if (m) m.classList.add('active');
+        }
+
+        function closeGestionConfirmModal() {
+            _gestionConfirmAction = null;
+            var m = document.getElementById('gestion-confirm-modal');
+            if (m) m.classList.remove('active');
+        }
+
+        function closeN8nPasswordModal() {
+            var m = document.getElementById('n8n-password-modal');
+            if (m) m.classList.remove('active');
+        }
+
+        function copyN8nPasswordLink() {
+            if (!currentN8nPasswordLink) return;
+            navigator.clipboard.writeText(currentN8nPasswordLink).then(function() {
+                showToast('Enlace copiado', 'success');
+            }).catch(function() {
+                showToast('No se pudo copiar', 'error');
+            });
+        }
+
+        function requestN8nPasswordResetLink() {
+            var id = document.getElementById('edit-user-id').value;
+            if (!id) return;
+            fetch('/admin/n8n/users/password-reset-link', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id: id }),
+                credentials: 'same-origin'
+            })
+            .then(function(r) { return r.json().then(function(j) { return { ok: r.ok, j: j }; }); })
+            .then(function(x) {
+                if (!x.ok) throw new Error(x.j.error || 'Error al obtener enlace');
+                var link = x.j.link;
+                if (!link) throw new Error('Respuesta sin enlace');
+                currentN8nPasswordLink = link;
+                var box = document.getElementById('n8n-password-link-box');
+                if (box) box.textContent = link;
+                document.getElementById('n8n-password-modal').classList.add('active');
+                showToast('Enlace generado', 'success');
+            })
+            .catch(function(e) {
+                showToast(e.message || 'Error', 'error');
+            });
         }
 
         var THEME_MODE_KEY = 'gestion-color-mode';
@@ -1277,6 +1469,24 @@
             syncThemeButton();
             var tbtn = document.getElementById('theme-cycle');
             if (tbtn) tbtn.addEventListener('click', cycleThemeMode);
+
+            var gCancel = document.getElementById('gestion-confirm-cancel');
+            if (gCancel) gCancel.addEventListener('click', closeGestionConfirmModal);
+            var gOk = document.getElementById('gestion-confirm-ok');
+            if (gOk) {
+                gOk.addEventListener('click', function() {
+                    var fn = _gestionConfirmAction;
+                    if (typeof fn !== 'function') {
+                        closeGestionConfirmModal();
+                        return;
+                    }
+                    gOk.disabled = true;
+                    Promise.resolve(fn()).finally(function() {
+                        gOk.disabled = false;
+                        closeGestionConfirmModal();
+                    });
+                });
+            }
             window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', function() {
                 if ((localStorage.getItem(THEME_MODE_KEY) || 'system') !== 'system') return;
                 applyResolvedTheme();
@@ -1517,9 +1727,13 @@
                     var n8n = data.n8n || {};
                     if (!n8n.available) {
                         if (bodyEl) bodyEl.style.display = 'none';
+                        var n8eHide = document.getElementById('n8n-stats-empty');
+                        var n8gHide = document.getElementById('n8n-charts-grid');
+                        if (n8eHide) n8eHide.style.display = 'none';
+                        if (n8gHide) n8gHide.style.display = '';
                         if (errEl) {
                             errEl.style.display = 'block';
-                            errEl.textContent = n8n.error || 'No se pudo leer n8n.';
+                            errEl.innerHTML = '<p class="empty-state-title">No hay datos de n8n</p><p class="empty-state-sub">' + (n8n.error || 'No se pudo leer n8n. Revisa N8N_POSTGRES_DSN y conectividad.') + '</p>';
                         }
                     } else {
                         if (errEl) errEl.style.display = 'none';
@@ -1531,6 +1745,17 @@
                         setKpi('kpi-n8n-failed', String(nt.failedProdExecutions != null ? nt.failedProdExecutions : '0'));
 
                         var nu = n8n.users || [];
+                        var n8nEmptyEl = document.getElementById('n8n-stats-empty');
+                        var n8nChartsGrid = document.getElementById('n8n-charts-grid');
+                        if (n8nEmptyEl && n8nChartsGrid) {
+                            if (!nu.length) {
+                                n8nEmptyEl.style.display = 'block';
+                                n8nChartsGrid.style.display = 'none';
+                            } else {
+                                n8nEmptyEl.style.display = 'none';
+                                n8nChartsGrid.style.display = '';
+                            }
+                        }
                         var nlabels = nu.map(function(u) { return shortChartLabel(u.email, 22); });
                         var execData = nu.map(function(u) { return Number(u.prodExecutions) || 0; });
                         var wfData = nu.map(function(u) { return Number(u.workflowsAccesibles) || 0; });
@@ -1610,9 +1835,13 @@
                     if (!lc.available) {
                         if (lcBody) lcBody.style.display = 'none';
                         if (lcMsg) lcMsg.style.display = 'none';
+                        var lceH = document.getElementById('lc-stats-empty');
+                        var lcgH = document.getElementById('lc-charts-grid');
+                        if (lceH) lceH.style.display = 'none';
+                        if (lcgH) lcgH.style.display = '';
                         if (lcErr) {
                             lcErr.style.display = 'block';
-                            lcErr.textContent = lc.error || lc.message || 'MongoDB no responde.';
+                            lcErr.innerHTML = '<p class="empty-state-title">LibreChat no disponible</p><p class="empty-state-sub">' + (lc.error || lc.message || 'MongoDB no responde.') + '</p>';
                         }
                     } else {
                         if (lcErr) lcErr.style.display = 'none';
@@ -1631,6 +1860,17 @@
                         setKpi('kpi-lc-msg', String(lt.totalMessages != null ? lt.totalMessages : '0'));
 
                         var lu = lc.users || [];
+                        var lcEmptyEl = document.getElementById('lc-stats-empty');
+                        var lcChartsGrid = document.getElementById('lc-charts-grid');
+                        if (lcEmptyEl && lcChartsGrid) {
+                            if (!lu.length) {
+                                lcEmptyEl.style.display = 'block';
+                                lcChartsGrid.style.display = 'none';
+                            } else {
+                                lcEmptyEl.style.display = 'none';
+                                lcChartsGrid.style.display = '';
+                            }
+                        }
                         var llabels = lu.map(function(u) { return shortChartLabel(u.email || u.name || '—', 22); });
                         var convSeries = lu.map(function(u) { return Number(u.totalConversations) || 0; });
                         var msgSeries = lu.map(function(u) { return Number(u.totalMessages) || 0; });
@@ -1786,29 +2026,53 @@
             if (!tr) {
                 return;
             }
-            tr.innerHTML = `
-                <th>Email</th>
-                <th>Nombre</th>
-                <th>Rol</th>
-                <th>Empresa</th>
-                <th>Acciones</th>
-            `;
+            if (currentTab === 'n8n') {
+                tr.innerHTML = `
+                    <th>Email</th>
+                    <th>Nombre</th>
+                    <th>Apellido(s)</th>
+                    <th>Rol</th>
+                    <th>Empresa</th>
+                    <th>Acciones</th>
+                `;
+                const tbl = document.querySelector('#users-table table');
+                if (tbl) tbl.classList.add('gestion-table-n8n');
+            } else {
+                tr.innerHTML = `
+                    <th>Email</th>
+                    <th>Nombre</th>
+                    <th>Rol</th>
+                    <th>Empresa</th>
+                    <th>Acciones</th>
+                `;
+                const tbl = document.querySelector('#users-table table');
+                if (tbl) tbl.classList.remove('gestion-table-n8n');
+            }
         }
 
         function generateUsersHTML(users, tab) {
+            const colspan = tab === 'n8n' ? 6 : 5;
             if (!users || users.length === 0) {
+                const icon = tab === 'n8n' ? '👤' : '💬';
+                const title = tab === 'n8n' ? 'Aún no hay usuarios en n8n' : 'No hay cuentas de LibreChat';
+                const sub = tab === 'n8n'
+                    ? 'Crea invitaciones con <strong>Nuevo usuario</strong> o revisa la instancia de n8n.'
+                    : 'Usa <strong>Nuevo usuario</strong> en esta pestaña para añadir la primera cuenta.';
                 return `
                     <tr>
-                        <td colspan="5" class="empty-state">
-                            <p>No hay usuarios registrados.</p>
-                            <p>Pulsa <strong>Nuevo usuario</strong> arriba a la derecha para dar de alta cuentas.</p>
+                        <td colspan="${colspan}" class="empty-state empty-state-soft">
+                            <div class="empty-state-icon" aria-hidden="true">${icon}</div>
+                            <p class="empty-state-title">${title}</p>
+                            <p class="empty-state-sub">${sub}</p>
                         </td>
                     </tr>
                 `;
             }
 
             return users.map(u => {
-                const name = u.firstName || u.name || '-';
+                const fn = (u.firstName && String(u.firstName).trim()) ? String(u.firstName).trim() : '—';
+                const ln = (u.lastName && String(u.lastName).trim()) ? String(u.lastName).trim() : '—';
+                const lcName = u.name || u.firstName || '—';
                 const isPending = u.isPending === true;
                 const roleClass = getRoleClass(u.role);
                 const userId = u.id || u.email;
@@ -1823,17 +2087,24 @@
                         </button>
                     `;
                 }
-                
-                // Botón Editar solo para LibreChat
-                if (tab === 'librechat') {
+
+                if (tab === 'n8n') {
                     actions += `
-                        <button type="button" class="btn-small btn-edit" 
-                                onclick="openEditModal('${tab}', '${escapeHtml(userId)}', '${escapeHtml(u.email)}', '${escapeHtml(name)}', '${escapeHtml(u.role)}', '${escapeHtml(co)}')">
-                            Editar
-                        </button>
+                        <button type="button" class="btn-small btn-edit" data-tab="n8n"
+                            data-id="${escapeHtml(userId)}" data-email="${escapeHtml(u.email)}"
+                            data-firstname="${escapeHtml(u.firstName || '')}" data-lastname="${escapeHtml(u.lastName || '')}"
+                            data-role="${escapeHtml(u.role || '')}" data-company="${escapeHtml(co)}"
+                            onclick="openEditModalFromDataset(this)">Editar</button>
+                    `;
+                } else {
+                    actions += `
+                        <button type="button" class="btn-small btn-edit" data-tab="librechat"
+                            data-id="${escapeHtml(userId)}" data-email="${escapeHtml(u.email)}"
+                            data-name="${escapeHtml(u.name || '')}" data-role="${escapeHtml(u.role || '')}" data-company="${escapeHtml(co)}"
+                            onclick="openEditModalFromDataset(this)">Editar</button>
                     `;
                 }
-                
+
                 actions += `
                     <button type="button" class="btn-small btn-delete" 
                             data-tab="${tab}" data-id="${escapeHtml(userId)}" data-email="${escapeHtml(u.email)}"
@@ -1842,10 +2113,26 @@
                     </button>
                 `;
 
+                if (tab === 'n8n') {
+                    return `
+                    <tr>
+                        <td>${escapeHtml(u.email)}</td>
+                        <td>${escapeHtml(fn)}</td>
+                        <td>${escapeHtml(ln)}</td>
+                        <td>
+                            <span class="role-badge ${roleClass}">
+                                ${escapeHtml(u.role)}${isPending ? ' (pendiente)' : ''}
+                            </span>
+                        </td>
+                        <td>${escapeHtml(co)}</td>
+                        <td>${actions}</td>
+                    </tr>
+                `;
+                }
                 return `
                     <tr>
                         <td>${escapeHtml(u.email)}</td>
-                        <td>${escapeHtml(name)}</td>
+                        <td>${escapeHtml(lcName)}</td>
                         <td>
                             <span class="role-badge ${roleClass}">
                                 ${escapeHtml(u.role)}${isPending ? ' (pendiente)' : ''}
@@ -1943,68 +2230,119 @@
             const tab = btn.dataset.tab;
             const userId = btn.dataset.id;
             const email = btn.dataset.email;
-
-            if (!confirm('¿Estás seguro de eliminar al usuario ' + email + '?')) {
-                return;
-            }
-
-            btn.disabled = true;
-            btn.textContent = '...';
-
-            const endpoint = tab === 'n8n' ? '/admin/n8n/users' : '/admin/librechat/users';
-            const body = tab === 'n8n' ? JSON.stringify({ id: userId }) : JSON.stringify({ email: email });
-
-            fetch(endpoint, {
-                method: 'DELETE',
-                headers: { 'Content-Type': 'application/json' },
-                body: body,
-                credentials: 'same-origin'
-            })
-            .then(response => {
-                if (!response.ok) {
-                    return response.json().then(err => { throw new Error(err.error || 'Error al eliminar'); });
+            openGestionConfirmModal({
+                title: 'Eliminar usuario',
+                message: 'Vas a eliminar la cuenta «' + email + '». Esta acción no se puede deshacer.',
+                confirmText: 'Eliminar usuario',
+                onConfirm: function() {
+                    btn.disabled = true;
+                    btn.textContent = '...';
+                    const endpoint = tab === 'n8n' ? '/admin/n8n/users' : '/admin/librechat/users';
+                    const body = tab === 'n8n' ? JSON.stringify({ id: userId }) : JSON.stringify({ email: email });
+                    return fetch(endpoint, {
+                        method: 'DELETE',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: body,
+                        credentials: 'same-origin'
+                    })
+                    .then(function(response) {
+                        if (!response.ok) {
+                            return response.json().then(function(err) { throw new Error(err.error || 'Error al eliminar'); });
+                        }
+                        return response.json();
+                    })
+                    .then(function() {
+                        showToast('Usuario eliminado', 'success');
+                        removeFromLocalStorage(tab, email);
+                    })
+                    .catch(function(error) {
+                        showToast('Error: ' + error.message, 'error');
+                        btn.disabled = false;
+                        btn.textContent = 'Eliminar';
+                    });
                 }
-                return response.json();
-            })
-            .then(data => {
-                showToast('Usuario eliminado', 'success');
-                removeFromLocalStorage(tab, email);
-            })
-            .catch(error => {
-                showToast('Error: ' + error.message, 'error');
-                btn.disabled = false;
-                btn.textContent = 'Eliminar';
             });
         }
 
-        function openEditModal(tab, userId, email, name, role, company) {
+        function openEditModalFromDataset(btn) {
+            var tab = btn.getAttribute('data-tab');
             if (tab === 'n8n') {
-                showToast('En n8n no se edita desde aquí; borra e invita de nuevo.', 'error');
-                return;
+                openEditModal('n8n',
+                    btn.getAttribute('data-id'),
+                    btn.getAttribute('data-email'),
+                    btn.getAttribute('data-firstname') || '',
+                    btn.getAttribute('data-lastname') || '',
+                    btn.getAttribute('data-role') || 'global:member',
+                    btn.getAttribute('data-company') || ''
+                );
+            } else {
+                openEditModal('librechat',
+                    btn.getAttribute('data-id'),
+                    btn.getAttribute('data-email'),
+                    btn.getAttribute('data-name') || '',
+                    '',
+                    btn.getAttribute('data-role') || 'USER',
+                    btn.getAttribute('data-company') || ''
+                );
             }
+        }
 
-            const cw = document.getElementById('edit-user-company-wrap');
-            if (cw) cw.style.display = 'block';
-            
-            document.getElementById('edit-user-id').value = userId;
+        function openEditModal(tab, userId, email, nameOrFirst, lastName, role, company) {
+            var tEl = document.getElementById('edit-modal-title');
+            if (tEl) tEl.textContent = tab === 'n8n' ? 'Editar usuario n8n' : 'Editar usuario LibreChat';
+
+            document.getElementById('edit-user-id').value = userId || '';
             document.getElementById('edit-user-tab').value = tab;
-            document.getElementById('edit-user-email').value = email;
-            document.getElementById('edit-user-name').value = name;
+            document.getElementById('edit-user-email').value = email || '';
+
+            var lcWrap = document.getElementById('edit-name-lc-wrap');
+            var n8nWrap = document.getElementById('edit-name-n8n-wrap');
+            var lcPw = document.getElementById('edit-lc-password-wrap');
+            var n8nPw = document.getElementById('edit-n8n-password-actions');
+            var cw = document.getElementById('edit-user-company-wrap');
+
+            if (tab === 'n8n') {
+                if (lcWrap) lcWrap.style.display = 'none';
+                if (n8nWrap) n8nWrap.style.display = 'block';
+                if (lcPw) lcPw.style.display = 'none';
+                if (n8nPw) n8nPw.style.display = 'block';
+                if (cw) cw.style.display = 'none';
+                document.getElementById('edit-n8n-first').value = nameOrFirst || '';
+                document.getElementById('edit-n8n-last').value = lastName || '';
+            } else {
+                if (lcWrap) lcWrap.style.display = 'block';
+                if (n8nWrap) n8nWrap.style.display = 'none';
+                if (lcPw) lcPw.style.display = 'block';
+                if (n8nPw) n8nPw.style.display = 'none';
+                if (cw) cw.style.display = 'block';
+                document.getElementById('edit-user-name').value = nameOrFirst || '';
+                var p1 = document.getElementById('edit-lc-password');
+                var p2 = document.getElementById('edit-lc-password2');
+                if (p1) p1.value = '';
+                if (p2) p2.value = '';
+            }
 
             const roleSelect = document.getElementById('edit-user-role');
             roleSelect.innerHTML = '';
+            if (tab === 'n8n') {
+                var n8roles = ['global:member', 'global:admin', 'global:owner'];
+                n8roles.forEach(function(rv) {
+                    roleSelect.innerHTML += '<option value="' + rv + '"' + (role === rv ? ' selected' : '') + '>' + rv + '</option>';
+                });
+            } else {
+                roleSelect.innerHTML =
+                    '<option value="USER"' + (role === 'USER' ? ' selected' : '') + '>USER</option>' +
+                    '<option value="ADMIN"' + (role === 'ADMIN' ? ' selected' : '') + '>ADMIN</option>';
+            }
 
-            roleSelect.innerHTML = `
-                <option value="USER" ${role === 'USER' ? 'selected' : ''}>USER</option>
-                <option value="ADMIN" ${role === 'ADMIN' ? 'selected' : ''}>ADMIN</option>
-            `;
-
-            fillCompanySelects();
-            const cs = document.getElementById('edit-user-company');
-            if (cs) {
-                const d = company || gestionMeta().defaultCompany;
-                if (Array.from(cs.options).some(function(o) { return o.value === d; })) {
-                    cs.value = d;
+            if (tab === 'librechat') {
+                fillCompanySelects();
+                const cs = document.getElementById('edit-user-company');
+                if (cs) {
+                    const d = company || gestionMeta().defaultCompany;
+                    if (Array.from(cs.options).some(function(o) { return o.value === d; })) {
+                        cs.value = d;
+                    }
                 }
             }
 
@@ -2019,19 +2357,43 @@
             const userId = document.getElementById('edit-user-id').value;
             const tab = document.getElementById('edit-user-tab').value;
             const email = document.getElementById('edit-user-email').value;
-            const name = document.getElementById('edit-user-name').value;
             const role = document.getElementById('edit-user-role').value;
             const companyEl = document.getElementById('edit-user-company');
             const company = companyEl ? companyEl.value : '';
 
-            const saveBtn = document.querySelector('.modal-save');
+            const saveBtn = document.querySelector('#edit-modal .modal-save');
             saveBtn.disabled = true;
             saveBtn.textContent = '...';
 
+            var body;
+            if (tab === 'n8n') {
+                const fn = document.getElementById('edit-n8n-first').value;
+                const ln = document.getElementById('edit-n8n-last').value;
+                body = JSON.stringify({ id: userId, firstName: fn, lastName: ln, role: role });
+            } else {
+                const name = document.getElementById('edit-user-name').value;
+                const p1 = document.getElementById('edit-lc-password').value;
+                const p2 = document.getElementById('edit-lc-password2').value;
+                if (p1 || p2) {
+                    if (p1 !== p2) {
+                        showToast('Las contraseñas no coinciden', 'error');
+                        saveBtn.disabled = false;
+                        saveBtn.textContent = 'Guardar';
+                        return;
+                    }
+                    if (p1.length < 8) {
+                        showToast('La contraseña debe tener al menos 8 caracteres', 'error');
+                        saveBtn.disabled = false;
+                        saveBtn.textContent = 'Guardar';
+                        return;
+                    }
+                }
+                var payload = { email: email, name: name, role: role, company: company };
+                if (p1) payload.password = p1;
+                body = JSON.stringify(payload);
+            }
+
             const endpoint = tab === 'n8n' ? '/admin/n8n/users' : '/admin/librechat/users';
-            const body = tab === 'n8n' 
-                ? JSON.stringify({ id: userId, firstName: name, role: role })
-                : JSON.stringify({ email: email, name: name, role: role, company: company });
 
             fetch(endpoint, {
                 method: 'PUT',
@@ -2039,20 +2401,35 @@
                 body: body,
                 credentials: 'same-origin'
             })
-            .then(response => {
+            .then(function(response) {
                 if (!response.ok) {
-                    return response.json().then(err => { throw new Error(err.error || 'Error al guardar'); });
+                    return response.json().then(function(err) { throw new Error(err.error || 'Error al guardar'); });
                 }
                 return response.json();
             })
-            .then(data => {
+            .then(function() {
                 showToast('Usuario actualizado', 'success');
                 closeEditModal();
                 saveBtn.disabled = false;
                 saveBtn.textContent = 'Guardar';
-                updateUserInLocalStorage(tab, { email: email, name: name, role: role, company: company });
+                if (tab === 'n8n') {
+                    updateUserInLocalStorage(tab, {
+                        email: email,
+                        firstName: document.getElementById('edit-n8n-first').value,
+                        lastName: document.getElementById('edit-n8n-last').value,
+                        role: role,
+                        company: company
+                    });
+                } else {
+                    updateUserInLocalStorage(tab, {
+                        email: email,
+                        name: document.getElementById('edit-user-name').value,
+                        role: role,
+                        company: company
+                    });
+                }
             })
-            .catch(error => {
+            .catch(function(error) {
                 showToast('Error: ' + error.message, 'error');
                 saveBtn.disabled = false;
                 saveBtn.textContent = 'Guardar';

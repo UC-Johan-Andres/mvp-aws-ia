@@ -128,18 +128,28 @@
             if (typeof showToast === 'function') showToast('Error de red', 'error');
         }
     };
-    window.empresaDelete = async function (name) {
-        if (!window.confirm('¿Eliminar la empresa «' + name + '»? No debe tener usuarios n8n/LibreChat asociados.')) return;
-        try {
-            var r = await fetch('/gestion/api/companies?name=' + encodeURIComponent(name), { method: 'DELETE', headers: { 'Accept': 'application/json' } });
-            var j = await r.json().catch(function () { return {}; });
-            if (!r.ok) { if (typeof showToast === 'function') showToast(j.error || 'No se puede eliminar', 'error'); return; }
-            if (typeof refreshGestionMeta === 'function') await refreshGestionMeta();
-            if (typeof showToast === 'function') showToast('Empresa eliminada', 'success');
-            htmx.ajax('GET', '/gestion/content?tab=empresas', { target: '#main-content', swap: 'innerHTML' });
-        } catch (e) {
-            if (typeof showToast === 'function') showToast('Error de red', 'error');
-        }
+    window.empresaDelete = function (name) {
+        if (typeof openGestionConfirmModal !== 'function') return;
+        openGestionConfirmModal({
+            title: 'Eliminar empresa',
+            message: 'Se eliminará «' + name + '» del registro. No debe quedar ningún usuario de n8n (almacén local) ni de LibreChat asociado a esta empresa.',
+            confirmText: 'Eliminar empresa',
+            onConfirm: function () {
+                return fetch('/gestion/api/companies?name=' + encodeURIComponent(name), { method: 'DELETE', headers: { 'Accept': 'application/json' } })
+                    .then(function (r) { return r.json().catch(function () { return {}; }).then(function (j) { return { ok: r.ok, j: j }; }); })
+                    .then(function (x) {
+                        if (!x.ok) throw new Error(x.j.error || 'No se puede eliminar');
+                        if (typeof refreshGestionMeta === 'function') return refreshGestionMeta();
+                    })
+                    .then(function () {
+                        if (typeof showToast === 'function') showToast('Empresa eliminada', 'success');
+                        htmx.ajax('GET', '/gestion/content?tab=empresas', { target: '#main-content', swap: 'innerHTML' });
+                    })
+                    .catch(function (e) {
+                        if (typeof showToast === 'function') showToast(e.message || 'Error', 'error');
+                    });
+            }
+        });
     };
 })();
 </script>
@@ -154,31 +164,56 @@
     {{end}}
 
     <div id="users-table" class="table-responsive-wrap">
-        <table class="data-table">
+        <table class="data-table {{if eq .Tab "n8n"}}gestion-table-n8n{{end}}">
             <thead>
                 <tr>
+                    {{if eq .Tab "n8n"}}
+                    <th>Email</th>
+                    <th>Nombre</th>
+                    <th>Apellido(s)</th>
+                    <th>Rol</th>
+                    <th>Empresa</th>
+                    <th>Acciones</th>
+                    {{else}}
                     <th>Email</th>
                     <th>Nombre</th>
                     <th>Rol</th>
                     <th>Empresa</th>
                     <th>Acciones</th>
+                    {{end}}
                 </tr>
             </thead>
             <tbody id="users-tbody">
                 {{$tab := .Tab}}
                 {{$users := .Users}}
                 {{if eq (len $users) 0}}
+                {{if eq $tab "n8n"}}
                 <tr>
-                    <td colspan="5" class="empty-state">
-                        <p>No hay usuarios registrados.</p>
-                        <p>Pulsa <strong>Nuevo usuario</strong> arriba a la derecha para dar de alta cuentas.</p>
+                    <td colspan="6" class="empty-state empty-state-soft">
+                        <div class="empty-state-icon" aria-hidden="true">👤</div>
+                        <p class="empty-state-title">Aún no hay usuarios en n8n</p>
+                        <p class="empty-state-sub">Crea invitaciones con <strong>Nuevo usuario</strong> o revisa la consola de n8n.</p>
                     </td>
                 </tr>
+                {{else}}
+                <tr>
+                    <td colspan="5" class="empty-state empty-state-soft">
+                        <div class="empty-state-icon" aria-hidden="true">💬</div>
+                        <p class="empty-state-title">No hay cuentas de LibreChat</p>
+                        <p class="empty-state-sub">Usa <strong>Nuevo usuario</strong> en esta pestaña para dar de alta el primer acceso.</p>
+                    </td>
+                </tr>
+                {{end}}
                 {{else}}
                 {{range $users}}
                 <tr>
                     <td>{{.Email}}</td>
+                    {{if eq $tab "n8n"}}
+                    <td>{{if .FirstName}}{{.FirstName}}{{else}}—{{end}}</td>
+                    <td>{{if .LastName}}{{.LastName}}{{else}}—{{end}}</td>
+                    {{else}}
                     <td>{{.Name}}</td>
+                    {{end}}
                     <td>
                         <span class="role-badge {{if or (eq .Role "ADMIN") (eq .Role "global:admin") (eq .Role "global:owner")}}role-admin{{else}}role-user{{end}}">
                             {{.Role}}{{if .IsPending}} (pendiente){{end}}
@@ -192,11 +227,18 @@
                             Invitar
                         </button>
                         {{end}}
+                        {{if eq $tab "n8n"}}
+                        <button type="button" class="btn-small btn-edit"
+                                data-tab="n8n" data-id="{{.ID}}" data-email="{{.Email}}"
+                                data-firstname="{{.FirstName}}" data-lastname="{{.LastName}}"
+                                data-role="{{.Role}}" data-company="{{.Company}}"
+                                onclick="openEditModalFromDataset(this)">Editar</button>
+                        {{end}}
                         {{if eq $tab "librechat"}}
                         <button type="button" class="btn-small btn-edit"
-                                onclick="openEditModal('{{$tab}}', '{{.ID}}', '{{.Email}}', '{{.Name}}', '{{.Role}}', '{{.Company}}')">
-                            Editar
-                        </button>
+                                data-tab="librechat" data-id="{{.ID}}" data-email="{{.Email}}"
+                                data-name="{{.Name}}" data-role="{{.Role}}" data-company="{{.Company}}"
+                                onclick="openEditModalFromDataset(this)">Editar</button>
                         {{end}}
                         <button type="button" class="btn-small btn-delete"
                                 data-tab="{{$tab}}" data-id="{{.ID}}" data-email="{{.Email}}"
