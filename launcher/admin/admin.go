@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"html"
+	"html/template"
 	"io"
 	"log"
 	"net/http"
@@ -183,7 +184,7 @@ func getLibreChatUsers() ([]LibreChatUser, error) {
 		return nil, err
 	}
 
-	defCo := config.GestionDefaultCompany()
+	defCo := GestionDefaultCompany()
 	result := make([]LibreChatUser, 0, len(users))
 	for _, u := range users {
 		co := strings.TrimSpace(u.Company)
@@ -265,20 +266,21 @@ type LibreChatUser struct {
 func gestionTab(r *http.Request) string {
 	tab := r.URL.Query().Get("tab")
 	if tab != "" {
-		if tab != "n8n" && tab != "librechat" {
+		switch tab {
+		case "n8n", "librechat", "empresas":
+			return tab
+		default:
 			return "n8n"
 		}
-		return tab
 	}
 	_ = r.ParseForm()
 	tab = r.FormValue("tab")
-	if tab != "n8n" && tab != "librechat" {
+	switch tab {
+	case "n8n", "librechat":
+		return tab
+	default:
 		return "n8n"
 	}
-	if tab == "" {
-		return "n8n"
-	}
-	return tab
 }
 
 // gestionUsersForTab loads users for the gestión table.
@@ -338,21 +340,39 @@ func gestionUsersForTab(tab string) ([]GestionUser, error) {
 
 // HandleGestion renders the users management dashboard page shell.
 func HandleGestion(w http.ResponseWriter, r *http.Request) {
-	tab := r.URL.Query().Get("tab")
+	tab := strings.TrimSpace(r.URL.Query().Get("tab"))
 	if tab == "" {
 		tab = "n8n"
 	}
-	if tab != "n8n" && tab != "librechat" {
+	switch tab {
+	case "n8n", "librechat", "empresas", "estadisticas":
+	default:
 		tab = "n8n"
 	}
-
-	ui.RenderGestion(w, tab)
+	meta, err := json.Marshal(map[string]any{
+		"companies":      GestionCompaniesList(),
+		"defaultCompany": GestionDefaultCompany(),
+	})
+	metaJS := template.JS(`{"companies":["default"],"defaultCompany":"default"}`)
+	if err == nil {
+		metaJS = template.JS(meta)
+	}
+	ui.RenderGestion(w, tab, metaJS)
 }
 
 // HandleGestionContent renders the inner content (table + form) for HTMX.
 // Users are fetched server-side and passed to the template.
 func HandleGestionContent(w http.ResponseWriter, r *http.Request) {
 	tab := gestionTab(r)
+	if tab == "empresas" {
+		ui.RenderGestionContentData(w, ui.GestionData{
+			Tab:            tab,
+			Companies:      GestionCompaniesList(),
+			DefaultCompany: GestionDefaultCompany(),
+			Users:          []GestionUser{},
+		})
+		return
+	}
 	users, err := gestionUsersForTab(tab)
 	if err != nil {
 		prefix := "Error al obtener usuarios de LibreChat: "
@@ -468,7 +488,7 @@ func createUsersFromJSON(tab string, usersJSON string) ([]byte, error) {
 	if tab == "n8n" {
 		for _, u := range rawUsers {
 			co := strings.TrimSpace(u["company"])
-			if co != "" && !config.IsValidGestionCompany(co) {
+			if co != "" && !IsValidGestionCompany(co) {
 				return nil, fmt.Errorf("empresa no válida para el email %q", u["email"])
 			}
 		}
@@ -588,9 +608,9 @@ func createUsersFromJSON(tab string, usersJSON string) ([]byte, error) {
 
 		co := strings.TrimSpace(u["company"])
 		if co == "" {
-			co = config.GestionDefaultCompany()
+			co = GestionDefaultCompany()
 		}
-		if !config.IsValidGestionCompany(co) {
+		if !IsValidGestionCompany(co) {
 			results = append(results, result{Email: email, Created: false, Error: "empresa no válida"})
 			continue
 		}
@@ -742,7 +762,7 @@ func fetchLibreChatUsersStruct() ([]GestionUser, error) {
 		return nil, err
 	}
 
-	defCo := config.GestionDefaultCompany()
+	defCo := GestionDefaultCompany()
 	users := make([]GestionUser, 0, len(lcUsers))
 	for _, u := range lcUsers {
 		co := strings.TrimSpace(u.Company)
@@ -782,6 +802,10 @@ func HandleGestionUsersRows(w http.ResponseWriter, r *http.Request) {
 	tab := r.URL.Query().Get("tab")
 	if tab == "" {
 		tab = "n8n"
+	}
+	if tab == "empresas" || tab == "estadisticas" {
+		w.WriteHeader(http.StatusNoContent)
+		return
 	}
 
 	if tab == "n8n" {
@@ -963,9 +987,9 @@ func createN8NUsersFromForm(r *http.Request) ([]byte, error) {
 
 	company := strings.TrimSpace(r.FormValue("company"))
 	if company == "" {
-		company = config.GestionDefaultCompany()
+		company = GestionDefaultCompany()
 	}
-	if !config.IsValidGestionCompany(company) {
+	if !IsValidGestionCompany(company) {
 		return nil, fmt.Errorf("empresa no válida")
 	}
 	var emailsOK []string
@@ -1065,9 +1089,9 @@ func createLibreChatUsersFromForm(r *http.Request) ([]byte, error) {
 
 		co := strings.TrimSpace(r.FormValue("company"))
 		if co == "" {
-			co = config.GestionDefaultCompany()
+			co = GestionDefaultCompany()
 		}
-		if !config.IsValidGestionCompany(co) {
+		if !IsValidGestionCompany(co) {
 			results = append(results, result{Email: req.Email, Created: false, Error: "empresa no válida"})
 			continue
 		}

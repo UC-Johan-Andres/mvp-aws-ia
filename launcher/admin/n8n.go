@@ -105,7 +105,7 @@ func createN8NUsers(w http.ResponseWriter, r *http.Request) {
 	}
 	for _, req := range requests {
 		c := strings.TrimSpace(req.Company)
-		if c != "" && !config.IsValidGestionCompany(c) {
+		if c != "" && !IsValidGestionCompany(c) {
 			jsonError(w, fmt.Sprintf("empresa no válida: %q", req.Company), http.StatusBadRequest)
 			return
 		}

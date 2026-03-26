@@ -1002,7 +1002,7 @@
 <body>
     <script>window.__GESTION_META = {{.GestionMetaJSON}};</script>
     <div hx-ext="sse" sse-connect="/gestion/stream" sse-swap="init,users_updated" id="sse-container"></div>
-    <div class="container" id="app-container">
+    <div class="container" id="app-container" data-initial-tab="{{.Tab}}">
         <header class="header">
             <div class="header-brand">
                 <div class="brand-mark" aria-hidden="true"></div>
@@ -1027,21 +1027,31 @@
 
         <div class="card card-elevated">
             <div class="tabs" role="tablist" aria-label="Secciones">
-                <button type="button" class="tab active" data-tab="n8n" onclick="switchTab('n8n')" role="tab" aria-selected="true">
+                <button type="button" class="tab {{if eq .Tab "n8n"}}active{{end}}" data-tab="n8n" onclick="switchTab('n8n')" role="tab" aria-selected="{{if eq .Tab "n8n"}}true{{else}}false{{end}}">
                     <span class="tab-icon tab-icon-n8n" aria-hidden="true"></span>
                     n8n
                 </button>
-                <button type="button" class="tab" data-tab="librechat" onclick="switchTab('librechat')" role="tab" aria-selected="false">
+                <button type="button" class="tab {{if eq .Tab "librechat"}}active{{end}}" data-tab="librechat" onclick="switchTab('librechat')" role="tab" aria-selected="{{if eq .Tab "librechat"}}true{{else}}false{{end}}">
                     <span class="tab-icon tab-icon-chat" aria-hidden="true"></span>
                     LibreChat
                 </button>
-                <button type="button" class="tab" data-tab="estadisticas" onclick="switchTab('estadisticas')" role="tab" aria-selected="false">
+                <button type="button" class="tab {{if eq .Tab "empresas"}}active{{end}}" data-tab="empresas" onclick="switchTab('empresas')" role="tab" aria-selected="{{if eq .Tab "empresas"}}true{{else}}false{{end}}">
+                    <span class="tab-icon tab-icon-chart" aria-hidden="true" style="opacity:0.85;"></span>
+                    Empresas
+                </button>
+                <button type="button" class="tab {{if eq .Tab "estadisticas"}}active{{end}}" data-tab="estadisticas" onclick="switchTab('estadisticas')" role="tab" aria-selected="{{if eq .Tab "estadisticas"}}true{{else}}false{{end}}">
                     <span class="tab-icon tab-icon-chart" aria-hidden="true"></span>
                     Estadísticas
                 </button>
             </div>
 
-            <div id="main-content" hx-get="/gestion/content?tab=n8n" hx-trigger="load" hx-swap="innerHTML">
+            <div id="main-content"
+                 {{if eq .Tab "estadisticas"}}
+                 hx-get="/gestion/charts-content"
+                 {{else}}
+                 hx-get="/gestion/content?tab={{.Tab}}"
+                 {{end}}
+                 hx-trigger="load" hx-swap="innerHTML">
             </div>
         </div>
 
@@ -1169,6 +1179,18 @@
         let currentTab = 'n8n';
         let isInitialized = false;
 
+        async function refreshGestionMeta() {
+            try {
+                var r = await fetch('/gestion/api/companies', { headers: { 'Accept': 'application/json' } });
+                if (!r.ok) return;
+                var j = await r.json();
+                if (j.companies && j.defaultCompany !== undefined) {
+                    window.__GESTION_META = { companies: j.companies, defaultCompany: j.defaultCompany };
+                    if (typeof fillCompanySelects === 'function') fillCompanySelects();
+                }
+            } catch (e) { /* ignore */ }
+        }
+
         var THEME_MODE_KEY = 'gestion-color-mode';
         var THEME_MODES = ['system', 'light', 'dark'];
 
@@ -1262,6 +1284,17 @@
                 window.dispatchEvent(new CustomEvent('gestion-theme-change'));
             });
 
+            var shell = document.getElementById('app-container');
+            if (shell && shell.dataset.initialTab) {
+                currentTab = shell.dataset.initialTab;
+            }
+            var foot = document.getElementById('footer-service');
+            if (foot) {
+                if (currentTab === 'estadisticas') foot.textContent = 'Estadísticas';
+                else if (currentTab === 'empresas') foot.textContent = 'Empresas';
+                else foot.textContent = currentTab === 'n8n' ? 'Pestaña: n8n' : 'Pestaña: LibreChat';
+            }
+
             updateCreateUserButtonVisibility();
             fillCompanySelects();
 
@@ -1289,6 +1322,12 @@
             if (tab === 'estadisticas') {
                 footer.textContent = 'Estadísticas';
                 htmx.ajax('GET', '/gestion/charts-content', { target: '#main-content', swap: 'innerHTML' });
+                updateCreateUserButtonVisibility();
+                return;
+            }
+            if (tab === 'empresas') {
+                footer.textContent = 'Empresas';
+                htmx.ajax('GET', '/gestion/content?tab=empresas', { target: '#main-content', swap: 'innerHTML' });
                 updateCreateUserButtonVisibility();
                 return;
             }
@@ -1852,7 +1891,7 @@
                     // Prevenir el swap automático de HTMX
                     evt.preventDefault();
                     
-                    if (eventName === 'users_updated') {
+                    if (eventName === 'users_updated' && (currentTab === 'n8n' || currentTab === 'librechat')) {
                         showToast('Tabla actualizada', 'success');
                     }
                     

@@ -215,11 +215,11 @@ func attachLibreChatCompanies(ctx context.Context, db *mongo.Database, items []L
 		}
 		co := strings.TrimSpace(doc.Company)
 		if co == "" {
-			co = config.GestionDefaultCompany()
+			co = GestionDefaultCompany()
 		}
 		emailToCompany[k] = co
 	}
-	def := config.GestionDefaultCompany()
+	def := GestionDefaultCompany()
 	for i := range items {
 		k := normEmail(items[i].Email)
 		if c, ok := emailToCompany[k]; ok {

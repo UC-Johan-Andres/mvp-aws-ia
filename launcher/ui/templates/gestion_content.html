@@ -4,7 +4,146 @@
         font-variant-numeric: tabular-nums;
         white-space: nowrap;
     }
+    .empresas-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+    .empresas-actions .btn-small { margin: 0; }
+    .badge-default {
+        display: inline-block;
+        font-size: 0.72rem;
+        font-weight: 600;
+        padding: 2px 8px;
+        border-radius: 999px;
+        background: var(--primary-soft);
+        color: var(--primary);
+    }
+    .empresa-name-input {
+        padding: 10px 12px;
+        border-radius: var(--radius-sm);
+        border: 1px solid var(--border);
+        background: var(--surface);
+        color: var(--text);
+        font-family: inherit;
+        font-size: 0.9rem;
+    }
+    .empresa-name-input:focus {
+        outline: 2px solid var(--primary);
+        outline-offset: 1px;
+    }
 </style>
+{{if eq .Tab "empresas"}}
+<div class="card-body">
+    <h4 class="section-title">Empresas</h4>
+    <p class="form-hint" style="margin-bottom:16px;">
+        El registro aplica a <strong>n8n</strong> (asignación en almacén local) y a <strong>LibreChat</strong> (campo <code>company</code> en MongoDB).
+        La primera carga puede tomar valores de <code>GESTION_COMPANIES</code> si el JSON aún no tenía lista.
+    </p>
+    <div class="form-group" style="margin-bottom:20px;">
+        <label style="display:block;margin-bottom:8px;font-size:0.85rem;font-weight:600;color:var(--text-muted);">Nueva empresa</label>
+        <div class="empresas-actions">
+            <input type="text" id="empresa-new-name" class="empresa-name-input" placeholder="ej. acme-corp" maxlength="64" autocomplete="off" style="min-width:220px;">
+            <button type="button" class="btn-small btn-submit" onclick="empresaCreate()">Crear</button>
+        </div>
+        <p class="form-hint" style="margin-top:8px;">Letras, números, espacio, <code>-</code>, <code>_</code> y <code>.</code> (máx. 64).</p>
+    </div>
+    <div class="table-responsive-wrap">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Nombre</th>
+                    <th>Predeterminada</th>
+                    <th>Acciones</th>
+                </tr>
+            </thead>
+            <tbody>
+                {{$def := .DefaultCompany}}
+                {{range .Companies}}
+                <tr data-empresa="{{.}}">
+                    <td><strong>{{.}}</strong></td>
+                    <td>{{if eq . $def}}<span class="badge-default">Sí</span>{{else}}<span class="text-muted">—</span>{{end}}</td>
+                    <td>
+                        <div class="empresas-actions">
+                            {{if ne . $def}}
+                            <button type="button" class="btn-small btn-invite" data-empresa="{{.}}" onclick="empresaSetDefault(this.dataset.empresa)">Predeterminada</button>
+                            {{end}}
+                            <button type="button" class="btn-small btn-edit" data-empresa="{{.}}" onclick="empresaRenamePrompt(this.dataset.empresa)">Renombrar</button>
+                            <button type="button" class="btn-small btn-delete" data-empresa="{{.}}" onclick="empresaDelete(this.dataset.empresa)">Eliminar</button>
+                        </div>
+                    </td>
+                </tr>
+                {{else}}
+                <tr><td colspan="3" class="empty-state">No hay empresas registradas.</td></tr>
+                {{end}}
+            </tbody>
+        </table>
+    </div>
+</div>
+<script>
+(function () {
+    function csrfHeaders() {
+        var h = { 'Content-Type': 'application/json', 'Accept': 'application/json' };
+        var m = document.querySelector('meta[name="csrf-token"]');
+        if (m && m.content) h['X-CSRF-Token'] = m.content;
+        return h;
+    }
+    window.empresaCreate = async function () {
+        var inp = document.getElementById('empresa-new-name');
+        var name = inp && inp.value ? inp.value.trim() : '';
+        if (!name) { if (typeof showToast === 'function') showToast('Indica un nombre', 'error'); return; }
+        try {
+            var r = await fetch('/gestion/api/companies', { method: 'POST', headers: csrfHeaders(), body: JSON.stringify({ name: name }) });
+            var j = await r.json().catch(function () { return {}; });
+            if (!r.ok) { if (typeof showToast === 'function') showToast(j.error || 'Error al crear', 'error'); return; }
+            if (inp) inp.value = '';
+            if (typeof refreshGestionMeta === 'function') await refreshGestionMeta();
+            if (typeof showToast === 'function') showToast('Empresa creada', 'success');
+            htmx.ajax('GET', '/gestion/content?tab=empresas', { target: '#main-content', swap: 'innerHTML' });
+        } catch (e) {
+            if (typeof showToast === 'function') showToast('Error de red', 'error');
+        }
+    };
+    window.empresaSetDefault = async function (name) {
+        try {
+            var r = await fetch('/gestion/api/companies/default', { method: 'POST', headers: csrfHeaders(), body: JSON.stringify({ name: name }) });
+            var j = await r.json().catch(function () { return {}; });
+            if (!r.ok) { if (typeof showToast === 'function') showToast(j.error || 'Error', 'error'); return; }
+            if (typeof refreshGestionMeta === 'function') await refreshGestionMeta();
+            if (typeof showToast === 'function') showToast('Empresa predeterminada actualizada', 'success');
+            htmx.ajax('GET', '/gestion/content?tab=empresas', { target: '#main-content', swap: 'innerHTML' });
+        } catch (e) {
+            if (typeof showToast === 'function') showToast('Error de red', 'error');
+        }
+    };
+    window.empresaRenamePrompt = async function (oldName) {
+        var n = window.prompt('Nuevo nombre para «' + oldName + '»:', oldName);
+        if (n === null) return;
+        n = n.trim();
+        if (!n || n === oldName) return;
+        try {
+            var r = await fetch('/gestion/api/companies', { method: 'PUT', headers: csrfHeaders(), body: JSON.stringify({ oldName: oldName, newName: n }) });
+            var j = await r.json().catch(function () { return {}; });
+            if (!r.ok) { if (typeof showToast === 'function') showToast(j.error || 'Error al renombrar', 'error'); return; }
+            if (typeof refreshGestionMeta === 'function') await refreshGestionMeta();
+            if (typeof showToast === 'function') showToast('Empresa renombrada (LibreChat actualizado)', 'success');
+            htmx.ajax('GET', '/gestion/content?tab=empresas', { target: '#main-content', swap: 'innerHTML' });
+        } catch (e) {
+            if (typeof showToast === 'function') showToast('Error de red', 'error');
+        }
+    };
+    window.empresaDelete = async function (name) {
+        if (!window.confirm('¿Eliminar la empresa «' + name + '»? No debe tener usuarios n8n/LibreChat asociados.')) return;
+        try {
+            var r = await fetch('/gestion/api/companies?name=' + encodeURIComponent(name), { method: 'DELETE', headers: { 'Accept': 'application/json' } });
+            var j = await r.json().catch(function () { return {}; });
+            if (!r.ok) { if (typeof showToast === 'function') showToast(j.error || 'No se puede eliminar', 'error'); return; }
+            if (typeof refreshGestionMeta === 'function') await refreshGestionMeta();
+            if (typeof showToast === 'function') showToast('Empresa eliminada', 'success');
+            htmx.ajax('GET', '/gestion/content?tab=empresas', { target: '#main-content', swap: 'innerHTML' });
+        } catch (e) {
+            if (typeof showToast === 'function') showToast('Error de red', 'error');
+        }
+    };
+})();
+</script>
+{{else}}
 <div class="card-body">
     <h4 class="section-title">Usuarios</h4>
 
@@ -79,4 +218,5 @@
     if (typeof openInviteSentModal === 'function') openInviteSentModal();
 })();
 </script>
+{{end}}
 {{end}}

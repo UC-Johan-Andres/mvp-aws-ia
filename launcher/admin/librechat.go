@@ -76,7 +76,7 @@ func listLibreChatUsers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	defCo := config.GestionDefaultCompany()
+	defCo := GestionDefaultCompany()
 	result := make([]lcUserPublic, 0, len(users))
 	for _, u := range users {
 		co := strings.TrimSpace(u.Company)
@@ -183,9 +183,9 @@ func createLibreChatUsers(w http.ResponseWriter, r *http.Request) {
 
 		co := strings.TrimSpace(req.Company)
 		if co == "" {
-			co = config.GestionDefaultCompany()
+			co = GestionDefaultCompany()
 		}
-		if !config.IsValidGestionCompany(co) {
+		if !IsValidGestionCompany(co) {
 			results = append(results, result{Email: req.Email, Created: false, Error: "empresa no válida"})
 			continue
 		}
@@ -308,11 +308,11 @@ func updateLibreChatUser(w http.ResponseWriter, r *http.Request) {
 		update["role"] = reqBody.Role
 	}
 	if reqBody.Company != "" {
-		if !config.IsValidGestionCompany(reqBody.Company) {
+		if !IsValidGestionCompany(reqBody.Company) {
 			jsonError(w, "empresa no válida", http.StatusBadRequest)
 			return
 		}
-		canon, _ := config.CanonicalGestionCompany(reqBody.Company)
+		canon, _ := CanonicalGestionCompany(reqBody.Company)
 		update["company"] = canon
 	}
 

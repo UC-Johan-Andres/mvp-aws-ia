@@ -156,7 +156,7 @@ func HandleGestionStatsAPI(w http.ResponseWriter, r *http.Request) {
 	q := strings.TrimSpace(r.URL.Query().Get("company"))
 	showAll := q == "" || strings.EqualFold(q, "all")
 	if !showAll {
-		canon, ok := config.CanonicalGestionCompany(q)
+		canon, ok := CanonicalGestionCompany(q)
 		if !ok {
 			http.Error(w, "empresa inválida", http.StatusBadRequest)
 			return

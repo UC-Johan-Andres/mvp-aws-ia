@@ -5,15 +5,19 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
+	"unicode"
 
 	"launcher/config"
 )
 
 type companyStoreFile struct {
-	N8NByEmail map[string]string `json:"n8nByEmail"`
-	N8NByID    map[string]string `json:"n8nByID"`
+	Companies      []string          `json:"companies"`
+	DefaultCompany string            `json:"defaultCompany"`
+	N8NByEmail     map[string]string `json:"n8nByEmail"`
+	N8NByID        map[string]string `json:"n8nByID"`
 }
 
 var (
@@ -31,6 +35,72 @@ func ensureCompanyMaps() {
 	}
 }
 
+func parseCompaniesFromEnvRaw() []string {
+	raw := strings.TrimSpace(os.Getenv("GESTION_COMPANIES"))
+	if raw == "" {
+		raw = "default"
+	}
+	parts := strings.Split(raw, ",")
+	seen := make(map[string]bool)
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		s := strings.TrimSpace(p)
+		if s == "" {
+			continue
+		}
+		k := strings.ToLower(s)
+		if seen[k] {
+			continue
+		}
+		seen[k] = true
+		out = append(out, s)
+	}
+	if len(out) == 0 {
+		out = []string{"default"}
+	}
+	return out
+}
+
+func pickDefaultFromEnv(list []string) string {
+	d := strings.TrimSpace(os.Getenv("GESTION_DEFAULT_COMPANY"))
+	if d == "" {
+		return list[0]
+	}
+	for _, c := range list {
+		if strings.EqualFold(c, d) {
+			return c
+		}
+	}
+	return list[0]
+}
+
+func normalizeCompaniesFileLocked() {
+	if len(companyStoreData.Companies) == 0 {
+		companyStoreData.Companies = parseCompaniesFromEnvRaw()
+	}
+	companyStoreData.DefaultCompany = strings.TrimSpace(companyStoreData.DefaultCompany)
+	if companyStoreData.DefaultCompany == "" {
+		companyStoreData.DefaultCompany = pickDefaultFromEnv(companyStoreData.Companies)
+	}
+	if _, ok := indexCompanyInsensitive(companyStoreData.Companies, companyStoreData.DefaultCompany); !ok {
+		companyStoreData.DefaultCompany = companyStoreData.Companies[0]
+	}
+}
+
+// defaultCompanyUnlocked: usar solo con companyStoreMu ya bloqueado (RLock o Lock).
+func defaultCompanyUnlocked() string {
+	if len(companyStoreData.Companies) == 0 {
+		return "default"
+	}
+	d := strings.TrimSpace(companyStoreData.DefaultCompany)
+	for _, c := range companyStoreData.Companies {
+		if strings.EqualFold(c, d) {
+			return c
+		}
+	}
+	return companyStoreData.Companies[0]
+}
+
 func loadCompanyStoreFromDisk() error {
 	path := config.GestionCompanyStorePath()
 	companyStoreMu.Lock()
@@ -40,8 +110,10 @@ func loadCompanyStoreFromDisk() error {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
+			companyStoreData.Companies = parseCompaniesFromEnvRaw()
+			companyStoreData.DefaultCompany = pickDefaultFromEnv(companyStoreData.Companies)
 			companyStoreLoaded = true
-			return nil
+			return saveCompanyStoreLocked()
 		}
 		companyStoreLoaded = true
 		return err
@@ -53,8 +125,9 @@ func loadCompanyStoreFromDisk() error {
 	}
 	companyStoreData = f
 	ensureCompanyMaps()
+	normalizeCompaniesFileLocked()
 	companyStoreLoaded = true
-	return nil
+	return saveCompanyStoreLocked()
 }
 
 func saveCompanyStoreLocked() error {
@@ -66,6 +139,7 @@ func saveCompanyStoreLocked() error {
 		}
 	}
 	ensureCompanyMaps()
+	normalizeCompaniesFileLocked()
 	b, err := json.MarshalIndent(companyStoreData, "", "  ")
 	if err != nil {
 		return err
@@ -77,7 +151,7 @@ func saveCompanyStoreLocked() error {
 	return os.Rename(tmp, path)
 }
 
-// InitCompanyStore carga el JSON de empresas n8n (si existe).
+// InitCompanyStore carga o crea el JSON de empresas y asignaciones n8n.
 func InitCompanyStore() error {
 	return loadCompanyStoreFromDisk()
 }
@@ -86,12 +160,198 @@ func normEmail(s string) string {
 	return strings.ToLower(strings.TrimSpace(s))
 }
 
+// GestionCompaniesList devuelve la lista de empresas (copia).
+func GestionCompaniesList() []string {
+	companyStoreMu.RLock()
+	defer companyStoreMu.RUnlock()
+	if !companyStoreLoaded || len(companyStoreData.Companies) == 0 {
+		return []string{"default"}
+	}
+	out := make([]string, len(companyStoreData.Companies))
+	copy(out, companyStoreData.Companies)
+	return out
+}
+
+// GestionDefaultCompany devuelve la empresa predeterminada.
+func GestionDefaultCompany() string {
+	companyStoreMu.RLock()
+	defer companyStoreMu.RUnlock()
+	if !companyStoreLoaded || len(companyStoreData.Companies) == 0 {
+		return "default"
+	}
+	d := strings.TrimSpace(companyStoreData.DefaultCompany)
+	for _, c := range companyStoreData.Companies {
+		if strings.EqualFold(c, d) {
+			return c
+		}
+	}
+	return companyStoreData.Companies[0]
+}
+
+// IsValidGestionCompany indica si el nombre está en el registro.
+func IsValidGestionCompany(name string) bool {
+	_, ok := CanonicalGestionCompany(name)
+	return ok
+}
+
+// CanonicalGestionCompany devuelve el nombre canónico del registro.
+func CanonicalGestionCompany(name string) (string, bool) {
+	s := strings.TrimSpace(name)
+	if s == "" {
+		return "", false
+	}
+	companyStoreMu.RLock()
+	defer companyStoreMu.RUnlock()
+	if !companyStoreLoaded {
+		return "", false
+	}
+	for _, c := range companyStoreData.Companies {
+		if strings.EqualFold(c, s) {
+			return c, true
+		}
+	}
+	return "", false
+}
+
+func indexCompanyInsensitive(list []string, name string) (int, bool) {
+	for i, c := range list {
+		if strings.EqualFold(c, name) {
+			return i, true
+		}
+	}
+	return 0, false
+}
+
+func validateNewCompanyName(name string) error {
+	s := strings.TrimSpace(name)
+	if s == "" {
+		return fmt.Errorf("el nombre no puede estar vacío")
+	}
+	if len(s) > 64 {
+		return fmt.Errorf("máximo 64 caracteres")
+	}
+	for _, r := range s {
+		if unicode.IsLetter(r) || unicode.IsNumber(r) || r == ' ' || r == '-' || r == '_' || r == '.' {
+			continue
+		}
+		return fmt.Errorf("solo letras, números, espacio, guión, guión bajo y punto")
+	}
+	return nil
+}
+
+// AddGestionCompany añade una empresa al registro.
+func AddGestionCompany(name string) error {
+	if err := validateNewCompanyName(name); err != nil {
+		return err
+	}
+	name = strings.TrimSpace(name)
+	companyStoreMu.Lock()
+	defer companyStoreMu.Unlock()
+	ensureCompanyMaps()
+	normalizeCompaniesFileLocked()
+	if _, ok := indexCompanyInsensitive(companyStoreData.Companies, name); ok {
+		return fmt.Errorf("ya existe una empresa con ese nombre")
+	}
+	companyStoreData.Companies = append(companyStoreData.Companies, name)
+	sort.Slice(companyStoreData.Companies, func(i, j int) bool {
+		return strings.ToLower(companyStoreData.Companies[i]) < strings.ToLower(companyStoreData.Companies[j])
+	})
+	return saveCompanyStoreLocked()
+}
+
+// SetGestionDefaultCompany marca la empresa predeterminada.
+func SetGestionDefaultCompany(name string) error {
+	companyStoreMu.Lock()
+	defer companyStoreMu.Unlock()
+	ensureCompanyMaps()
+	normalizeCompaniesFileLocked()
+	idx, ok := indexCompanyInsensitive(companyStoreData.Companies, name)
+	if !ok {
+		return fmt.Errorf("empresa no encontrada")
+	}
+	companyStoreData.DefaultCompany = companyStoreData.Companies[idx]
+	return saveCompanyStoreLocked()
+}
+
+// RenameGestionCompany renombra en el registro y en mapas n8n locales. mongoRenameCompany debe llamarse aparte.
+func RenameGestionCompany(oldName, newName string) (oldCanon, newCanon string, err error) {
+	if err := validateNewCompanyName(newName); err != nil {
+		return "", "", err
+	}
+	newName = strings.TrimSpace(newName)
+	companyStoreMu.Lock()
+	defer companyStoreMu.Unlock()
+	ensureCompanyMaps()
+	normalizeCompaniesFileLocked()
+	idx, ok := indexCompanyInsensitive(companyStoreData.Companies, oldName)
+	if !ok {
+		return "", "", fmt.Errorf("empresa no encontrada")
+	}
+	if _, dup := indexCompanyInsensitive(companyStoreData.Companies, newName); dup {
+		return "", "", fmt.Errorf("ya existe una empresa con el nombre destino")
+	}
+	oldCanon = companyStoreData.Companies[idx]
+	newCanon = newName
+	companyStoreData.Companies[idx] = newCanon
+	if strings.EqualFold(companyStoreData.DefaultCompany, oldCanon) {
+		companyStoreData.DefaultCompany = newCanon
+	}
+	for k, v := range companyStoreData.N8NByEmail {
+		if strings.EqualFold(v, oldCanon) {
+			companyStoreData.N8NByEmail[k] = newCanon
+		}
+	}
+	for k, v := range companyStoreData.N8NByID {
+		if strings.EqualFold(v, oldCanon) {
+			companyStoreData.N8NByID[k] = newCanon
+		}
+	}
+	sort.Slice(companyStoreData.Companies, func(i, j int) bool {
+		return strings.ToLower(companyStoreData.Companies[i]) < strings.ToLower(companyStoreData.Companies[j])
+	})
+	return oldCanon, newCanon, saveCompanyStoreLocked()
+}
+
+// DeleteGestionCompany elimina una empresa si no está en uso (LibreChat + n8n local).
+func DeleteGestionCompany(name string, lcUsersWithCompany int) error {
+	companyStoreMu.Lock()
+	defer companyStoreMu.Unlock()
+	ensureCompanyMaps()
+	normalizeCompaniesFileLocked()
+	if len(companyStoreData.Companies) <= 1 {
+		return fmt.Errorf("debe quedar al menos una empresa")
+	}
+	idx, ok := indexCompanyInsensitive(companyStoreData.Companies, name)
+	if !ok {
+		return fmt.Errorf("empresa no encontrada")
+	}
+	canon := companyStoreData.Companies[idx]
+	if lcUsersWithCompany > 0 {
+		return fmt.Errorf("hay %d usuario(s) de LibreChat con esta empresa; reasígnalos antes", lcUsersWithCompany)
+	}
+	for _, v := range companyStoreData.N8NByEmail {
+		if strings.EqualFold(v, canon) {
+			return fmt.Errorf("hay usuarios n8n asociados a esta empresa en el almacén local")
+		}
+	}
+	for _, v := range companyStoreData.N8NByID {
+		if strings.EqualFold(v, canon) {
+			return fmt.Errorf("hay usuarios n8n asociados a esta empresa en el almacén local")
+		}
+	}
+	companyStoreData.Companies = append(companyStoreData.Companies[:idx], companyStoreData.Companies[idx+1:]...)
+	if strings.EqualFold(companyStoreData.DefaultCompany, canon) {
+		companyStoreData.DefaultCompany = companyStoreData.Companies[0]
+	}
+	return saveCompanyStoreLocked()
+}
+
 // N8NUserCompany devuelve la empresa asociada a un usuario n8n (archivo local).
 func N8NUserCompany(userID, email string) string {
 	companyStoreMu.RLock()
 	defer companyStoreMu.RUnlock()
 	if !companyStoreLoaded {
-		return config.GestionDefaultCompany()
+		return defaultCompanyUnlocked()
 	}
 	id := strings.TrimSpace(userID)
 	if id != "" {
@@ -104,23 +364,23 @@ func N8NUserCompany(userID, email string) string {
 			return c
 		}
 	}
-	return config.GestionDefaultCompany()
+	return defaultCompanyUnlocked()
 }
 
 // SetN8NUserCompany guarda empresa para n8n (por email y opcionalmente por id).
 func SetN8NUserCompany(userID, email, company string) error {
-	c := strings.TrimSpace(company)
-	if !config.IsValidGestionCompany(c) {
+	canon, ok := CanonicalGestionCompany(company)
+	if !ok {
 		return fmt.Errorf("empresa no válida: %q", company)
 	}
 	companyStoreMu.Lock()
 	defer companyStoreMu.Unlock()
 	ensureCompanyMaps()
 	if k := normEmail(email); k != "" {
-		companyStoreData.N8NByEmail[k] = c
+		companyStoreData.N8NByEmail[k] = canon
 	}
 	if id := strings.TrimSpace(userID); id != "" {
-		companyStoreData.N8NByID[id] = c
+		companyStoreData.N8NByID[id] = canon
 	}
 	return saveCompanyStoreLocked()
 }
@@ -164,14 +424,15 @@ func PersistN8NEmailCompanies(rows []N8NEmailCompanyRow) error {
 	companyStoreMu.Lock()
 	defer companyStoreMu.Unlock()
 	ensureCompanyMaps()
+	normalizeCompaniesFileLocked()
 	for _, row := range rows {
 		c := strings.TrimSpace(row.Company)
 		var canon string
 		if c == "" {
-			canon = config.GestionDefaultCompany()
+			canon = defaultCompanyUnlocked()
 		} else {
 			var ok bool
-			canon, ok = config.CanonicalGestionCompany(c)
+			canon, ok = canonicalCompanyUnlocked(c)
 			if !ok {
 				return fmt.Errorf("empresa no válida: %q", c)
 			}
@@ -181,6 +442,19 @@ func PersistN8NEmailCompanies(rows []N8NEmailCompanyRow) error {
 		}
 	}
 	return saveCompanyStoreLocked()
+}
+
+func canonicalCompanyUnlocked(name string) (string, bool) {
+	s := strings.TrimSpace(name)
+	if s == "" {
+		return "", false
+	}
+	for _, c := range companyStoreData.Companies {
+		if strings.EqualFold(c, s) {
+			return c, true
+		}
+	}
+	return "", false
 }
 
 // PersistN8NInviteCompanies guarda la misma empresa para varios emails (formulario de gestión).

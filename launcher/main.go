@@ -50,6 +50,12 @@ func main() {
 	mux.HandleFunc("GET /gestion/stream", auth.RequireAuth(admin.HandleGestionStream))
 	mux.HandleFunc("GET /gestion/api/stats", auth.RequireAuth(admin.HandleGestionStatsAPI))
 	mux.HandleFunc("GET /gestion/charts-content", auth.RequireAuth(admin.HandleGestionChartsContent))
+	hCompanies := auth.RequireAuth(admin.HandleGestionCompaniesAPI)
+	mux.HandleFunc("GET /gestion/api/companies", hCompanies)
+	mux.HandleFunc("POST /gestion/api/companies", hCompanies)
+	mux.HandleFunc("PUT /gestion/api/companies", hCompanies)
+	mux.HandleFunc("DELETE /gestion/api/companies", hCompanies)
+	mux.HandleFunc("POST /gestion/api/companies/default", auth.RequireAuth(admin.HandleGestionCompaniesDefaultAPI))
 
 	// Wake (catch-all — called by nginx @launcher on 502)
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
