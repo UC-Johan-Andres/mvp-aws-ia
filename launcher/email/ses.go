@@ -5,7 +5,7 @@ import (
 	"fmt"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/config"
+	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/ses"
 
@@ -19,13 +19,17 @@ func getSESClient() *ses.Client {
 		return sesClient
 	}
 
-	awsCfg := aws.Config{
-		Region: aws.String(config.SESRegion),
-		Credentials: credentials.NewStaticCredentialsProvider(
+	awsCfg, err := awsconfig.LoadDefaultConfig(context.Background(),
+		awsconfig.WithRegion(config.SESRegion),
+		awsconfig.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(
 			config.SESSMTPUser,
 			config.SESSMTPPassword,
 			"",
-		),
+		)),
+	)
+	if err != nil {
+		sesClient = nil
+		return nil
 	}
 
 	sesClient = ses.NewFromConfig(awsCfg)
@@ -36,6 +40,9 @@ func SendEmail(to, subject, body string) error {
 	ctx := context.Background()
 
 	client := getSESClient()
+	if client == nil {
+		return fmt.Errorf("SES client not initialized")
+	}
 
 	input := &ses.SendEmailInput{
 		Source: aws.String(config.SESFromEmail),
