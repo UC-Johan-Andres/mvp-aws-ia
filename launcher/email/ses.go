@@ -1,7 +1,7 @@
 package email
 
 import (
-	"gopkg.in/gomail/v2"
+	"gopkg.in/gomail.v2"
 	"launcher/config"
 )
 
