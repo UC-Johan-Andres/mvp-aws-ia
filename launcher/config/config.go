@@ -27,11 +27,18 @@ var (
 	// LibreChatMongoDB nombre de la base en Mongo (colecciones users, conversations, messages).
 	// Debe coincidir con el path de MONGO_URI (p. ej. .../LibreChat?authSource=admin).
 	LibreChatMongoDB = getEnv("LIBRECHAT_MONGO_DB", "LibreChat")
-	N8NInternalURL = getEnv("N8N_INTERNAL_URL", "http://n8n:5678")
-	N8NBasicUser   = getEnv("N8N_BASIC_AUTH_USER", "")
-	N8NBasicPass   = getEnv("N8N_BASIC_AUTH_PASSWORD", "")
-	N8NOwnerEmail  = getEnv("N8N_OWNER_EMAIL", "")
-	N8NOwnerPass   = getEnv("N8N_OWNER_PASSWORD", "")
+	N8NInternalURL   = getEnv("N8N_INTERNAL_URL", "http://n8n:5678")
+	N8NBasicUser     = getEnv("N8N_BASIC_AUTH_USER", "")
+	N8NBasicPass     = getEnv("N8N_BASIC_AUTH_PASSWORD", "")
+	N8NOwnerEmail    = getEnv("N8N_OWNER_EMAIL", "")
+	N8NOwnerPass     = getEnv("N8N_OWNER_PASSWORD", "")
+
+	// SES Email configuration
+	SESSMTPHost     = getEnv("SES_SMTP_HOST", "email-smtp.us-east-1.amazonaws.com")
+	SESSMTPPort     = 587
+	SESSMTPUser     = getEnv("SES_SMTP_USER", "")
+	SESSMTPPassword = getEnv("SES_SMTP_PASSWORD", "")
+	SESFromEmail    = getEnv("SES_FROM_EMAIL", "")
 )
 
 // N8NPostgresDSN devuelve la cadena de conexión a la BD de n8n.

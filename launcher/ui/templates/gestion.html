@@ -1361,22 +1361,32 @@
         function requestN8nPasswordResetLink() {
             var id = document.getElementById('edit-user-id').value;
             if (!id) return;
+            var userEmail = document.getElementById('edit-user-email').value || '';
             fetch('/admin/n8n/users/password-reset-link', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ id: id }),
+                body: JSON.stringify({ id: id, email: userEmail }),
                 credentials: 'same-origin'
             })
             .then(function(r) { return r.json().then(function(j) { return { ok: r.ok, j: j }; }); })
             .then(function(x) {
                 if (!x.ok) throw new Error(x.j.error || 'Error al obtener enlace');
-                var link = x.j.link;
+                var data = x.j.data || x.j;
+                var link = data.link;
                 if (!link) throw new Error('Respuesta sin enlace');
                 currentN8nPasswordLink = link;
                 var box = document.getElementById('n8n-password-link-box');
                 if (box) box.textContent = link;
                 document.getElementById('n8n-password-modal').classList.add('active');
-                showToast('Enlace generado', 'success');
+                
+                // Notificar estado del email
+                if (data.sent) {
+                    showToast('Enlace generado y enviado por email', 'success');
+                } else if (userEmail) {
+                    showToast('Enlace generado (email no enviado)', 'warning');
+                } else {
+                    showToast('Enlace generado', 'success');
+                }
             })
             .catch(function(e) {
                 showToast(e.message || 'Error', 'error');

@@ -275,6 +275,12 @@ services:
       - GESTION_DEFAULT_COMPANY=${GESTION_DEFAULT_COMPANY:-default}
       # Persistir el mapa email→empresa de n8n (sin esto, en contenedor suele usarse /tmp y se pierde al reiniciar).
       - GESTION_COMPANY_STORE=/data/gestion_company_store.json
+      # SES Email configuration
+      - SES_SMTP_HOST=${SES_SMTP_HOST:-email-smtp.us-east-1.amazonaws.com}
+      - SES_SMTP_PORT=587
+      - SES_SMTP_USER=${SES_SMTP_USER}
+      - SES_SMTP_PASSWORD=${SES_SMTP_PASSWORD}
+      - SES_FROM_EMAIL=${SES_FROM_EMAIL}
     volumes:
       - /var/run/docker-agent.sock:/var/run/docker-agent.sock:ro
       - launcher_company_store:/data

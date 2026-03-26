@@ -6,6 +6,7 @@ require (
 	github.com/lib/pq v1.10.9
 	go.mongodb.org/mongo-driver v1.15.0
 	golang.org/x/crypto v0.24.0
+	gopkg.in/gomail.v2 v2.19.1
 )
 
 require (

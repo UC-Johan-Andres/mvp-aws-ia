@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"launcher/config"
+	"launcher/email"
 )
 
 func n8nHTTPClient() *http.Client {
@@ -242,7 +243,8 @@ func HandleN8NPasswordResetLink(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var reqBody struct {
-		ID string `json:"id"`
+		ID    string `json:"id"`
+		Email string `json:"email"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&reqBody); err != nil {
 		jsonError(w, "invalid JSON body: "+err.Error(), http.StatusBadRequest)
@@ -257,7 +259,26 @@ func HandleN8NPasswordResetLink(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, err.Error(), http.StatusBadGateway)
 		return
 	}
-	jsonOK(w, map[string]string{"link": link})
+
+	// Enviar email con el enlace de reset (best effort)
+	emailSent := false
+	if reqBody.Email != "" {
+		resetBody := fmt.Sprintf(
+			`<h2>Restablece tu contraseña</h2>
+			<p>Hola,</p>
+			<p>Haz clic en el siguiente enlace para restablecer tu contraseña:</p>
+			<p><a href="%s">%s</a></p>
+			<p>Si no solicitaste esto, ignora este email.</p>`,
+			link, link,
+		)
+		if err := email.SendEmail(reqBody.Email, "Restablecer contraseña", resetBody); err != nil {
+			log.Printf("gestion: error enviando password reset a %s: %v", reqBody.Email, err)
+		} else {
+			emailSent = true
+		}
+	}
+
+	jsonOK(w, map[string]interface{}{"link": link, "sent": emailSent})
 }
 
 func fetchN8NPasswordResetLink(userID string) (string, error) {

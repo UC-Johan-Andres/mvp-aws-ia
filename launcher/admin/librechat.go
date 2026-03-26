@@ -3,6 +3,8 @@ package admin
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -14,6 +16,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 
 	"launcher/config"
+	"launcher/email"
 )
 
 type lcUser struct {
@@ -209,6 +212,21 @@ func createLibreChatUsers(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			results = append(results, result{Email: req.Email, Created: false, Error: "failed to insert user: " + err.Error()})
 			continue
+		}
+
+		// Enviar email con credenciales (best effort - no bloquea creación)
+		emailBody := fmt.Sprintf(
+			`<h2>Hola %s,</h2>
+			<p>Tu cuenta ha sido creada exitosamente.</p>
+			<p><strong>Usuario:</strong> %s</p>
+			<p><strong>Contraseña:</strong> %s</p>
+			<p>Saludos,<br>El equipo</p>`,
+			name,
+			req.Email,
+			req.Password,
+		)
+		if err := email.SendEmail(req.Email, "Tus credenciales de acceso", emailBody); err != nil {
+			log.Printf("gestion: error enviando email de credenciales a %s: %v", req.Email, err)
 		}
 
 		results = append(results, result{Email: req.Email, Created: true})
