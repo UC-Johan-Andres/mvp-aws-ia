@@ -39,6 +39,7 @@ var (
 	SESSMTPUser     = getEnv("SES_SMTP_USER", "")
 	SESSMTPPassword = getEnv("SES_SMTP_PASSWORD", "")
 	SESFromEmail    = getEnv("SES_FROM_EMAIL", "")
+	SESRegion       = getEnv("SES_REGION", "us-east-1")
 )
 
 // N8NPostgresDSN devuelve la cadena de conexión a la BD de n8n.

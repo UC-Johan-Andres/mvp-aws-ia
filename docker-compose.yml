@@ -281,6 +281,7 @@ services:
       - SES_SMTP_USER=${SES_SMTP_USER}
       - SES_SMTP_PASSWORD=${SES_SMTP_PASSWORD}
       - SES_FROM_EMAIL=${SES_FROM_EMAIL}
+      - SES_REGION=${SES_REGION:-us-east-1}
     volumes:
       - /var/run/docker-agent.sock:/var/run/docker-agent.sock:ro
       - launcher_company_store:/data

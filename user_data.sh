@@ -147,6 +147,7 @@ SES_SMTP_USER=$(aws ssm get-parameter --name "/ai-ecosystem/ses-smtp-user" --wit
 SES_SMTP_PASSWORD=$(aws ssm get-parameter --name "/ai-ecosystem/ses-smtp-password" --with-decryption --query "Parameter.Value" --output text 2>/dev/null || echo "")
 SES_FROM_EMAIL=$(aws ssm get-parameter --name "/ai-ecosystem/ses-from-email" --query "Parameter.Value" --output text 2>/dev/null || echo "")
 SES_SMTP_HOST=$(aws ssm get-parameter --name "/ai-ecosystem/ses-smtp-host" --query "Parameter.Value" --output text 2>/dev/null || echo "email-smtp.us-east-1.amazonaws.com")
+SES_REGION=$(aws ssm get-parameter --name "/ai-ecosystem/ses-region" --query "Parameter.Value" --output text 2>/dev/null || echo "us-east-1")
 
 # N8N_ENCRYPTION_KEY: only use SSM value if provided, otherwise let n8n generate its own
 N8N_ENCRYPTION_KEY_FROM_SSM="$N8N_ENCRYPTION_KEY"
