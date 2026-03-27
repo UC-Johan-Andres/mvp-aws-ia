@@ -5,9 +5,9 @@ import (
 	"fmt"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
-	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/ses"
+	"github.com/aws/aws-sdk-go-v2/service/ses/types"
 
 	"launcher/config"
 )
@@ -19,17 +19,13 @@ func getSESClient() *ses.Client {
 		return sesClient
 	}
 
-	awsCfg, err := awsconfig.LoadDefaultConfig(context.Background(),
-		awsconfig.WithRegion(config.SESRegion),
-		awsconfig.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(
+	awsCfg := aws.Config{
+		Region: config.SESRegion,
+		Credentials: credentials.NewStaticCredentialsProvider(
 			config.SESSMTPUser,
 			config.SESSMTPPassword,
 			"",
-		)),
-	)
-	if err != nil {
-		sesClient = nil
-		return nil
+		),
 	}
 
 	sesClient = ses.NewFromConfig(awsCfg)
@@ -46,15 +42,15 @@ func SendEmail(to, subject, body string) error {
 
 	input := &ses.SendEmailInput{
 		Source: aws.String(config.SESFromEmail),
-		Destination: &ses.Destination{
+		Destination: &types.Destination{
 			ToAddresses: []string{to},
 		},
-		Message: &ses.Message{
-			Subject: &ses.Content{
+		Message: &types.Message{
+			Subject: &types.Content{
 				Data: aws.String(subject),
 			},
-			Body: &ses.Body{
-				Html: &ses.Content{
+			Body: &types.Body{
+				Html: &types.Content{
 					Data: aws.String(body),
 				},
 			},
