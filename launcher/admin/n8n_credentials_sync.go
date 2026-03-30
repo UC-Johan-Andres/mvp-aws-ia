@@ -282,10 +282,17 @@ func n8nDeleteCredential(client *http.Client, cookies []*http.Cookie, credID str
 	return nil
 }
 
-// SyncN8NUserAIKeys crea, actualiza o elimina credenciales IA gestionadas en el proyecto personal del usuario.
-func SyncN8NUserAIKeys(n8nUser *N8NUser, companyCanon string) error {
-	if config.N8NOwnerEmail == "" || config.N8NOwnerPass == "" || n8nUser == nil {
-		log.Printf("n8n-cred-sync: skip (owner creds vacías o user nil)")
+func n8nErrLooksLikeRateLimit(err error) bool {
+	if err == nil {
+		return false
+	}
+	s := strings.ToLower(err.Error())
+	return strings.Contains(s, "429") || strings.Contains(s, "too many requests")
+}
+
+// syncN8NUserAIKeysWithSession usa cookies ya obtenidas (un solo login por lote de usuarios → evita 429 en n8n).
+func syncN8NUserAIKeysWithSession(client *http.Client, cookies []*http.Cookie, n8nUser *N8NUser, companyCanon string) error {
+	if n8nUser == nil {
 		return nil
 	}
 	log.Printf("n8n-cred-sync: inicio para email=%s company=%q projectRelations=%d",
@@ -300,12 +307,6 @@ func SyncN8NUserAIKeys(n8nUser *N8NUser, companyCanon string) error {
 		return fmt.Errorf("sin proyecto personal n8n para %s (¿invitación sin aceptar? o sin N8N_POSTGRES_DSN para leer project_relation)", strings.TrimSpace(n8nUser.Email))
 	}
 	log.Printf("n8n-cred-sync: proyecto personal id=%q para %s", pid, n8nUser.Email)
-
-	client := n8nCredentialHTTPClient()
-	cookies, err := n8nLogin(client)
-	if err != nil {
-		return fmt.Errorf("n8n login: %w", err)
-	}
 
 	rows, err := n8nListCredentials(client, cookies, pid)
 	if err != nil {
@@ -359,6 +360,20 @@ func SyncN8NUserAIKeys(n8nUser *N8NUser, companyCanon string) error {
 	return nil
 }
 
+// SyncN8NUserAIKeys crea, actualiza o elimina credenciales IA gestionadas en el proyecto personal del usuario.
+func SyncN8NUserAIKeys(n8nUser *N8NUser, companyCanon string) error {
+	if config.N8NOwnerEmail == "" || config.N8NOwnerPass == "" || n8nUser == nil {
+		log.Printf("n8n-cred-sync: skip (owner creds vacías o user nil)")
+		return nil
+	}
+	client := n8nCredentialHTTPClient()
+	cookies, err := n8nLogin(client)
+	if err != nil {
+		return fmt.Errorf("n8n login: %w", err)
+	}
+	return syncN8NUserAIKeysWithSession(client, cookies, n8nUser, companyCanon)
+}
+
 // SyncN8NAllUsersForCompany aplica credenciales de empresa a todos los usuarios n8n asignados a esa empresa (store local).
 func SyncN8NAllUsersForCompany(ctx context.Context, companyCanon string) (int, error) {
 	_ = ctx
@@ -373,7 +388,8 @@ func SyncN8NAllUsersForCompany(ctx context.Context, companyCanon string) (int, e
 		return 0, err
 	}
 	log.Printf("n8n-cred-sync: %d usuarios n8n obtenidos", len(users))
-	n := 0
+
+	var targets []*N8NUser
 	for i := range users {
 		u := &users[i]
 		co := N8NUserCompany(u.ID, u.Email)
@@ -388,8 +404,37 @@ func SyncN8NAllUsersForCompany(ctx context.Context, companyCanon string) (int, e
 			log.Printf("n8n-cred-sync: skip %s — empresa %q ≠ %q", u.Email, c2, companyCanon)
 			continue
 		}
-		log.Printf("n8n-cred-sync: MATCH %s → empresa %q, sincronizando…", u.Email, c2)
-		if err := SyncN8NUserAIKeys(u, c2); err != nil {
+		targets = append(targets, u)
+	}
+
+	if len(targets) == 0 {
+		log.Printf("n8n-cred-sync: SyncN8NAllUsersForCompany empresa=%q → 0 usuario(s) procesados", companyCanon)
+		return 0, nil
+	}
+
+	client := n8nCredentialHTTPClient()
+	cookies, err := n8nLogin(client)
+	if err != nil {
+		return 0, fmt.Errorf("n8n login: %w", err)
+	}
+	log.Printf("n8n-cred-sync: sesión n8n única para %d usuario(s) de empresa %q", len(targets), companyCanon)
+
+	n := 0
+	for _, u := range targets {
+		log.Printf("n8n-cred-sync: MATCH %s → empresa %q, sincronizando…", u.Email, companyCanon)
+		err := syncN8NUserAIKeysWithSession(client, cookies, u, companyCanon)
+		if err != nil && n8nErrLooksLikeRateLimit(err) {
+			log.Printf("n8n-cred-sync: 429 en sync %s, re-login tras pausa…", u.Email)
+			time.Sleep(3 * time.Second)
+			var loginErr error
+			cookies, loginErr = n8nLogin(client)
+			if loginErr != nil {
+				log.Printf("n8n-cred-sync: ERROR re-login: %v", loginErr)
+				continue
+			}
+			err = syncN8NUserAIKeysWithSession(client, cookies, u, companyCanon)
+		}
+		if err != nil {
 			log.Printf("n8n-cred-sync: ERROR sync %s: %v", u.Email, err)
 			continue
 		}
@@ -414,6 +459,12 @@ func n8nSyncAIKeysForEmails(emails []string) {
 		e := strings.TrimSpace(strings.ToLower(users[i].Email))
 		byEmail[e] = &users[i]
 	}
+
+	type pair struct {
+		u     *N8NUser
+		canon string
+	}
+	var batch []pair
 	for _, raw := range emails {
 		e := strings.TrimSpace(strings.ToLower(raw))
 		u := byEmail[e]
@@ -428,8 +479,31 @@ func n8nSyncAIKeysForEmails(emails []string) {
 		if canon == "" || !IsValidGestionCompany(canon) {
 			continue
 		}
-		if err := SyncN8NUserAIKeys(u, canon); err != nil {
-			log.Printf("gestión n8n: sync tras invitación %s: %v", e, err)
+		batch = append(batch, pair{u: u, canon: canon})
+	}
+	if len(batch) == 0 {
+		return
+	}
+
+	client := n8nCredentialHTTPClient()
+	cookies, err := n8nLogin(client)
+	if err != nil {
+		log.Printf("gestión n8n: sync tras invitación login: %v", err)
+		return
+	}
+	for _, it := range batch {
+		err := syncN8NUserAIKeysWithSession(client, cookies, it.u, it.canon)
+		if err != nil && n8nErrLooksLikeRateLimit(err) {
+			time.Sleep(3 * time.Second)
+			cookies, err = n8nLogin(client)
+			if err != nil {
+				log.Printf("gestión n8n: sync tras invitación re-login: %v", err)
+				continue
+			}
+			err = syncN8NUserAIKeysWithSession(client, cookies, it.u, it.canon)
+		}
+		if err != nil {
+			log.Printf("gestión n8n: sync tras invitación %s: %v", strings.ToLower(strings.TrimSpace(it.u.Email)), err)
 		}
 	}
 }
