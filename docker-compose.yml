@@ -183,6 +183,9 @@ services:
     container_name: librechat
     env_file:
       - .env.librechat
+    # OPENROUTER_KEY: usado en librechat.yaml (OpenRouter + títulos de conv. para endpoint Google Gemini).
+    environment:
+      - OPENROUTER_KEY=${OPENROUTER_KEY:-}
     restart: "no"
     volumes:
       - librechat-images:/app/client/public/images

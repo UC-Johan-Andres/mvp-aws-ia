@@ -7,7 +7,7 @@
         <div class="chart-section-header">
             <h4 class="chart-heading">n8n</h4>
             <p class="chart-lede">
-                Totales y desglose por usuario desde PostgreSQL. Se recarga al entrar en esta pestaña.
+                Por usuario (PostgreSQL). Los mismos totales salen en la pestaña <strong>n8n</strong>, columnas Ejec. / Auto. / Man.
             </p>
         </div>
         <div id="n8n-stats-error" class="empty-state" style="display:none;"></div>
@@ -15,25 +15,37 @@
             <div id="n8n-stats-empty" class="empty-state-panel" style="display:none;" role="status">
                 <div class="empty-state-icon" aria-hidden="true">📊</div>
                 <p class="empty-state-title">Sin datos para graficar</p>
-                <p class="empty-state-sub">No hay usuarios en el resumen de n8n o aún no registran ejecuciones. Los KPI arriba pueden seguir en cero.</p>
+                <p class="empty-state-sub">Nadie coincide con el filtro de empresa.</p>
             </div>
             <div class="stats-kpi-row">
                 <div class="stats-kpi">
-                    <div class="kpi-label">Usuarios en el resumen</div>
+                    <div class="kpi-label">Usuarios</div>
                     <div class="kpi-value" id="kpi-n8n-users">—</div>
                 </div>
                 <div class="stats-kpi">
-                    <div class="kpi-label">Ejecuciones (no manual)</div>
+                    <div class="kpi-label">Total ejecuciones</div>
+                    <div class="kpi-value" id="kpi-n8n-total-exec">—</div>
+                </div>
+                <div class="stats-kpi">
+                    <div class="kpi-label">Automáticas</div>
                     <div class="kpi-value" id="kpi-n8n-exec">—</div>
                 </div>
                 <div class="stats-kpi">
-                    <div class="kpi-label">Fallidas en prod.</div>
+                    <div class="kpi-label">Manuales</div>
+                    <div class="kpi-value" id="kpi-n8n-manual-exec">—</div>
+                </div>
+                <div class="stats-kpi">
+                    <div class="kpi-label">Fallos (auto)</div>
                     <div class="kpi-value" id="kpi-n8n-failed">—</div>
+                </div>
+                <div class="stats-kpi">
+                    <div class="kpi-label">Fallos (todas)</div>
+                    <div class="kpi-value" id="kpi-n8n-failed-all">—</div>
                 </div>
             </div>
             <div id="n8n-charts-grid" class="chart-grid">
                 <div class="chart-card">
-                    <h4>Ejecuciones en producción (por usuario)</h4>
+                    <h4>Ejecuciones por usuario (auto + manual)</h4>
                     <canvas id="chart-n8n-exec" aria-label="Gráfico ejecuciones"></canvas>
                 </div>
                 <div class="chart-card">
@@ -41,7 +53,7 @@
                     <canvas id="chart-n8n-workflows" aria-label="Gráfico workflows"></canvas>
                 </div>
                 <div class="chart-card">
-                    <h4>Tasa de fallo % (por usuario)</h4>
+                    <h4>Fallos % (solo automáticas)</h4>
                     <canvas id="chart-n8n-failrate" aria-label="Gráfico tasa de fallo"></canvas>
                 </div>
             </div>
@@ -52,7 +64,7 @@
         <div class="chart-section-header">
             <h4 class="chart-heading">LibreChat</h4>
             <p class="chart-lede">
-                Lectura directa de MongoDB: <code>conversations</code>, <code>messages</code> y <code>users</code>.
+                MongoDB (LibreChat).
             </p>
         </div>
         <div id="lc-stats-error" class="empty-state" style="display:none;padding:20px;"></div>
@@ -60,8 +72,8 @@
         <div id="lc-stats-body" style="display:none;">
             <div id="lc-stats-empty" class="empty-state-panel" style="display:none;" role="status">
                 <div class="empty-state-icon" aria-hidden="true">📈</div>
-                <p class="empty-state-title">Sin serie de usuarios</p>
-                <p class="empty-state-sub">No hay conversaciones o mensajes asociados a usuarios en el periodo consultado. Prueba filtrar por otra empresa o espera a que haya actividad.</p>
+                <p class="empty-state-title">Sin actividad</p>
+                <p class="empty-state-sub">Prueba otro filtro o espera actividad en el chat.</p>
             </div>
             <div class="stats-kpi-row">
                 <div class="stats-kpi">

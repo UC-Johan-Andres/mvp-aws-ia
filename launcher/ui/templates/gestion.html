@@ -1111,7 +1111,7 @@
                 <div class="brand-mark" aria-hidden="true"></div>
                 <div class="header-titles">
                     <h1>Gestión de usuarios</h1>
-                    <p class="header-subtitle">Altas, bajas y números de uso</p>
+                    <p class="header-subtitle">Usuarios, empresas y uso</p>
                 </div>
             </div>
             <div class="header-actions">
@@ -1173,7 +1173,7 @@
     <div id="invite-modal">
         <div class="modal-content">
             <h3>Enlace de invitación</h3>
-            <p>Si el correo no llega, pásale este enlace:</p>
+            <p>Si no llega el correo, comparte este enlace:</p>
             <div id="invite-link-box" class="invite-link-box"></div>
             <div class="modal-actions">
                 <button class="modal-close" onclick="closeInviteModal()">Cerrar</button>
@@ -1185,7 +1185,7 @@
     <div id="invite-sent-modal">
         <div class="modal-content">
             <h3>Listo</h3>
-            <p>La invitación quedó creada en n8n. Con SMTP en <code>.env.n8n</code> el correo sale solo; si no, usa <strong>Invitar</strong> en la tabla y copia el enlace.</p>
+            <p>Invitación creada en n8n. Sin SMTP configurado, usa <strong>Invitar</strong> en la tabla y copia el enlace.</p>
             <div class="modal-actions">
                 <button type="button" class="modal-copy" onclick="closeInviteSentModal()">Entendido</button>
             </div>
@@ -1206,7 +1206,7 @@
     <div id="n8n-password-modal" onclick="if (event.target === this) closeN8nPasswordModal()">
         <div class="modal-content" role="dialog" aria-modal="true">
             <h3>Enlace para nueva contraseña (n8n)</h3>
-            <p class="panel-muted">Comparte este enlace con el usuario; caduca según la configuración de n8n. No fija la contraseña desde aquí.</p>
+            <p class="panel-muted">Caduca según n8n. No cambia la contraseña desde aquí.</p>
             <div id="n8n-password-link-box" class="invite-link-box"></div>
             <div class="modal-actions">
                 <button type="button" class="modal-close" onclick="closeN8nPasswordModal()">Cerrar</button>
@@ -1218,7 +1218,7 @@
     <div id="company-modal" onclick="if (event.target === this) window.closeCompanyModal && window.closeCompanyModal()">
         <div class="modal-content" role="dialog" aria-modal="true" aria-labelledby="company-modal-title">
             <h3 id="company-modal-title">Nueva empresa</h3>
-            <p id="company-modal-lede" class="create-modal-lede">Nombre y, opcionalmente, API keys (OpenAI y Google Gemini para n8n y LibreChat).</p>
+            <p id="company-modal-lede" class="create-modal-lede">Nombre y claves opcionales.</p>
             <input type="hidden" id="company-modal-original-name" value="">
             <div class="form-group">
                 <label for="company-modal-name">Nombre de la empresa</label>
@@ -1230,7 +1230,8 @@
             </div>
             <div class="form-group">
                 <label for="company-modal-gemini">Google Gemini — API key</label>
-                <input type="password" id="company-modal-gemini" autocomplete="new-password" placeholder="API key de Google AI Studio (opcional)">
+                <input type="password" id="company-modal-gemini" autocomplete="new-password" placeholder="Google AI Studio (opcional)">
+                <p class="form-hint" style="margin-top:6px;margin-bottom:0;font-size:0.8rem;">El plan gratuito de Google a veces responde 429 (límite de peticiones); no es un fallo de esta consola.</p>
             </div>
             <p id="company-modal-masked-hint" class="create-modal-lede" style="display:none;margin-top:0;"></p>
             <div id="company-modal-remove-row" style="display:none;margin-bottom:12px;">
@@ -1253,7 +1254,7 @@
                 <form id="modal-form-n8n" hx-post="/gestion" hx-target="#main-content" hx-swap="innerHTML">
                     <input type="hidden" name="tab" value="n8n">
                     <div class="dynamic-form n8n-form">
-                        <p class="form-hint">Solo miembros (<strong>global:member</strong>), no owners.</p>
+                        <p class="form-hint">Rol miembro; no se crean owners desde aquí.</p>
                         <div class="form-group" style="margin-bottom:14px;">
                             <label style="display:block;margin-bottom:6px;font-size:0.85rem;color:var(--text-muted);font-weight:600;">Empresa</label>
                             <select name="company" class="input-like-select" data-company-select required></select>
@@ -1278,7 +1279,7 @@
                 <form id="modal-form-librechat" hx-post="/gestion" hx-target="#main-content" hx-swap="innerHTML">
                     <input type="hidden" name="tab" value="librechat">
                     <div class="dynamic-form librechat-form">
-                        <p class="form-hint">Rol <strong>USER</strong> (fijo aquí).</p>
+                        <p class="form-hint">Rol usuario fijo.</p>
                         <div class="form-group" style="margin-bottom:14px;">
                             <label style="display:block;margin-bottom:6px;font-size:0.85rem;color:var(--text-muted);font-weight:600;">Empresa</label>
                             <select name="company" class="input-like-select" data-company-select required></select>
@@ -1336,7 +1337,7 @@
                 <select id="edit-user-company" data-company-select></select>
             </div>
             <div id="edit-lc-password-wrap" style="display:none;">
-                <p class="form-hint" style="margin-bottom:10px;">Deja en blanco para no cambiar la contraseña de LibreChat.</p>
+                <p class="form-hint" style="margin-bottom:10px;">En blanco = no cambiar contraseña.</p>
                 <div class="form-group">
                     <label>Nueva contraseña</label>
                     <input type="password" id="edit-lc-password" autocomplete="new-password" minlength="8">
@@ -1347,7 +1348,7 @@
                 </div>
             </div>
             <div id="edit-n8n-password-actions" style="display:none;">
-                <p class="form-hint" style="margin-bottom:10px;">n8n no permite asignar una contraseña directamente. Obtén un enlace de restablecimiento.</p>
+                <p class="form-hint" style="margin-bottom:10px;">n8n no permite poner contraseña aquí; pide enlace de restablecimiento.</p>
                 <button type="button" class="modal-copy" style="width:100%;margin-bottom:16px;" onclick="requestN8nPasswordResetLink()">Obtener enlace de restablecimiento</button>
             </div>
             <div class="modal-actions">
@@ -1435,11 +1436,11 @@
                 
                 // Notificar estado del email
                 if (data.sent) {
-                    showToast('Enlace generado y enviado por email', 'success');
+                    showToast('Enlace enviado por correo', 'success');
                 } else if (userEmail) {
-                    showToast('Enlace generado (email no enviado)', 'warning');
+                    showToast('Enlace listo (sin correo)', 'warning');
                 } else {
-                    showToast('Enlace generado', 'success');
+                    showToast('Enlace listo', 'success');
                 }
             })
             .catch(function(e) {
@@ -1948,7 +1949,7 @@
                         if (n8gHide) n8gHide.style.display = '';
                         if (errEl) {
                             errEl.style.display = 'block';
-                            errEl.innerHTML = '<p class="empty-state-title">No hay datos de n8n</p><p class="empty-state-sub">' + (n8n.error || 'No se pudo leer n8n. Revisa N8N_POSTGRES_DSN y conectividad.') + '</p>';
+                            errEl.innerHTML = '<p class="empty-state-title">n8n no disponible</p><p class="empty-state-sub">' + (n8n.error || 'Revisa N8N_POSTGRES_DSN y PostgreSQL.') + '</p>';
                         }
                     } else {
                         if (errEl) errEl.style.display = 'none';
@@ -1956,8 +1957,13 @@
 
                         var nt = n8n.totals || {};
                         setKpi('kpi-n8n-users', String(nt.userCount != null ? nt.userCount : '0'));
+                        setKpi('kpi-n8n-total-exec', String(nt.totalExecutions != null ? nt.totalExecutions : '0'));
                         setKpi('kpi-n8n-exec', String(nt.prodExecutions != null ? nt.prodExecutions : '0'));
+                        var n8nMan = (Number(nt.totalExecutions) || 0) - (Number(nt.prodExecutions) || 0);
+                        if (n8nMan < 0) n8nMan = 0;
+                        setKpi('kpi-n8n-manual-exec', String(n8nMan));
                         setKpi('kpi-n8n-failed', String(nt.failedProdExecutions != null ? nt.failedProdExecutions : '0'));
+                        setKpi('kpi-n8n-failed-all', String(nt.failedTotalExecutions != null ? nt.failedTotalExecutions : '0'));
 
                         var nu = n8n.users || [];
                         var n8nEmptyEl = document.getElementById('n8n-stats-empty');
@@ -1972,7 +1978,9 @@
                             }
                         }
                         var nlabels = nu.map(function(u) { return shortChartLabel(u.email, 22); });
-                        var execData = nu.map(function(u) { return Number(u.prodExecutions) || 0; });
+                        var execProd = nu.map(function(u) { return Number(u.prodExecutions) || 0; });
+                        var execTotal = nu.map(function(u) { return Number(u.totalExecutions) || 0; });
+                        var execManual = execTotal.map(function(t, i) { return Math.max(0, t - (execProd[i] || 0)); });
                         var wfData = nu.map(function(u) { return Number(u.workflowsAccesibles) || 0; });
                         var failRate = nu.map(function(u) { return Number(u.failureRatePct) || 0; });
 
@@ -1982,18 +1990,30 @@
                                 type: 'bar',
                                 data: {
                                     labels: nlabels,
-                                    datasets: [{
-                                        label: 'Ejecuciones (no manual)',
-                                        data: execData,
-                                        backgroundColor: 'rgba(0, 123, 255, 0.55)',
-                                        borderColor: 'rgba(0, 86, 179, 0.9)',
-                                        borderWidth: 1
-                                    }]
+                                    datasets: [
+                                        {
+                                            label: 'Automáticas',
+                                            data: execProd,
+                                            stack: 'ex',
+                                            backgroundColor: 'rgba(0, 123, 255, 0.55)',
+                                            borderColor: 'rgba(0, 86, 179, 0.9)',
+                                            borderWidth: 1
+                                        },
+                                        {
+                                            label: 'Manuales',
+                                            data: execManual,
+                                            stack: 'ex',
+                                            backgroundColor: 'rgba(148, 163, 184, 0.55)',
+                                            borderColor: 'rgba(100, 116, 139, 0.95)',
+                                            borderWidth: 1
+                                        }
+                                    ]
                                 },
                                 options: Object.assign({}, commonOpts, {
+                                    plugins: { legend: { display: true, position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } } },
                                     scales: {
-                                        x: chartSx(),
-                                        y: chartSyNum()
+                                        x: Object.assign({ stacked: true }, chartSx()),
+                                        y: Object.assign({ stacked: true }, chartSyNum())
                                     }
                                 })
                             }));
@@ -2029,7 +2049,7 @@
                                 data: {
                                     labels: nlabels,
                                     datasets: [{
-                                        label: '% fallos (prod)',
+                                        label: '% fallos (auto)',
                                         data: failRate,
                                         backgroundColor: 'rgba(220, 53, 69, 0.45)',
                                         borderColor: 'rgba(176, 42, 55, 0.9)',
@@ -2056,7 +2076,7 @@
                         if (lcgH) lcgH.style.display = '';
                         if (lcErr) {
                             lcErr.style.display = 'block';
-                            lcErr.innerHTML = '<p class="empty-state-title">LibreChat no disponible</p><p class="empty-state-sub">' + (lc.error || lc.message || 'MongoDB no responde.') + '</p>';
+                            lcErr.innerHTML = '<p class="empty-state-title">LibreChat no disponible</p><p class="empty-state-sub">' + (lc.error || lc.message || 'MongoDB no responde o falta MONGO_URI.') + '</p>';
                         }
                     } else {
                         if (lcErr) lcErr.style.display = 'none';
@@ -2248,6 +2268,9 @@
                     <th>Apellido(s)</th>
                     <th>Rol</th>
                     <th>Empresa</th>
+                    <th class="col-num" title="Todas las ejecuciones">Ejec.</th>
+                    <th class="col-num" title="Automáticas">Auto.</th>
+                    <th class="col-num" title="Manuales">Man.</th>
                     <th>Acciones</th>
                 `;
                 const tbl = document.querySelector('#users-table table');
@@ -2266,13 +2289,13 @@
         }
 
         function generateUsersHTML(users, tab) {
-            const colspan = tab === 'n8n' ? 6 : 5;
+            const colspan = tab === 'n8n' ? 9 : 5;
             if (!users || users.length === 0) {
                 const icon = tab === 'n8n' ? '👤' : '💬';
                 const title = tab === 'n8n' ? 'Aún no hay usuarios en n8n' : 'No hay cuentas de LibreChat';
                 const sub = tab === 'n8n'
-                    ? 'Crea invitaciones con <strong>Nuevo usuario</strong> o revisa la instancia de n8n.'
-                    : 'Usa <strong>Nuevo usuario</strong> en esta pestaña para añadir la primera cuenta.';
+                    ? '<strong>Nuevo usuario</strong> o la consola de n8n.'
+                    : '<strong>Nuevo usuario</strong> en esta pestaña.';
                 return `
                     <tr>
                         <td colspan="${colspan}" class="empty-state empty-state-soft">
@@ -2329,6 +2352,10 @@
                 `;
 
                 if (tab === 'n8n') {
+                    const tot = Number(u.totalExecutions) || 0;
+                    const prod = Number(u.prodExecutions) || 0;
+                    let man = tot - prod;
+                    if (man < 0) man = 0;
                     return `
                     <tr>
                         <td>${escapeHtml(u.email)}</td>
@@ -2340,6 +2367,9 @@
                             </span>
                         </td>
                         <td>${escapeHtml(co)}</td>
+                        <td class="col-num">${tot}</td>
+                        <td class="col-num">${prod}</td>
+                        <td class="col-num">${man}</td>
                         <td>${actions}</td>
                     </tr>
                 `;
@@ -2394,7 +2424,7 @@
                     evt.preventDefault();
                     
                     if (eventName === 'users_updated' && (currentTab === 'n8n' || currentTab === 'librechat')) {
-                        showToast('Tabla actualizada', 'success');
+                        showToast('Lista actualizada', 'success');
                     }
                     
                     // Renderizar desde localStorage

@@ -33,11 +33,7 @@
 <div class="card-body">
     <h4 class="section-title">Empresas</h4>
     <p class="form-hint" style="margin-bottom:16px;">
-        El registro aplica a <strong>n8n</strong> (asignación en almacén local) y a <strong>LibreChat</strong> (campo <code>company</code> en MongoDB).
-        Puedes guardar API keys por proveedor (OpenAI, Gemini); al <strong>crear</strong> o <strong>actualizar</strong> la empresa se dispara la sync en segundo plano hacia LibreChat (<code>keys</code>) y n8n (credenciales en el <strong>proyecto personal</strong> de cada usuario de esa empresa). Renombrar empresa también re-sincroniza. Manual: <code>POST /gestion/api/companies/sync</code> con <code>{"name":"empresa"}</code>.
-        En n8n, el launcher crea credenciales como <code>Launcher AI · OpenAI (ChatGPT) · tu@email</code> y <code>Launcher AI · Google Gemini · tu@email</code> (tipo interno <code>googlePalmApi</code>, compatible con nodos Google Gemini / PaLM). Al <strong>editar</strong> la credencial en n8n, el campo API Key suele verse <strong>vacío</strong>: es normal.
-        Usa el botón <strong>+ Nueva empresa</strong> del encabezado (misma zona que «Nuevo usuario») para crear o <strong>Editar</strong> en la tabla para nombre y claves.
-        La primera carga puede tomar valores de <code>GESTION_COMPANIES</code> si el JSON aún no tenía lista.
+        Claves por proveedor: al guardar se copian a LibreChat y a las credenciales del proyecto personal en n8n. En n8n la clave puede verse vacía al editar (normal).
     </p>
     <div class="table-responsive-wrap">
         <table class="data-table">
@@ -96,16 +92,15 @@
         }
     };
     window.empresaSync = async function (name) {
-        if (typeof showToast === 'function') showToast('Sincronizando credenciales IA para «' + name + '»…', 'info');
+        if (typeof showToast === 'function') showToast('Sincronizando «' + name + '»…', 'info');
         try {
             var r = await fetch('/gestion/api/companies/sync', { method: 'POST', headers: csrfHeaders(), body: JSON.stringify({ name: name }) });
             var j = await r.json().catch(function () { return {}; });
             if (j.error) {
                 if (typeof showToast === 'function') showToast('Sync: ' + j.error, 'error');
             } else {
-                var msg = 'Sync OK: LibreChat=' + (j.libreChatUsers || 0) + ', n8n=' + (j.n8nUsers || 0);
-                if (j.providersFound) msg += ' (proveedores: ' + j.providersFound.join(', ') + ')';
-                if (j.errors && j.errors.length) msg += ' — errores: ' + j.errors.join('; ');
+                var msg = 'Listo: LibreChat ' + (j.libreChatUsers || 0) + ', n8n ' + (j.n8nUsers || 0);
+                if (j.errors && j.errors.length) msg += '. ' + j.errors.join(' ');
                 if (typeof showToast === 'function') showToast(msg, (j.errors && j.errors.length) ? 'error' : 'success');
             }
             htmx.ajax('GET', '/gestion/content?tab=empresas', { target: '#main-content', swap: 'innerHTML' });
@@ -117,7 +112,7 @@
         if (typeof openGestionConfirmModal !== 'function') return;
         openGestionConfirmModal({
             title: 'Eliminar empresa',
-            message: 'Se eliminará «' + name + '» del registro. Los usuarios n8n (almacén local) pasarán a la empresa predeterminada. No debe quedar ningún usuario de LibreChat con esta empresa.',
+            message: 'Se borra «' + name + '» del registro. Usuarios n8n locales pasan a la empresa predeterminada; en LibreChat no debe quedar nadie con esta empresa.',
             confirmText: 'Eliminar empresa',
             onConfirm: function () {
                 return fetch('/gestion/api/companies?name=' + encodeURIComponent(name), { method: 'DELETE', headers: { 'Accept': 'application/json' } })
@@ -158,6 +153,9 @@
                     <th>Apellido(s)</th>
                     <th>Rol</th>
                     <th>Empresa</th>
+                    <th class="col-num" title="Todas las ejecuciones">Ejec.</th>
+                    <th class="col-num" title="Automáticas">Auto.</th>
+                    <th class="col-num" title="Manuales">Man.</th>
                     <th>Acciones</th>
                     {{else}}
                     <th>Email</th>
@@ -174,10 +172,10 @@
                 {{if eq (len $users) 0}}
                 {{if eq $tab "n8n"}}
                 <tr>
-                    <td colspan="6" class="empty-state empty-state-soft">
+                    <td colspan="9" class="empty-state empty-state-soft">
                         <div class="empty-state-icon" aria-hidden="true">👤</div>
                         <p class="empty-state-title">Aún no hay usuarios en n8n</p>
-                        <p class="empty-state-sub">Crea invitaciones con <strong>Nuevo usuario</strong> o revisa la consola de n8n.</p>
+                        <p class="empty-state-sub"><strong>Nuevo usuario</strong> o la consola de n8n.</p>
                     </td>
                 </tr>
                 {{else}}
@@ -205,6 +203,11 @@
                         </span>
                     </td>
                     <td>{{.Company}}</td>
+                    {{if eq $tab "n8n"}}
+                    <td class="col-num">{{.TotalExecutions}}</td>
+                    <td class="col-num">{{.ProdExecutions}}</td>
+                    <td class="col-num">{{.ManualExecutions}}</td>
+                    {{end}}
                     <td>
                         {{if and (eq $tab "n8n") .InviteURL}}
                         <button type="button" class="btn-small btn-invite"

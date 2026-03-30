@@ -110,36 +110,43 @@ func getN8NUsers() ([]N8NUser, error) {
 
 	client := n8nHTTPClient()
 
-	cookies, err := n8nLogin(client)
-	if err != nil {
-		return nil, fmt.Errorf("n8n authentication failed: %w", err)
-	}
+	var body []byte
+	for attempt := 0; attempt < 2; attempt++ {
+		cookies, err := n8nOwnerCookies(client)
+		if err != nil {
+			return nil, fmt.Errorf("n8n authentication failed: %w", err)
+		}
 
-	req, err := http.NewRequest(http.MethodGet, config.N8NInternalURL+"/rest/users", nil)
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Content-Type", "application/json")
-	if config.N8NBasicUser != "" {
-		req.SetBasicAuth(config.N8NBasicUser, config.N8NBasicPass)
-	}
-	for _, c := range cookies {
-		req.AddCookie(c)
-	}
+		req, err := http.NewRequest(http.MethodGet, config.N8NInternalURL+"/rest/users", nil)
+		if err != nil {
+			return nil, err
+		}
+		req.Header.Set("Content-Type", "application/json")
+		if config.N8NBasicUser != "" {
+			req.SetBasicAuth(config.N8NBasicUser, config.N8NBasicPass)
+		}
+		for _, c := range cookies {
+			req.AddCookie(c)
+		}
 
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("n8n read body: %w", err)
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("n8n returned status %d: %s", resp.StatusCode, string(body))
+		resp, err := client.Do(req)
+		if err != nil {
+			return nil, err
+		}
+		b, rerr := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if rerr != nil {
+			return nil, fmt.Errorf("n8n read body: %w", rerr)
+		}
+		if resp.StatusCode == http.StatusUnauthorized && attempt == 0 {
+			n8nInvalidateOwnerSession()
+			continue
+		}
+		if resp.StatusCode != http.StatusOK {
+			return nil, fmt.Errorf("n8n returned status %d: %s", resp.StatusCode, string(b))
+		}
+		body = b
+		break
 	}
 
 	var items []N8NUser
@@ -259,11 +266,15 @@ type GestionUser struct {
 	IsPending bool
 	CreatedAt string
 	// n8n: estadísticas desde PostgreSQL (misma consulta que en psql)
-	WorkflowsAccesibles  int64
-	ProdExecutions       int64
-	FailedProdExecutions int64
-	FailureRatePct       float64
-	RunTimeAvgSeconds    float64
+	WorkflowsAccesibles   int64
+	TotalExecutions       int64
+	ProdExecutions        int64
+	FailedTotalExecutions int64
+	FailedProdExecutions  int64
+	FailureRatePct        float64
+	RunTimeAvgSeconds     float64
+	// Ejecuciones manuales = total − automáticas (solo UI).
+	ManualExecutions int64
 }
 
 // N8NProjectRelation is a user's membership in an n8n project (RBAC).
@@ -285,11 +296,13 @@ type N8NUser struct {
 	ProjectRelations []N8NProjectRelation `json:"projectRelations"`
 	Company          string `json:"company,omitempty"`
 
-	WorkflowsAccesibles  int64   `json:"workflowsAccesibles"`
-	ProdExecutions       int64   `json:"prodExecutions"`
-	FailedProdExecutions int64   `json:"failedProdExecutions"`
-	FailureRatePct       float64 `json:"failureRatePct"`
-	RunTimeAvgSeconds    float64 `json:"runTimeAvgSeconds"`
+	WorkflowsAccesibles   int64   `json:"workflowsAccesibles"`
+	TotalExecutions       int64   `json:"totalExecutions"`
+	ProdExecutions        int64   `json:"prodExecutions"`
+	FailedTotalExecutions int64   `json:"failedTotalExecutions"`
+	FailedProdExecutions  int64   `json:"failedProdExecutions"`
+	FailureRatePct        float64 `json:"failureRatePct"`
+	RunTimeAvgSeconds     float64 `json:"runTimeAvgSeconds"`
 }
 
 // LibreChatUser represents a user from LibreChat.
@@ -339,6 +352,10 @@ func gestionUsersForTab(tab string) ([]GestionUser, error) {
 			if name == "" {
 				name = "-"
 			}
+			manual := u.TotalExecutions - u.ProdExecutions
+			if manual < 0 {
+				manual = 0
+			}
 			users = append(users, GestionUser{
 				ID:                   u.ID,
 				Email:                u.Email,
@@ -349,11 +366,14 @@ func gestionUsersForTab(tab string) ([]GestionUser, error) {
 				Company:              u.Company,
 				InviteURL:            u.InviteAcceptURL,
 				IsPending:            u.IsPending,
-				WorkflowsAccesibles:  u.WorkflowsAccesibles,
-				ProdExecutions:       u.ProdExecutions,
-				FailedProdExecutions: u.FailedProdExecutions,
-				FailureRatePct:       u.FailureRatePct,
-				RunTimeAvgSeconds:    u.RunTimeAvgSeconds,
+				WorkflowsAccesibles:   u.WorkflowsAccesibles,
+				TotalExecutions:       u.TotalExecutions,
+				ProdExecutions:        u.ProdExecutions,
+				ManualExecutions:      manual,
+				FailedTotalExecutions: u.FailedTotalExecutions,
+				FailedProdExecutions:  u.FailedProdExecutions,
+				FailureRatePct:        u.FailureRatePct,
+				RunTimeAvgSeconds:     u.RunTimeAvgSeconds,
 			})
 		}
 		return users, nil
@@ -575,7 +595,7 @@ func createUsersFromJSON(tab string, usersJSON string) ([]byte, error) {
 		body, _ := json.Marshal(apiPayload)
 		client := &http.Client{Timeout: 15 * time.Second}
 
-		cookies, err := n8nLogin(client)
+		cookies, err := n8nOwnerCookies(client)
 		if err != nil {
 			return nil, fmt.Errorf("n8n authentication failed: %w", err)
 		}
@@ -723,7 +743,7 @@ func createUsersFromJSON(tab string, usersJSON string) ([]byte, error) {
 func fetchN8NUsersStruct() ([]GestionUser, error) {
 	client := &http.Client{Timeout: 15 * time.Second}
 
-	cookies, err := n8nLogin(client)
+	cookies, err := n8nOwnerCookies(client)
 	if err != nil {
 		return nil, err
 	}
@@ -889,7 +909,7 @@ func HandleGestionUsersRows(w http.ResponseWriter, r *http.Request) {
 		n8nUsers, err := getN8NUsers()
 		if err != nil {
 			log.Printf("gestion users-rows n8n: %v", err)
-			ui.RenderGestionRows(w, tab, `<div class="table-responsive-wrap"><table class="data-table"><tbody><tr><td colspan="6" class="empty-state empty-state-error"><p>No se pudieron cargar los usuarios.</p><p class="empty-state-sub">Comprueba credenciales de n8n y conectividad.</p></td></tr></tbody></table></div>`)
+			ui.RenderGestionRows(w, tab, `<div class="table-responsive-wrap"><table class="data-table"><tbody><tr><td colspan="9" class="empty-state empty-state-error"><p>No se pudieron cargar los usuarios.</p><p class="empty-state-sub">Revisa credenciales de n8n y la red.</p></td></tr></tbody></table></div>`)
 			return
 		}
 		ui.RenderGestionRows(w, tab, buildN8NUsersTableHTML(n8nUsers))
@@ -925,9 +945,9 @@ func fetchN8NUsers() ([]byte, error) {
 // buildN8NUsersTableHTML renders the users table for HTMX (tab n8n).
 func buildN8NUsersTableHTML(users []N8NUser) string {
 	var b strings.Builder
-	b.WriteString(`<div class="table-responsive-wrap"><table class="data-table gestion-table-n8n"><thead><tr><th>Email</th><th>Nombre</th><th>Apellido(s)</th><th>Rol</th><th>Empresa</th><th>Acciones</th></tr></thead><tbody>`)
+	b.WriteString(`<div class="table-responsive-wrap"><table class="data-table gestion-table-n8n"><thead><tr><th>Email</th><th>Nombre</th><th>Apellido(s)</th><th>Rol</th><th>Empresa</th><th class="col-num" title="Todas las ejecuciones en workflows compartidos">Ejec.</th><th class="col-num" title="No manuales">Auto.</th><th class="col-num" title="Ejecuciones manuales">Man.</th><th>Acciones</th></tr></thead><tbody>`)
 	if len(users) == 0 {
-		b.WriteString(`<tr><td colspan="6" class="empty-state empty-state-soft"><div class="empty-state-icon" aria-hidden="true">👤</div><p>Aún no hay usuarios en n8n</p><p class="empty-state-sub">Crea invitaciones con <strong>Nuevo usuario</strong> o revisa la consola de n8n.</p></td></tr>`)
+		b.WriteString(`<tr><td colspan="9" class="empty-state empty-state-soft"><div class="empty-state-icon" aria-hidden="true">👤</div><p>Aún no hay usuarios en n8n</p><p class="empty-state-sub"><strong>Nuevo usuario</strong> o la consola de n8n.</p></td></tr>`)
 		b.WriteString(`</tbody></table></div>`)
 		return b.String()
 	}
@@ -957,13 +977,20 @@ func buildN8NUsersTableHTML(users []N8NUser) string {
 		if uid == "" {
 			uid = u.Email
 		}
-		fmt.Fprintf(&b, `<tr><td>%s</td><td>%s</td><td>%s</td><td><span class="role-badge %s">%s</span></td><td>%s</td><td>%s<button type="button" class="btn-small btn-edit" data-tab="n8n" data-id="%s" data-email="%s" data-firstname="%s" data-lastname="%s" data-role="%s" data-company="%s" onclick="openEditModalFromDataset(this)">Editar</button> <button type="button" class="btn-small btn-delete" data-tab="n8n" data-id="%s" data-email="%s" onclick="deleteUser(this)">Eliminar</button></td></tr>`,
+		manual := u.TotalExecutions - u.ProdExecutions
+		if manual < 0 {
+			manual = 0
+		}
+		fmt.Fprintf(&b, `<tr><td>%s</td><td>%s</td><td>%s</td><td><span class="role-badge %s">%s</span></td><td>%s</td><td class="col-num">%d</td><td class="col-num">%d</td><td class="col-num">%d</td><td>%s<button type="button" class="btn-small btn-edit" data-tab="n8n" data-id="%s" data-email="%s" data-firstname="%s" data-lastname="%s" data-role="%s" data-company="%s" onclick="openEditModalFromDataset(this)">Editar</button> <button type="button" class="btn-small btn-delete" data-tab="n8n" data-id="%s" data-email="%s" onclick="deleteUser(this)">Eliminar</button></td></tr>`,
 			html.EscapeString(u.Email),
 			html.EscapeString(fn),
 			html.EscapeString(ln),
 			roleClass,
 			html.EscapeString(roleLabel),
 			html.EscapeString(u.Company),
+			u.TotalExecutions,
+			u.ProdExecutions,
+			manual,
 			invite,
 			html.EscapeString(uid),
 			html.EscapeString(u.Email),
@@ -1039,7 +1066,7 @@ func createN8NUsersFromForm(r *http.Request) ([]byte, error) {
 
 	client := &http.Client{Timeout: 15 * time.Second}
 
-	cookies, err := n8nLogin(client)
+	cookies, err := n8nOwnerCookies(client)
 	if err != nil {
 		return nil, fmt.Errorf("n8n authentication failed: %w", err)
 	}

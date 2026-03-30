@@ -367,7 +367,7 @@ func SyncN8NUserAIKeys(n8nUser *N8NUser, companyCanon string) error {
 		return nil
 	}
 	client := n8nCredentialHTTPClient()
-	cookies, err := n8nLogin(client)
+	cookies, err := n8nOwnerCookies(client)
 	if err != nil {
 		return fmt.Errorf("n8n login: %w", err)
 	}
@@ -413,7 +413,7 @@ func SyncN8NAllUsersForCompany(ctx context.Context, companyCanon string) (int, e
 	}
 
 	client := n8nCredentialHTTPClient()
-	cookies, err := n8nLogin(client)
+	cookies, err := n8nOwnerCookies(client)
 	if err != nil {
 		return 0, fmt.Errorf("n8n login: %w", err)
 	}
@@ -424,10 +424,11 @@ func SyncN8NAllUsersForCompany(ctx context.Context, companyCanon string) (int, e
 		log.Printf("n8n-cred-sync: MATCH %s → empresa %q, sincronizando…", u.Email, companyCanon)
 		err := syncN8NUserAIKeysWithSession(client, cookies, u, companyCanon)
 		if err != nil && n8nErrLooksLikeRateLimit(err) {
-			log.Printf("n8n-cred-sync: 429 en sync %s, re-login tras pausa…", u.Email)
+			log.Printf("n8n-cred-sync: 429 en sync %s, invalidar sesión y re-login tras pausa…", u.Email)
+			n8nInvalidateOwnerSession()
 			time.Sleep(3 * time.Second)
 			var loginErr error
-			cookies, loginErr = n8nLogin(client)
+			cookies, loginErr = n8nOwnerCookies(client)
 			if loginErr != nil {
 				log.Printf("n8n-cred-sync: ERROR re-login: %v", loginErr)
 				continue
@@ -486,7 +487,7 @@ func n8nSyncAIKeysForEmails(emails []string) {
 	}
 
 	client := n8nCredentialHTTPClient()
-	cookies, err := n8nLogin(client)
+	cookies, err := n8nOwnerCookies(client)
 	if err != nil {
 		log.Printf("gestión n8n: sync tras invitación login: %v", err)
 		return
@@ -494,8 +495,9 @@ func n8nSyncAIKeysForEmails(emails []string) {
 	for _, it := range batch {
 		err := syncN8NUserAIKeysWithSession(client, cookies, it.u, it.canon)
 		if err != nil && n8nErrLooksLikeRateLimit(err) {
+			n8nInvalidateOwnerSession()
 			time.Sleep(3 * time.Second)
-			cookies, err = n8nLogin(client)
+			cookies, err = n8nOwnerCookies(client)
 			if err != nil {
 				log.Printf("gestión n8n: sync tras invitación re-login: %v", err)
 				continue

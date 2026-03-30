@@ -27,12 +27,14 @@ type GestionStatsN8NSection struct {
 }
 
 type N8NStatsTotals struct {
-	UserCount            int     `json:"userCount"`
-	WorkflowsAccesibles  int64   `json:"workflowsAccesibles"`
-	ProdExecutions       int64   `json:"prodExecutions"`
-	FailedProdExecutions int64   `json:"failedProdExecutions"`
-	AvgFailureRatePct    float64 `json:"avgFailureRatePct"`
-	AvgRunTimeSeconds    float64 `json:"avgRunTimeSeconds"`
+	UserCount             int     `json:"userCount"`
+	WorkflowsAccesibles   int64   `json:"workflowsAccesibles"`
+	TotalExecutions       int64   `json:"totalExecutions"`
+	ProdExecutions        int64   `json:"prodExecutions"`
+	FailedTotalExecutions int64   `json:"failedTotalExecutions"`
+	FailedProdExecutions  int64   `json:"failedProdExecutions"`
+	AvgFailureRatePct     float64 `json:"avgFailureRatePct"`
+	AvgRunTimeSeconds     float64 `json:"avgRunTimeSeconds"`
 }
 
 // GestionStatsLCSection métricas LibreChat (MongoDB).
@@ -53,7 +55,9 @@ func n8nTotalsFromSeries(users []N8NStatsSeriesItem) N8NStatsTotals {
 	var sumRate, sumRun float64
 	for _, u := range users {
 		t.WorkflowsAccesibles += u.WorkflowsAccesibles
+		t.TotalExecutions += u.TotalExecutions
 		t.ProdExecutions += u.ProdExecutions
+		t.FailedTotalExecutions += u.FailedTotalExecutions
 		t.FailedProdExecutions += u.FailedProdExecutions
 		sumRate += u.FailureRatePct
 		sumRun += u.RunTimeAvgSeconds
@@ -122,7 +126,7 @@ func HandleGestionStatsAPI(w http.ResponseWriter, r *http.Request) {
 	if strings.TrimSpace(config.MongoURI) == "" {
 		out.LibreChat = GestionStatsLCSection{
 			Available: false,
-			Message:   "Sin MONGO_URI en el launcher no hay métricas de LibreChat.",
+			Message:   "Falta MONGO_URI: no se pueden leer métricas de LibreChat.",
 		}
 	} else {
 		lcUsers, lcTotals, err := FetchLibreChatStatsSeries(ctx)
@@ -138,7 +142,7 @@ func HandleGestionStatsAPI(w http.ResponseWriter, r *http.Request) {
 				Totals:    lcTotals,
 			}
 			if len(lcUsers) == 0 {
-				out.LibreChat.Message = "La base aún no tiene conversaciones ni mensajes asociados a usuarios."
+				out.LibreChat.Message = "Sin conversaciones todavía."
 			}
 		}
 	}

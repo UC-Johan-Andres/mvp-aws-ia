@@ -1,3 +1,9 @@
+# Notas de despliegue (429 / límites):
+# - 429 al enviar mensaje con Gemini: casi siempre es límite o cuota de Google (a menudo sin cuerpo en la respuesta).
+#   Eso no es lo mismo que un rate limit interno de LibreChat (suele venir con otro mensaje o de /api distinto).
+# - Tras “probar clave”, el primer mensaje real suele llamar al modelo de chat y, si titleConvo usa el mismo endpoint,
+#   también al de títulos. Los títulos para conv. iniciadas con Gemini se envían a OpenRouter para no gastar cuota Gemini.
+#   Si OPENROUTER_KEY está vacío, quita titleEndpoint/titleModel aquí y deja titleModel en un modelo Gemini o titleConvo: false.
 version: 1.3.4
 
 endpoints:
@@ -45,5 +51,7 @@ endpoints:
         fetch: false
       userProvide: true
       titleConvo: true
-      titleModel: "gemini-2.0-flash-lite"
+      # Títulos fuera de Google → menos 429 “justo después de validar la clave” (antes: chat + título = 2× Gemini).
+      titleEndpoint: "OpenRouter"
+      titleModel: "z-ai/glm-4.5-air:free"
       modelDisplayLabel: "Google Gemini"

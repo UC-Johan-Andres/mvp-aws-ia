@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 
 	"launcher/config"
@@ -19,9 +20,60 @@ func n8nHTTPClient() *http.Client {
 	return &http.Client{Timeout: 15 * time.Second}
 }
 
-// n8nLogin authenticates with n8n using owner credentials and basic auth,
-// returning the session cookies from the response.
-func n8nLogin(client *http.Client) ([]*http.Cookie, error) {
+var (
+	n8nOwnerSessMu    sync.Mutex
+	n8nOwnerSessCookies []*http.Cookie
+	n8nOwnerSessUntil   time.Time
+)
+
+const n8nOwnerSessionTTL = 5 * time.Minute
+
+func cloneHTTPCookies(src []*http.Cookie) []*http.Cookie {
+	if len(src) == 0 {
+		return nil
+	}
+	out := make([]*http.Cookie, 0, len(src))
+	for _, c := range src {
+		if c == nil {
+			continue
+		}
+		cp := *c
+		out = append(out, &cp)
+	}
+	return out
+}
+
+// n8nInvalidateOwnerSession borra la caché de cookies (p. ej. 401 o tras 429 antes de re-login).
+func n8nInvalidateOwnerSession() {
+	n8nOwnerSessMu.Lock()
+	defer n8nOwnerSessMu.Unlock()
+	n8nOwnerSessCookies = nil
+	n8nOwnerSessUntil = time.Time{}
+}
+
+// n8nOwnerCookies devuelve cookies de sesión del owner reutilizando caché breve para no disparar 429 en n8n.
+func n8nOwnerCookies(client *http.Client) ([]*http.Cookie, error) {
+	n8nOwnerSessMu.Lock()
+	if len(n8nOwnerSessCookies) > 0 && time.Now().Before(n8nOwnerSessUntil) {
+		out := cloneHTTPCookies(n8nOwnerSessCookies)
+		n8nOwnerSessMu.Unlock()
+		return out, nil
+	}
+	n8nOwnerSessMu.Unlock()
+
+	cookies, err := n8nLogin(client)
+	if err != nil {
+		return nil, err
+	}
+	n8nOwnerSessMu.Lock()
+	n8nOwnerSessCookies = cloneHTTPCookies(cookies)
+	n8nOwnerSessUntil = time.Now().Add(n8nOwnerSessionTTL)
+	n8nOwnerSessMu.Unlock()
+	return cloneHTTPCookies(cookies), nil
+}
+
+// n8nLoginOnce un solo POST /rest/login.
+func n8nLoginOnce(client *http.Client) ([]*http.Cookie, error) {
 	body, _ := json.Marshal(map[string]string{
 		"emailOrLdapLoginId": config.N8NOwnerEmail,
 		"password":           config.N8NOwnerPass,
@@ -42,12 +94,37 @@ func n8nLogin(client *http.Client) ([]*http.Cookie, error) {
 	}
 	defer resp.Body.Close()
 
+	data, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode != http.StatusOK {
-		data, _ := io.ReadAll(resp.Body)
 		return nil, fmt.Errorf("n8n login failed with status %d: %s", resp.StatusCode, string(data))
 	}
 
 	return resp.Cookies(), nil
+}
+
+// n8nLogin autentica con reintentos si n8n responde 429 (rate limit).
+func n8nLogin(client *http.Client) ([]*http.Cookie, error) {
+	var lastErr error
+	for attempt := 0; attempt < 5; attempt++ {
+		if attempt > 0 {
+			d := time.Duration(1+attempt*2) * time.Second
+			if d > 10*time.Second {
+				d = 10 * time.Second
+			}
+			log.Printf("n8n: esperando %v antes de reintentar login (intento %d/5)", d, attempt+1)
+			time.Sleep(d)
+		}
+		cookies, err := n8nLoginOnce(client)
+		if err == nil {
+			return cookies, nil
+		}
+		lastErr = err
+		s := strings.ToLower(err.Error())
+		if !strings.Contains(s, "429") && !strings.Contains(s, "too many requests") {
+			return nil, err
+		}
+	}
+	return nil, lastErr
 }
 
 func listN8NUsers(w http.ResponseWriter, r *http.Request) {
@@ -115,7 +192,7 @@ func createN8NUsers(w http.ResponseWriter, r *http.Request) {
 
 	client := n8nHTTPClient()
 
-	cookies, err := n8nLogin(client)
+	cookies, err := n8nOwnerCookies(client)
 	if err != nil {
 		jsonError(w, "n8n authentication failed: "+err.Error(), http.StatusBadGateway)
 		return
@@ -198,7 +275,7 @@ func deleteN8NUser(w http.ResponseWriter, r *http.Request) {
 
 	client := n8nHTTPClient()
 
-	cookies, err := n8nLogin(client)
+	cookies, err := n8nOwnerCookies(client)
 	if err != nil {
 		jsonError(w, "n8n authentication failed: "+err.Error(), http.StatusBadGateway)
 		return
@@ -289,7 +366,7 @@ func HandleN8NPasswordResetLink(w http.ResponseWriter, r *http.Request) {
 
 func fetchN8NPasswordResetLink(userID string) (string, error) {
 	client := n8nHTTPClient()
-	cookies, err := n8nLogin(client)
+	cookies, err := n8nOwnerCookies(client)
 	if err != nil {
 		return "", fmt.Errorf("n8n authentication failed: %w", err)
 	}
@@ -357,7 +434,7 @@ func updateN8NUser(w http.ResponseWriter, r *http.Request) {
 
 	client := n8nHTTPClient()
 
-	cookies, err := n8nLogin(client)
+	cookies, err := n8nOwnerCookies(client)
 	if err != nil {
 		jsonError(w, "n8n authentication failed: "+err.Error(), http.StatusBadGateway)
 		return

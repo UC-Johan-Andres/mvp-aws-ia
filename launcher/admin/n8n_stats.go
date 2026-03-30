@@ -16,13 +16,15 @@ import (
 
 // N8NStatsSeriesItem: una fila por usuario (consulta PostgreSQL).
 type N8NStatsSeriesItem struct {
-	UserID               string  `json:"userId"`
-	Email                string  `json:"email"`
-	WorkflowsAccesibles  int64   `json:"workflowsAccesibles"`
-	ProdExecutions       int64   `json:"prodExecutions"`
-	FailedProdExecutions int64   `json:"failedProdExecutions"`
-	FailureRatePct       float64 `json:"failureRatePct"`
-	RunTimeAvgSeconds    float64 `json:"runTimeAvgSeconds"`
+	UserID                string  `json:"userId"`
+	Email                 string  `json:"email"`
+	WorkflowsAccesibles   int64   `json:"workflowsAccesibles"`
+	TotalExecutions       int64   `json:"totalExecutions"`
+	ProdExecutions        int64   `json:"prodExecutions"`
+	FailedTotalExecutions int64   `json:"failedTotalExecutions"`
+	FailedProdExecutions  int64   `json:"failedProdExecutions"`
+	FailureRatePct        float64 `json:"failureRatePct"`
+	RunTimeAvgSeconds     float64 `json:"runTimeAvgSeconds"`
 }
 
 // Incluye u.id para cruzar con la API aunque el email difiera en mayúsculas/espacios.
@@ -32,7 +34,9 @@ SELECT
   u.id::text AS user_id,
   u.email AS usuario,
   COUNT(DISTINCT sw."workflowId")::bigint AS workflows_accesibles,
+  COUNT(e.id)::bigint AS total_executions,
   COUNT(e.id) FILTER (WHERE e.mode <> 'manual')::bigint AS prod_executions,
+  COUNT(e.id) FILTER (WHERE e.status = 'error')::bigint AS failed_total_executions,
   COUNT(e.id) FILTER (WHERE e.mode <> 'manual' AND e.status = 'error')::bigint AS failed_prod_executions,
   CASE 
     WHEN COUNT(e.id) FILTER (WHERE e.mode <> 'manual') = 0 THEN 0::double precision
@@ -50,15 +54,17 @@ LEFT JOIN project_relation pr ON u.id = pr."userId"
 LEFT JOIN shared_workflow sw ON pr."projectId" = sw."projectId"
 LEFT JOIN execution_entity e ON sw."workflowId" = e."workflowId"
 GROUP BY u.id, u.email
-ORDER BY COUNT(e.id) FILTER (WHERE e.mode <> 'manual') DESC
+ORDER BY COUNT(e.id) DESC
 `
 
 type n8nDBStatsRow struct {
-	WorkflowsAccesibles  int64
-	ProdExecutions       int64
-	FailedProdExecutions int64
-	FailureRatePct       float64
-	RunTimeAvgSeconds    float64
+	WorkflowsAccesibles   int64
+	TotalExecutions       int64
+	ProdExecutions        int64
+	FailedTotalExecutions int64
+	FailedProdExecutions  int64
+	FailureRatePct        float64
+	RunTimeAvgSeconds     float64
 }
 
 func loadN8NStatsMaps(ctx context.Context, db *sql.DB) (byUserID map[string]n8nDBStatsRow, byEmail map[string]n8nDBStatsRow, err error) {
@@ -77,7 +83,9 @@ func loadN8NStatsMaps(ctx context.Context, db *sql.DB) (byUserID map[string]n8nD
 			&userID,
 			&email,
 			&r.WorkflowsAccesibles,
+			&r.TotalExecutions,
 			&r.ProdExecutions,
+			&r.FailedTotalExecutions,
 			&r.FailedProdExecutions,
 			&r.FailureRatePct,
 			&r.RunTimeAvgSeconds,
@@ -106,7 +114,9 @@ func loadN8NStatsSeries(ctx context.Context, db *sql.DB) ([]N8NStatsSeriesItem, 
 			&it.UserID,
 			&it.Email,
 			&it.WorkflowsAccesibles,
+			&it.TotalExecutions,
 			&it.ProdExecutions,
+			&it.FailedTotalExecutions,
 			&it.FailedProdExecutions,
 			&it.FailureRatePct,
 			&it.RunTimeAvgSeconds,
@@ -264,7 +274,9 @@ func enrichN8NUsersFromPostgres(users []N8NUser) {
 			continue
 		}
 		users[i].WorkflowsAccesibles = s.WorkflowsAccesibles
+		users[i].TotalExecutions = s.TotalExecutions
 		users[i].ProdExecutions = s.ProdExecutions
+		users[i].FailedTotalExecutions = s.FailedTotalExecutions
 		users[i].FailedProdExecutions = s.FailedProdExecutions
 		users[i].FailureRatePct = s.FailureRatePct
 		users[i].RunTimeAvgSeconds = s.RunTimeAvgSeconds
