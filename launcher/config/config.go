@@ -35,7 +35,7 @@ var (
 
 	// SES Email configuration
 	SESSMTPHost     = getEnv("SES_SMTP_HOST", "email-smtp.us-east-1.amazonaws.com")
-	SESSMTPPort     = 587
+	SESSMTPPort     = 465
 	SESSMTPUser     = getEnv("SES_SMTP_USER", "")
 	SESSMTPPassword = getEnv("SES_SMTP_PASSWORD", "")
 	SESFromEmail    = getEnv("SES_FROM_EMAIL", "")

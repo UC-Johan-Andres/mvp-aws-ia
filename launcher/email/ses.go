@@ -1,67 +1,33 @@
 package email
 
 import (
-	"context"
+	"crypto/tls"
 	"fmt"
 
-	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/credentials"
-	"github.com/aws/aws-sdk-go-v2/service/ses"
-	"github.com/aws/aws-sdk-go-v2/service/ses/types"
-
+	"gopkg.in/gomail.v2"
 	"launcher/config"
 )
 
-var sesClient *ses.Client
-
-func getSESClient() *ses.Client {
-	if sesClient != nil {
-		return sesClient
-	}
-
-	awsCfg := aws.Config{
-		Region: config.SESRegion,
-		Credentials: credentials.NewStaticCredentialsProvider(
-			config.SESSMTPUser,
-			config.SESSMTPPassword,
-			"",
-		),
-	}
-
-	sesClient = ses.NewFromConfig(awsCfg)
-	return sesClient
-}
-
 func SendEmail(to, subject, body string) error {
-	ctx := context.Background()
+	m := gomail.NewMessage()
+	m.SetHeader("From", config.SESFromEmail)
+	m.SetHeader("To", to)
+	m.SetHeader("Subject", subject)
+	m.SetBody("text/html", body)
 
-	client := getSESClient()
-	if client == nil {
-		return fmt.Errorf("SES client not initialized")
+	d := gomail.NewDialer(
+		config.SESSMTPHost,
+		465,
+		config.SESSMTPUser,
+		config.SESSMTPPassword,
+	)
+	d.SSL = true
+	d.TLSConfig = &tls.Config{
+		ServerName: config.SESSMTPHost,
 	}
 
-	input := &ses.SendEmailInput{
-		Source: aws.String(config.SESFromEmail),
-		Destination: &types.Destination{
-			ToAddresses: []string{to},
-		},
-		Message: &types.Message{
-			Subject: &types.Content{
-				Data: aws.String(subject),
-			},
-			Body: &types.Body{
-				Html: &types.Content{
-					Data: aws.String(body),
-				},
-			},
-		},
+	if err := d.DialAndSend(m); err != nil {
+		return fmt.Errorf("failed to send email: %w", err)
 	}
-
-	result, err := client.SendEmail(ctx, input)
-	if err != nil {
-		return fmt.Errorf("SES send email failed: %w", err)
-	}
-
-	fmt.Printf("SES email sent successfully: %s\n", *result.MessageId)
 	return nil
 }
