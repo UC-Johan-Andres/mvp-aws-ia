@@ -177,6 +177,13 @@
             outline: 2px solid var(--primary);
             outline-offset: 2px;
         }
+        /* Oculto hasta pestaña Empresas; !important gana sobre estilos inline heredados */
+        #btn-new-company:not(.header-action-visible) {
+            display: none !important;
+        }
+        #btn-new-company.header-action-visible {
+            display: inline-flex !important;
+        }
         .user-badge {
             display: inline-flex;
             align-items: center;
@@ -1112,8 +1119,8 @@
                         title="Crear usuario" aria-label="Crear nuevo usuario">
                     + Nuevo usuario
                 </button>
-                <button type="button" class="btn-header-new" id="btn-new-company" onclick="openCompanyModalCreate()"
-                        title="Nueva empresa" aria-label="Crear nueva empresa" style="display:none" aria-hidden="true">
+                <button type="button" class="btn-header-new" id="btn-new-company" onclick="window.openCompanyModalCreate && window.openCompanyModalCreate()"
+                        title="Nueva empresa" aria-label="Crear nueva empresa" aria-hidden="true">
                     + Nueva empresa
                 </button>
                 <button type="button" class="btn-theme" id="theme-cycle" title="Cambiar tema" aria-label="Tema: automático, claro u oscuro">
@@ -1208,7 +1215,7 @@
         </div>
     </div>
 
-    <div id="company-modal" onclick="if (event.target === this) closeCompanyModal()">
+    <div id="company-modal" onclick="if (event.target === this) window.closeCompanyModal && window.closeCompanyModal()">
         <div class="modal-content" role="dialog" aria-modal="true" aria-labelledby="company-modal-title">
             <h3 id="company-modal-title">Nueva empresa</h3>
             <p id="company-modal-lede" class="create-modal-lede">Nombre y, opcionalmente, API keys (OpenAI y Google Gemini para n8n y LibreChat).</p>
@@ -1231,8 +1238,8 @@
                 <label><input type="checkbox" id="company-modal-remove-gemini"> Quitar clave Gemini guardada</label>
             </div>
             <div class="modal-actions">
-                <button type="button" class="modal-close" onclick="closeCompanyModal()">Cancelar</button>
-                <button type="button" class="modal-save" onclick="saveCompanyModal()">Guardar</button>
+                <button type="button" class="modal-close" onclick="window.closeCompanyModal && window.closeCompanyModal()">Cancelar</button>
+                <button type="button" class="modal-save" onclick="window.saveCompanyModal && window.saveCompanyModal()">Guardar</button>
             </div>
         </div>
     </div>
@@ -1614,7 +1621,7 @@
             }
             if (btnCo) {
                 const showC = (currentTab === 'empresas');
-                btnCo.style.display = showC ? '' : 'none';
+                btnCo.classList.toggle('header-action-visible', showC);
                 btnCo.setAttribute('aria-hidden', showC ? 'false' : 'true');
             }
         }
@@ -1747,6 +1754,20 @@
                 showToast('Error de red', 'error');
             }
         }
+
+        // HTMX inyecta onclick en #main-content; deben existir en window (no solo en el cierre léxico del script).
+        window.openCompanyModalCreate = openCompanyModalCreate;
+        window.openCompanyModalEdit = openCompanyModalEdit;
+        window.closeCompanyModal = closeCompanyModal;
+        window.saveCompanyModal = saveCompanyModal;
+
+        document.body.addEventListener('htmx:afterSwap', function (evt) {
+            if (!evt.detail || !evt.detail.target) return;
+            if (evt.detail.target.id !== 'main-content') return;
+            if (typeof updateHeaderNewButtons === 'function') {
+                updateHeaderNewButtons();
+            }
+        });
 
         function openCreateUserModal() {
             if (currentTab !== 'n8n' && currentTab !== 'librechat') {

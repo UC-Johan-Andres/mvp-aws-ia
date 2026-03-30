@@ -59,7 +59,7 @@
                     <td>{{if .IsDefault}}<span class="badge-default">Sí</span>{{else}}<span class="text-muted">—</span>{{end}}</td>
                     <td>
                         <div class="empresas-actions">
-                            <button type="button" class="btn-small btn-edit" data-empresa="{{.Name}}" onclick="openCompanyModalEdit(this.dataset.empresa)">Editar</button>
+                            <button type="button" class="btn-small btn-edit" data-empresa="{{.Name}}" onclick="window.openCompanyModalEdit && window.openCompanyModalEdit(this.dataset.empresa)">Editar</button>
                             {{if not .IsDefault}}
                             <button type="button" class="btn-small btn-invite" data-empresa="{{.Name}}" onclick="empresaSetDefault(this.dataset.empresa)">Predeterminada</button>
                             {{end}}
