@@ -411,8 +411,8 @@ func HandleGestionSubmit(w http.ResponseWriter, r *http.Request) {
 	} else if tab == "n8n" {
 		_, err = createN8NUsersFromForm(r)
 	} else {
-		// LibreChat: usar función unificada del API
-		err = createLibreChatUsersFromGestion(r)
+		// LibreChat: BFF hace HTTP call al API
+		err = callLibreChatAPI(r)
 	}
 
 	if err != nil {
@@ -1019,9 +1019,9 @@ func createN8NUsersFromForm(r *http.Request) ([]byte, error) {
 	return data, nil
 }
 
-// createLibreChatUsersFromGestion creates LibreChat users from dashboard HTMX form.
-// Reuses the internal function from the API layer.
-func createLibreChatUsersFromGestion(r *http.Request) error {
+// callLibreChatAPI makes an HTTP call to the LibreChat API from the BFF.
+// This follows the BFF pattern: /gestion calls /admin/librechat/users internally.
+func callLibreChatAPI(r *http.Request) error {
 	emails := r.Form["email"]
 	names := r.Form["name"]
 	passwords := r.Form["password"]
@@ -1033,6 +1033,14 @@ func createLibreChatUsersFromGestion(r *http.Request) error {
 	company := strings.TrimSpace(r.FormValue("company"))
 	if company == "" {
 		company = GestionDefaultCompany()
+	}
+
+	type createUserRequest struct {
+		Email    string `json:"email"`
+		Name     string `json:"name"`
+		Password string `json:"password"`
+		Role     string `json:"role"`
+		Company  string `json:"company"`
 	}
 
 	requests := make([]createUserRequest, 0, len(emails))
@@ -1054,6 +1062,31 @@ func createLibreChatUsersFromGestion(r *http.Request) error {
 		})
 	}
 
-	_, err := createLibreChatUsersInternal(requests)
-	return err
+	jsonData, err := json.Marshal(requests)
+	if err != nil {
+		return fmt.Errorf("failed to marshal request: %w", err)
+	}
+
+	apiURL := "http://localhost" + config.Port + "/admin/librechat/users"
+	apiReq, err := http.NewRequest(http.MethodPost, apiURL, bytes.NewReader(jsonData))
+	if err != nil {
+		return fmt.Errorf("failed to create API request: %w", err)
+	}
+
+	apiReq.Header.Set("Content-Type", "application/json")
+	apiReq.Header.Set("Cookie", r.Header.Get("Cookie"))
+
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Do(apiReq)
+	if err != nil {
+		return fmt.Errorf("failed to call API: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("API returned status %d: %s", resp.StatusCode, string(body))
+	}
+
+	return nil
 }

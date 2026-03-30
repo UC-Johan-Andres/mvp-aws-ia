@@ -206,16 +206,98 @@ func createLibreChatUsersInternal(requests []createUserRequest) ([]lcUserResult,
 
 		log.Printf("DEBUG: usuario creado en MongoDB: %s (empresa: %s)", req.Email, co)
 
-		emailBody := fmt.Sprintf(
-			`<h2>Hola %s,</h2>
-			<p>Tu cuenta ha sido creada exitosamente.</p>
-			<p><strong>Usuario:</strong> %s</p>
-			<p><strong>Contraseña:</strong> %s</p>
-			<p>Saludos,<br>El equipo</p>`,
-			name,
-			req.Email,
-			req.Password,
-		)
+		emailBody := fmt.Sprintf(`<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tu cuenta ha sido creada</title>
+    <style>
+        body {
+            font-family: "Plus Jakarta Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            background: linear-gradient(165deg, #f8fafc 0%, #e2e8f0 100%);
+            margin: 0;
+            padding: 40px 20px;
+        }
+        .container {
+            max-width: 500px;
+            margin: 0 auto;
+            background: #ffffff;
+            border-radius: 16px;
+            box-shadow: 0 4px 24px rgba(15, 23, 42, 0.07);
+            overflow: hidden;
+        }
+        .header {
+            background: linear-gradient(90deg, #2563eb, #8b5cf6);
+            padding: 32px 24px;
+            text-align: center;
+        }
+        .header-title {
+            color: #ffffff;
+            font-size: 24px;
+            font-weight: 700;
+            margin: 0;
+        }
+        .content {
+            padding: 32px 24px;
+        }
+        .greeting {
+            color: #0f172a;
+            font-size: 18px;
+            margin-bottom: 24px;
+        }
+        .card {
+            background: #f8fafc;
+            border-radius: 10px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+        .label {
+            color: #64748b;
+            font-size: 13px;
+            font-weight: 600;
+            text-transform: uppercase;
+            margin-bottom: 4px;
+        }
+        .value {
+            color: #0f172a;
+            font-size: 16px;
+            font-weight: 500;
+        }
+        .footer {
+            padding: 24px;
+            text-align: center;
+            color: #64748b;
+            font-size: 14px;
+            border-top: 1px solid #e2e8f0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1 class="header-title">Cuenta creada</h1>
+        </div>
+        <div class="content">
+            <p class="greeting">Hola %s,</p>
+            <p>Tu cuenta ha sido creada exitosamente. Ya puedes acceder a LibreChat.</p>
+            
+            <div class="card">
+                <div class="label">Usuario</div>
+                <div class="value">%s</div>
+            </div>
+            
+            <div class="card">
+                <div class="label">Contraseña</div>
+                <div class="value">%s</div>
+            </div>
+        </div>
+        <div class="footer">
+            <p>Saludos,<br>El equipo de AI Ecosystem</p>
+        </div>
+    </div>
+</body>
+</html>`, name, req.Email, req.Password)
 		if err := email.SendEmail(req.Email, "Tus credenciales de acceso", emailBody); err != nil {
 			log.Printf("gestion: error enviando email de credenciales a %s: %v", req.Email, err)
 		}
