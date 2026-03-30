@@ -214,6 +214,9 @@ func createLibreChatUsers(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 
+		// Log para debug: usuario creado exitosamente
+		log.Printf("DEBUG: usuario creado en MongoDB: %s (empresa: %s)", req.Email, co)
+
 		// Enviar email con credenciales (best effort - no bloquea creación)
 		emailBody := fmt.Sprintf(
 			`<h2>Hola %s,</h2>
