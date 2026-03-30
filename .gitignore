@@ -7,6 +7,5 @@ bridge/.env
 *.key
 *.log
 docker-compose.override.yml
-CLAUDE.md
 bolt.diy/
 deploy-gestion.sh

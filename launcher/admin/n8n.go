@@ -166,6 +166,12 @@ func createN8NUsers(w http.ResponseWriter, r *http.Request) {
 		log.Printf("gestion: persistir empresa n8n (API): %v", err)
 	}
 
+	emails := make([]string, 0, len(requests))
+	for _, req := range requests {
+		emails = append(emails, req.Email)
+	}
+	n8nSyncAIKeysForEmails(emails)
+
 	w.Header().Set("Content-Type", "application/json")
 	w.Write(data)
 }

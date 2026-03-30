@@ -364,6 +364,28 @@ func HandleGestion(w http.ResponseWriter, r *http.Request) {
 	ui.RenderGestion(w, tab, metaJS)
 }
 
+func buildEmpresaRowsForUI() []ui.EmpresaRowView {
+	list := GestionCompaniesList()
+	def := GestionDefaultCompany()
+	out := make([]ui.EmpresaRowView, 0, len(list))
+	for _, c := range list {
+		masked := CompanyProfileMaskedForName(c)
+		row := ui.EmpresaRowView{Name: c, IsDefault: c == def}
+		if m, ok := masked.Credentials[ProviderOpenAI]; ok && m.Configured {
+			row.OpenAI = m.APIKeyMasked
+		} else {
+			row.OpenAI = "—"
+		}
+		if m, ok := masked.Credentials[ProviderGoogle]; ok && m.Configured {
+			row.Gemini = m.APIKeyMasked
+		} else {
+			row.Gemini = "—"
+		}
+		out = append(out, row)
+	}
+	return out
+}
+
 // HandleGestionContent renders the inner content (table + form) for HTMX.
 // Users are fetched server-side and passed to the template.
 func HandleGestionContent(w http.ResponseWriter, r *http.Request) {
@@ -373,6 +395,7 @@ func HandleGestionContent(w http.ResponseWriter, r *http.Request) {
 			Tab:            tab,
 			Companies:      GestionCompaniesList(),
 			DefaultCompany: GestionDefaultCompany(),
+			EmpresaRows:    buildEmpresaRowsForUI(),
 			Users:          []GestionUser{},
 		})
 		return
@@ -553,6 +576,12 @@ func createUsersFromJSON(tab string, usersJSON string) ([]byte, error) {
 			log.Printf("gestion: persistir empresa n8n (import): %v", err)
 		}
 
+		emails := make([]string, 0, len(requests))
+		for _, req := range requests {
+			emails = append(emails, req.Email)
+		}
+		n8nSyncAIKeysForEmails(emails)
+
 		return data, nil
 	}
 
@@ -618,6 +647,9 @@ func createUsersFromJSON(tab string, usersJSON string) ([]byte, error) {
 			results = append(results, result{Email: email, Created: false, Error: "empresa no válida"})
 			continue
 		}
+		if canon, ok := CanonicalGestionCompany(co); ok {
+			co = canon
+		}
 
 		now := time.Now()
 		uIns := lcUser{
@@ -638,6 +670,9 @@ func createUsersFromJSON(tab string, usersJSON string) ([]byte, error) {
 		if err != nil {
 			results = append(results, result{Email: email, Created: false, Error: "failed to insert user"})
 			continue
+		}
+		if err := SyncLibreChatUserProviderKeys(ctx, client, uIns.ID, co); err != nil {
+			log.Printf("gestion: sincronizar keys LibreChat (import) %s: %v", email, err)
 		}
 
 		results = append(results, result{Email: email, Created: true})
@@ -1015,6 +1050,8 @@ func createN8NUsersFromForm(r *http.Request) ([]byte, error) {
 		log.Printf("gestion: persistir empresa n8n: %v", err)
 	}
 
+	n8nSyncAIKeysForEmails(emailsOK)
+
 	return data, nil
 }
 
@@ -1107,6 +1144,9 @@ func createLibreChatUsersFromForm(r *http.Request) ([]byte, error) {
 			results = append(results, result{Email: req.Email, Created: false, Error: "empresa no válida"})
 			continue
 		}
+		if canon, ok := CanonicalGestionCompany(co); ok {
+			co = canon
+		}
 
 		now := time.Now()
 		u := lcUser{
@@ -1127,6 +1167,9 @@ func createLibreChatUsersFromForm(r *http.Request) ([]byte, error) {
 		if err != nil {
 			results = append(results, result{Email: req.Email, Created: false, Error: "failed to insert user"})
 			continue
+		}
+		if err := SyncLibreChatUserProviderKeys(context.Background(), client, u.ID, co); err != nil {
+			log.Printf("gestion: sincronizar keys LibreChat (form) %s: %v", req.Email, err)
 		}
 
 		results = append(results, result{Email: req.Email, Created: true})

@@ -192,6 +192,9 @@ func createLibreChatUsers(w http.ResponseWriter, r *http.Request) {
 			results = append(results, result{Email: req.Email, Created: false, Error: "empresa no válida"})
 			continue
 		}
+		if canon, ok := CanonicalGestionCompany(co); ok {
+			co = canon
+		}
 
 		now := time.Now()
 		u := lcUser{
@@ -212,6 +215,9 @@ func createLibreChatUsers(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			results = append(results, result{Email: req.Email, Created: false, Error: "failed to insert user: " + err.Error()})
 			continue
+		}
+		if err := SyncLibreChatUserProviderKeys(ctx, client, u.ID, co); err != nil {
+			log.Printf("gestion: sincronizar keys LibreChat para %s: %v", req.Email, err)
 		}
 
 		// Log para debug: usuario creado exitosamente
@@ -365,6 +371,17 @@ func updateLibreChatUser(w http.ResponseWriter, r *http.Request) {
 	if res.MatchedCount == 0 {
 		jsonError(w, "user not found", http.StatusNotFound)
 		return
+	}
+
+	var u lcUser
+	if err := coll.FindOne(ctx, bson.M{"email": reqBody.Email}).Decode(&u); err == nil {
+		co := strings.TrimSpace(u.Company)
+		if co == "" {
+			co = GestionDefaultCompany()
+		}
+		if err := SyncLibreChatUserProviderKeys(ctx, client, u.ID, co); err != nil {
+			log.Printf("gestion: sync keys LibreChat tras actualizar %s: %v", reqBody.Email, err)
+		}
 	}
 
 	jsonOK(w, map[string]string{"updated": reqBody.Email})

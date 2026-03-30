@@ -8,33 +8,69 @@ import (
 	"time"
 )
 
+func gestionCompaniesAPIPayload(ok bool) map[string]any {
+	list := GestionCompaniesList()
+	profiles := make(map[string]CompanyProfileMasked, len(list))
+	for _, c := range list {
+		profiles[c] = CompanyProfileMaskedForName(c)
+	}
+	out := map[string]any{
+		"companies":      list,
+		"profiles":       profiles,
+		"defaultCompany": GestionDefaultCompany(),
+	}
+	if ok {
+		out["ok"] = true
+	}
+	return out
+}
+
 // HandleGestionCompaniesAPI CRUD JSON de empresas (n8n + LibreChat).
-// GET lista; POST {"name"} crear; PUT {"oldName","newName"} renombrar; DELETE ?name=
+// GET: companies ([]string), profiles (map nombre → perfil enmascarado). POST crear con credentials opcional.
+// PATCH fusionar credenciales; PUT renombrar; DELETE ?name=
 func HandleGestionCompaniesAPI(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
-		jsonOK(w, map[string]any{
-			"companies":      GestionCompaniesList(),
-			"defaultCompany": GestionDefaultCompany(),
-		})
+		jsonOK(w, gestionCompaniesAPIPayload(false))
 	case http.MethodPost:
 		var body struct {
-			Name string `json:"name"`
+			Name        string                        `json:"name"`
+			Credentials map[string]ProviderCredential `json:"credentials,omitempty"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			jsonError(w, "JSON inválido", http.StatusBadRequest)
 			return
 		}
-		if err := AddGestionCompany(body.Name); err != nil {
+		if err := AddGestionCompanyWithCredentials(body.Name, body.Credentials); err != nil {
 			jsonError(w, err.Error(), http.StatusBadRequest)
 			return
 		}
 		BroadcastUsersUpdate()
-		jsonOK(w, map[string]any{
-			"ok":             true,
-			"companies":      GestionCompaniesList(),
-			"defaultCompany": GestionDefaultCompany(),
-		})
+		jsonOK(w, gestionCompaniesAPIPayload(true))
+	case http.MethodPatch:
+		var body struct {
+			Name        string                        `json:"name"`
+			Credentials map[string]ProviderCredential `json:"credentials"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			jsonError(w, "JSON inválido", http.StatusBadRequest)
+			return
+		}
+		if strings.TrimSpace(body.Name) == "" {
+			jsonError(w, "falta name", http.StatusBadRequest)
+			return
+		}
+		if body.Credentials == nil {
+			jsonError(w, "falta credentials", http.StatusBadRequest)
+			return
+		}
+		if err := MergeGestionCompanyCredentials(body.Name, body.Credentials); err != nil {
+			jsonError(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		GoSyncCompanyAIIntegrations(body.Name)
+		BroadcastUsersUpdate()
+		jsonOK(w, gestionCompaniesAPIPayload(true))
 	case http.MethodPut:
 		var body struct {
 			OldName string `json:"oldName"`
@@ -61,12 +97,9 @@ func HandleGestionCompaniesAPI(w http.ResponseWriter, r *http.Request) {
 			jsonError(w, "error MongoDB: "+mongoErr.Error(), http.StatusBadGateway)
 			return
 		}
+		GoSyncCompanyAIIntegrations(body.NewName)
 		BroadcastUsersUpdate()
-		jsonOK(w, map[string]any{
-			"ok":             true,
-			"companies":      GestionCompaniesList(),
-			"defaultCompany": GestionDefaultCompany(),
-		})
+		jsonOK(w, gestionCompaniesAPIPayload(true))
 	case http.MethodDelete:
 		name := strings.TrimSpace(r.URL.Query().Get("name"))
 		if name == "" {
@@ -90,14 +123,41 @@ func HandleGestionCompaniesAPI(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		BroadcastUsersUpdate()
-		jsonOK(w, map[string]any{
-			"ok":             true,
-			"companies":      GestionCompaniesList(),
-			"defaultCompany": GestionDefaultCompany(),
-		})
+		jsonOK(w, gestionCompaniesAPIPayload(true))
 	default:
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 	}
+}
+
+// HandleGestionCompanyIntegrationsSyncAPI POST {"name"} — fuerza sync LibreChat + n8n para una empresa.
+func HandleGestionCompanyIntegrationsSyncAPI(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	var body struct {
+		Name string `json:"name"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		jsonError(w, "JSON inválido", http.StatusBadRequest)
+		return
+	}
+	if strings.TrimSpace(body.Name) == "" {
+		jsonError(w, "falta name", http.StatusBadRequest)
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Minute)
+	defer cancel()
+	lc, nn, err := SyncCompanyAIIntegrations(ctx, body.Name)
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusBadGateway)
+		return
+	}
+	jsonOK(w, map[string]any{
+		"ok":             true,
+		"libreChatUsers": lc,
+		"n8nUsers":       nn,
+	})
 }
 
 // HandleGestionCompaniesDefaultAPI POST {"name"} — empresa predeterminada.
@@ -118,9 +178,5 @@ func HandleGestionCompaniesDefaultAPI(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	BroadcastUsersUpdate()
-	jsonOK(w, map[string]any{
-		"ok":             true,
-		"defaultCompany": GestionDefaultCompany(),
-		"companies":      GestionCompaniesList(),
-	})
+	jsonOK(w, gestionCompaniesAPIPayload(true))
 }

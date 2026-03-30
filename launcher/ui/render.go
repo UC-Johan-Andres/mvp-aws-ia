@@ -159,6 +159,14 @@ func RenderQueueFragment(w http.ResponseWriter, status services.Status) {
 // Gestion Dashboard
 // ─────────────────────────────────────────────────────────────────
 
+// EmpresaRowView fila de la tabla de empresas (credenciales enmascaradas).
+type EmpresaRowView struct {
+	Name      string
+	IsDefault bool
+	OpenAI    string
+	Gemini    string
+}
+
 type GestionData struct {
 	Tab             string
 	Users           interface{}
@@ -167,6 +175,7 @@ type GestionData struct {
 	GestionMetaJSON template.JS
 	Companies       []string
 	DefaultCompany  string
+	EmpresaRows     []EmpresaRowView
 }
 
 type gestionShellData struct {

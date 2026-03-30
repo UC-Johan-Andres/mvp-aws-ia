@@ -56,6 +56,8 @@ func main() {
 	mux.HandleFunc("POST /gestion/api/companies", hCompanies)
 	mux.HandleFunc("PUT /gestion/api/companies", hCompanies)
 	mux.HandleFunc("DELETE /gestion/api/companies", hCompanies)
+	mux.HandleFunc("PATCH /gestion/api/companies", hCompanies)
+	mux.HandleFunc("POST /gestion/api/companies/sync", auth.RequireAuth(admin.HandleGestionCompanyIntegrationsSyncAPI))
 	mux.HandleFunc("POST /gestion/api/companies/default", auth.RequireAuth(admin.HandleGestionCompaniesDefaultAPI))
 
 	// Wake (catch-all — called by nginx @launcher on 502)

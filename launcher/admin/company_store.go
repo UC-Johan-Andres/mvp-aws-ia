@@ -13,11 +13,17 @@ import (
 	"launcher/config"
 )
 
+// CompanyProfile credenciales por proveedor por empresa (extensible).
+type CompanyProfile struct {
+	Credentials map[string]ProviderCredential `json:"credentials,omitempty"`
+}
+
 type companyStoreFile struct {
-	Companies      []string          `json:"companies"`
-	DefaultCompany string            `json:"defaultCompany"`
-	N8NByEmail     map[string]string `json:"n8nByEmail"`
-	N8NByID        map[string]string `json:"n8nByID"`
+	Companies        []string                   `json:"companies"`
+	DefaultCompany   string                     `json:"defaultCompany"`
+	CompanyProfiles  map[string]CompanyProfile  `json:"companyProfiles,omitempty"`
+	N8NByEmail       map[string]string          `json:"n8nByEmail"`
+	N8NByID          map[string]string          `json:"n8nByID"`
 }
 
 var (
@@ -32,6 +38,9 @@ func ensureCompanyMaps() {
 	}
 	if companyStoreData.N8NByID == nil {
 		companyStoreData.N8NByID = make(map[string]string)
+	}
+	if companyStoreData.CompanyProfiles == nil {
+		companyStoreData.CompanyProfiles = make(map[string]CompanyProfile)
 	}
 }
 
@@ -126,6 +135,7 @@ func loadCompanyStoreFromDisk() error {
 	companyStoreData = f
 	ensureCompanyMaps()
 	normalizeCompaniesFileLocked()
+	pruneOrphanCompanyProfilesLocked()
 	companyStoreLoaded = true
 	return saveCompanyStoreLocked()
 }
@@ -222,6 +232,88 @@ func indexCompanyInsensitive(list []string, name string) (int, bool) {
 	return 0, false
 }
 
+// pruneOrphanCompanyProfilesLocked elimina perfiles cuyo nombre ya no está en Companies.
+func pruneOrphanCompanyProfilesLocked() {
+	if companyStoreData.CompanyProfiles == nil {
+		return
+	}
+	valid := make(map[string]bool, len(companyStoreData.Companies))
+	for _, c := range companyStoreData.Companies {
+		valid[c] = true
+	}
+	for key := range companyStoreData.CompanyProfiles {
+		if !valid[key] {
+			delete(companyStoreData.CompanyProfiles, key)
+		}
+	}
+}
+
+// CompanyProfileMasked es la forma segura para API/UI (sin secretos completos).
+type CompanyProfileMasked struct {
+	Credentials map[string]ProviderCredentialMasked `json:"credentials,omitempty"`
+}
+
+// ProviderCredentialMasked solo máscaras por proveedor.
+type ProviderCredentialMasked struct {
+	APIKeyMasked string `json:"apiKeyMasked,omitempty"`
+	Configured   bool   `json:"configured"`
+}
+
+// CompanyProfileMaskedForName devuelve perfil enmascarado; vacío si no hay perfil.
+func CompanyProfileMaskedForName(companyCanon string) CompanyProfileMasked {
+	companyStoreMu.RLock()
+	defer companyStoreMu.RUnlock()
+	if !companyStoreLoaded || companyCanon == "" {
+		return CompanyProfileMasked{}
+	}
+	p, ok := companyStoreData.CompanyProfiles[companyCanon]
+	if !ok || len(p.Credentials) == 0 {
+		return CompanyProfileMasked{}
+	}
+	out := CompanyProfileMasked{Credentials: make(map[string]ProviderCredentialMasked)}
+	for prov, c := range p.Credentials {
+		k := strings.TrimSpace(c.APIKey)
+		if k == "" {
+			continue
+		}
+		out.Credentials[prov] = ProviderCredentialMasked{
+			APIKeyMasked: MaskAPIKey(k),
+			Configured:   true,
+		}
+	}
+	return out
+}
+
+// CompanyProviderCredentialForSync devuelve apiKey guardada para empresa+proveedor.
+func CompanyProviderCredentialForSync(companyName, providerID string) (string, bool) {
+	canon, ok := CanonicalGestionCompany(companyName)
+	if !ok {
+		return "", false
+	}
+	pid, err := NormalizeProviderID(providerID)
+	if err != nil {
+		return "", false
+	}
+	companyStoreMu.RLock()
+	defer companyStoreMu.RUnlock()
+	if !companyStoreLoaded {
+		return "", false
+	}
+	p, ok := companyStoreData.CompanyProfiles[canon]
+	if !ok {
+		return "", false
+	}
+	c, ok := p.Credentials[pid]
+	if !ok {
+		return "", false
+	}
+	k := strings.TrimSpace(c.APIKey)
+	if k == "" {
+		return "", false
+	}
+	return k, true
+}
+
 func validateNewCompanyName(name string) error {
 	s := strings.TrimSpace(name)
 	if s == "" {
@@ -241,10 +333,19 @@ func validateNewCompanyName(name string) error {
 
 // AddGestionCompany añade una empresa al registro.
 func AddGestionCompany(name string) error {
+	return AddGestionCompanyWithCredentials(name, nil)
+}
+
+// AddGestionCompanyWithCredentials añade empresa y opcionalmente credenciales por proveedor.
+func AddGestionCompanyWithCredentials(name string, creds map[string]ProviderCredential) error {
 	if err := validateNewCompanyName(name); err != nil {
 		return err
 	}
 	name = strings.TrimSpace(name)
+	normCreds, err := NormalizeCredentialsMapInput(creds)
+	if err != nil {
+		return err
+	}
 	companyStoreMu.Lock()
 	defer companyStoreMu.Unlock()
 	ensureCompanyMaps()
@@ -256,6 +357,11 @@ func AddGestionCompany(name string) error {
 	sort.Slice(companyStoreData.Companies, func(i, j int) bool {
 		return strings.ToLower(companyStoreData.Companies[i]) < strings.ToLower(companyStoreData.Companies[j])
 	})
+	idx, _ := indexCompanyInsensitive(companyStoreData.Companies, name)
+	canon := companyStoreData.Companies[idx]
+	if len(normCreds) > 0 {
+		companyStoreData.CompanyProfiles[canon] = CompanyProfile{Credentials: normCreds}
+	}
 	return saveCompanyStoreLocked()
 }
 
@@ -309,6 +415,12 @@ func RenameGestionCompany(oldName, newName string) (oldCanon, newCanon string, e
 	sort.Slice(companyStoreData.Companies, func(i, j int) bool {
 		return strings.ToLower(companyStoreData.Companies[i]) < strings.ToLower(companyStoreData.Companies[j])
 	})
+	if companyStoreData.CompanyProfiles != nil {
+		if prof, ok := companyStoreData.CompanyProfiles[oldCanon]; ok {
+			delete(companyStoreData.CompanyProfiles, oldCanon)
+			companyStoreData.CompanyProfiles[newCanon] = prof
+		}
+	}
 	return oldCanon, newCanon, saveCompanyStoreLocked()
 }
 
@@ -342,6 +454,48 @@ func DeleteGestionCompany(name string, lcUsersWithCompany int) error {
 	companyStoreData.Companies = append(companyStoreData.Companies[:idx], companyStoreData.Companies[idx+1:]...)
 	if strings.EqualFold(companyStoreData.DefaultCompany, canon) {
 		companyStoreData.DefaultCompany = companyStoreData.Companies[0]
+	}
+	if companyStoreData.CompanyProfiles != nil {
+		delete(companyStoreData.CompanyProfiles, canon)
+	}
+	return saveCompanyStoreLocked()
+}
+
+// MergeGestionCompanyCredentials fusiona credenciales en el perfil de una empresa existente.
+func MergeGestionCompanyCredentials(companyName string, patch map[string]ProviderCredential) error {
+	normPatch, err := NormalizeCredentialsMapInput(patch)
+	if err != nil {
+		return err
+	}
+	companyStoreMu.Lock()
+	defer companyStoreMu.Unlock()
+	ensureCompanyMaps()
+	normalizeCompaniesFileLocked()
+	idx, ok := indexCompanyInsensitive(companyStoreData.Companies, companyName)
+	if !ok {
+		return fmt.Errorf("empresa no encontrada")
+	}
+	canon := companyStoreData.Companies[idx]
+	prof := companyStoreData.CompanyProfiles[canon]
+	if prof.Credentials == nil {
+		prof.Credentials = make(map[string]ProviderCredential)
+	}
+	merged := MergeCredentialsMaps(prof.Credentials, normPatch)
+	// También permitir borrar con patch explícito: NormalizeCredentialsMapInput omite vacíos;
+	// MergeCredentialsMaps necesita entradas vacías para borrar — añadimos paso para keys en patch con apiKey "".
+	for k, v := range patch {
+		nid, e := NormalizeProviderID(k)
+		if e != nil {
+			continue
+		}
+		if strings.TrimSpace(v.APIKey) == "" {
+			delete(merged, nid)
+		}
+	}
+	if len(merged) == 0 {
+		delete(companyStoreData.CompanyProfiles, canon)
+	} else {
+		companyStoreData.CompanyProfiles[canon] = CompanyProfile{Credentials: merged}
 	}
 	return saveCompanyStoreLocked()
 }
