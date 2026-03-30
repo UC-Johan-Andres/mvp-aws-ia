@@ -424,7 +424,8 @@ func RenameGestionCompany(oldName, newName string) (oldCanon, newCanon string, e
 	return oldCanon, newCanon, saveCompanyStoreLocked()
 }
 
-// DeleteGestionCompany elimina una empresa si no está en uso (LibreChat + n8n local).
+// DeleteGestionCompany elimina una empresa. Los usuarios n8n del almacén local pasan a la empresa predeterminada
+// (o a otra superviviente si se borra la que era default). LibreChat sigue exigiendo reasignación previa.
 func DeleteGestionCompany(name string, lcUsersWithCompany int) error {
 	companyStoreMu.Lock()
 	defer companyStoreMu.Unlock()
@@ -441,16 +442,32 @@ func DeleteGestionCompany(name string, lcUsersWithCompany int) error {
 	if lcUsersWithCompany > 0 {
 		return fmt.Errorf("hay %d usuario(s) de LibreChat con esta empresa; reasígnalos antes", lcUsersWithCompany)
 	}
-	for _, v := range companyStoreData.N8NByEmail {
-		if strings.EqualFold(v, canon) {
-			return fmt.Errorf("hay usuarios n8n asociados a esta empresa en el almacén local")
+
+	// A qué empresa canónica mover los n8n que apuntaban a `canon`.
+	reassign := defaultCompanyUnlocked()
+	if strings.EqualFold(reassign, canon) {
+		reassign = ""
+		for _, c := range companyStoreData.Companies {
+			if !strings.EqualFold(c, canon) {
+				reassign = c
+				break
+			}
+		}
+		if reassign == "" {
+			return fmt.Errorf("no hay empresa destino para reasignar usuarios n8n")
 		}
 	}
-	for _, v := range companyStoreData.N8NByID {
+	for k, v := range companyStoreData.N8NByEmail {
 		if strings.EqualFold(v, canon) {
-			return fmt.Errorf("hay usuarios n8n asociados a esta empresa en el almacén local")
+			companyStoreData.N8NByEmail[k] = reassign
 		}
 	}
+	for k, v := range companyStoreData.N8NByID {
+		if strings.EqualFold(v, canon) {
+			companyStoreData.N8NByID[k] = reassign
+		}
+	}
+
 	companyStoreData.Companies = append(companyStoreData.Companies[:idx], companyStoreData.Companies[idx+1:]...)
 	if strings.EqualFold(companyStoreData.DefaultCompany, canon) {
 		companyStoreData.DefaultCompany = companyStoreData.Companies[0]

@@ -23,6 +23,7 @@ type ProviderDefinition struct {
 func RegisteredProviders() []ProviderDefinition {
 	return []ProviderDefinition{
 		{ID: ProviderOpenAI, DisplayName: "OpenAI (ChatGPT)", LibreChatKeyName: "OpenAI", N8NCredentialType: "openAiApi"},
+		// n8n: credencial «Google Gemini (PaLM) API»; los nodos Gemini/PaLM leen apiKey y host (docs.n8n.io/credentials/googleai).
 		{ID: ProviderGoogle, DisplayName: "Google Gemini", LibreChatKeyName: "Google Gemini", N8NCredentialType: "googlePalmApi"},
 	}
 }

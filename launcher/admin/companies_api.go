@@ -124,6 +124,7 @@ func HandleGestionCompaniesAPI(w http.ResponseWriter, r *http.Request) {
 			jsonError(w, err.Error(), http.StatusBadRequest)
 			return
 		}
+		GoSyncCompanyAIIntegrations(GestionDefaultCompany())
 		BroadcastUsersUpdate()
 		jsonOK(w, gestionCompaniesAPIPayload(true))
 	default:

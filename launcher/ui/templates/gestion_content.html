@@ -35,28 +35,10 @@
     <p class="form-hint" style="margin-bottom:16px;">
         El registro aplica a <strong>n8n</strong> (asignación en almacén local) y a <strong>LibreChat</strong> (campo <code>company</code> en MongoDB).
         Puedes guardar API keys por proveedor (OpenAI, Gemini); al <strong>crear</strong> o <strong>actualizar</strong> la empresa se dispara la sync en segundo plano hacia LibreChat (<code>keys</code>) y n8n (credenciales en el <strong>proyecto personal</strong> de cada usuario de esa empresa). Renombrar empresa también re-sincroniza. Manual: <code>POST /gestion/api/companies/sync</code> con <code>{"name":"empresa"}</code>.
-        En n8n, la credencial creada por el launcher se llama como <code>Launcher AI · OpenAI (ChatGPT) · tu@email</code>; al <strong>abrirla para editar</strong>, el campo API Key suele verse <strong>vacío</strong> (n8n no vuelve a mostrar secretos guardados): es normal. Comprueba que exista en la lista de credenciales y ejecuta un nodo OpenAI con esa credencial.
+        En n8n, el launcher crea credenciales como <code>Launcher AI · OpenAI (ChatGPT) · tu@email</code> y <code>Launcher AI · Google Gemini · tu@email</code> (tipo interno <code>googlePalmApi</code>, compatible con nodos Google Gemini / PaLM). Al <strong>editar</strong> la credencial en n8n, el campo API Key suele verse <strong>vacío</strong>: es normal.
+        Usa el botón <strong>+ Nueva empresa</strong> del encabezado (misma zona que «Nuevo usuario») para crear o <strong>Editar</strong> en la tabla para nombre y claves.
         La primera carga puede tomar valores de <code>GESTION_COMPANIES</code> si el JSON aún no tenía lista.
     </p>
-    <div class="form-group" style="margin-bottom:20px;">
-        <label style="display:block;margin-bottom:8px;font-size:0.85rem;font-weight:600;color:var(--text-muted);">Nueva empresa</label>
-        <div class="empresas-actions" style="flex-wrap:wrap;">
-            <input type="text" id="empresa-new-name" class="empresa-name-input" placeholder="ej. acme-corp" maxlength="64" autocomplete="off" style="min-width:220px;">
-            <button type="button" class="btn-small btn-submit" onclick="empresaCreate()">Crear</button>
-        </div>
-        <p class="form-hint" style="margin-top:10px;margin-bottom:6px;">Opcional — claves solo en este navegador; no se muestran completas después de guardar.</p>
-        <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;margin-top:8px;">
-            <div class="form-group" style="margin:0;">
-                <label style="display:block;font-size:0.8rem;color:var(--text-muted);margin-bottom:4px;">OpenAI (ChatGPT)</label>
-                <input type="password" id="empresa-new-openai" class="empresa-name-input" placeholder="sk-…" autocomplete="new-password" style="min-width:200px;">
-            </div>
-            <div class="form-group" style="margin:0;">
-                <label style="display:block;font-size:0.8rem;color:var(--text-muted);margin-bottom:4px;">Google Gemini</label>
-                <input type="password" id="empresa-new-gemini" class="empresa-name-input" placeholder="API key" autocomplete="new-password" style="min-width:200px;">
-            </div>
-        </div>
-        <p class="form-hint" style="margin-top:8px;">Nombre: letras, números, espacio, <code>-</code>, <code>_</code> y <code>.</code> (máx. 64).</p>
-    </div>
     <div class="table-responsive-wrap">
         <table class="data-table">
             <thead>
@@ -77,11 +59,11 @@
                     <td>{{if .IsDefault}}<span class="badge-default">Sí</span>{{else}}<span class="text-muted">—</span>{{end}}</td>
                     <td>
                         <div class="empresas-actions">
+                            <button type="button" class="btn-small btn-edit" data-empresa="{{.Name}}" onclick="openCompanyModalEdit(this.dataset.empresa)">Editar</button>
                             {{if not .IsDefault}}
                             <button type="button" class="btn-small btn-invite" data-empresa="{{.Name}}" onclick="empresaSetDefault(this.dataset.empresa)">Predeterminada</button>
                             {{end}}
                             <button type="button" class="btn-small btn-invite" data-empresa="{{.Name}}" onclick="empresaSync(this.dataset.empresa)">Sync AI</button>
-                            <button type="button" class="btn-small btn-edit" data-empresa="{{.Name}}" onclick="empresaRenamePrompt(this.dataset.empresa)">Renombrar</button>
                             <button type="button" class="btn-small btn-delete" data-empresa="{{.Name}}" onclick="empresaDelete(this.dataset.empresa)">Eliminar</button>
                         </div>
                     </td>
@@ -101,31 +83,6 @@
         if (m && m.content) h['X-CSRF-Token'] = m.content;
         return h;
     }
-    window.empresaCreate = async function () {
-        var inp = document.getElementById('empresa-new-name');
-        var name = inp && inp.value ? inp.value.trim() : '';
-        if (!name) { if (typeof showToast === 'function') showToast('Indica un nombre', 'error'); return; }
-        var creds = {};
-        var oa = document.getElementById('empresa-new-openai');
-        var gm = document.getElementById('empresa-new-gemini');
-        if (oa && oa.value.trim()) creds.openai = { apiKey: oa.value.trim() };
-        if (gm && gm.value.trim()) creds.google = { apiKey: gm.value.trim() };
-        var body = { name: name };
-        if (Object.keys(creds).length) body.credentials = creds;
-        try {
-            var r = await fetch('/gestion/api/companies', { method: 'POST', headers: csrfHeaders(), body: JSON.stringify(body) });
-            var j = await r.json().catch(function () { return {}; });
-            if (!r.ok) { if (typeof showToast === 'function') showToast(j.error || 'Error al crear', 'error'); return; }
-            if (inp) inp.value = '';
-            if (oa) oa.value = '';
-            if (gm) gm.value = '';
-            if (typeof refreshGestionMeta === 'function') await refreshGestionMeta();
-            if (typeof showToast === 'function') showToast('Empresa creada', 'success');
-            htmx.ajax('GET', '/gestion/content?tab=empresas', { target: '#main-content', swap: 'innerHTML' });
-        } catch (e) {
-            if (typeof showToast === 'function') showToast('Error de red', 'error');
-        }
-    };
     window.empresaSetDefault = async function (name) {
         try {
             var r = await fetch('/gestion/api/companies/default', { method: 'POST', headers: csrfHeaders(), body: JSON.stringify({ name: name }) });
@@ -133,22 +90,6 @@
             if (!r.ok) { if (typeof showToast === 'function') showToast(j.error || 'Error', 'error'); return; }
             if (typeof refreshGestionMeta === 'function') await refreshGestionMeta();
             if (typeof showToast === 'function') showToast('Empresa predeterminada actualizada', 'success');
-            htmx.ajax('GET', '/gestion/content?tab=empresas', { target: '#main-content', swap: 'innerHTML' });
-        } catch (e) {
-            if (typeof showToast === 'function') showToast('Error de red', 'error');
-        }
-    };
-    window.empresaRenamePrompt = async function (oldName) {
-        var n = window.prompt('Nuevo nombre para «' + oldName + '»:', oldName);
-        if (n === null) return;
-        n = n.trim();
-        if (!n || n === oldName) return;
-        try {
-            var r = await fetch('/gestion/api/companies', { method: 'PUT', headers: csrfHeaders(), body: JSON.stringify({ oldName: oldName, newName: n }) });
-            var j = await r.json().catch(function () { return {}; });
-            if (!r.ok) { if (typeof showToast === 'function') showToast(j.error || 'Error al renombrar', 'error'); return; }
-            if (typeof refreshGestionMeta === 'function') await refreshGestionMeta();
-            if (typeof showToast === 'function') showToast('Empresa renombrada (LibreChat actualizado)', 'success');
             htmx.ajax('GET', '/gestion/content?tab=empresas', { target: '#main-content', swap: 'innerHTML' });
         } catch (e) {
             if (typeof showToast === 'function') showToast('Error de red', 'error');
@@ -176,7 +117,7 @@
         if (typeof openGestionConfirmModal !== 'function') return;
         openGestionConfirmModal({
             title: 'Eliminar empresa',
-            message: 'Se eliminará «' + name + '» del registro. No debe quedar ningún usuario de n8n (almacén local) ni de LibreChat asociado a esta empresa.',
+            message: 'Se eliminará «' + name + '» del registro. Los usuarios n8n (almacén local) pasarán a la empresa predeterminada. No debe quedar ningún usuario de LibreChat con esta empresa.',
             confirmText: 'Eliminar empresa',
             onConfirm: function () {
                 return fetch('/gestion/api/companies?name=' + encodeURIComponent(name), { method: 'DELETE', headers: { 'Accept': 'application/json' } })

@@ -843,7 +843,8 @@
         }
 
         #edit-modal,
-        #create-user-modal {
+        #create-user-modal,
+        #company-modal {
             position: fixed;
             top: 0;
             left: 0;
@@ -858,12 +859,25 @@
             padding: 20px;
         }
         #edit-modal.active,
-        #create-user-modal.active { display: flex; }
-        #create-user-modal .modal-content {
+        #create-user-modal.active,
+        #company-modal.active { display: flex; }
+        #create-user-modal .modal-content,
+        #company-modal .modal-content {
             max-width: 520px;
             width: 100%;
             max-height: 85vh;
             overflow-y: auto;
+        }
+        #company-modal-remove-row label {
+            display: block;
+            margin-bottom: 8px;
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            cursor: pointer;
+        }
+        #company-modal-remove-row input[type="checkbox"] {
+            margin-right: 8px;
+            vertical-align: middle;
         }
         .create-modal-lede {
             font-size: 0.88rem;
@@ -1098,6 +1112,10 @@
                         title="Crear usuario" aria-label="Crear nuevo usuario">
                     + Nuevo usuario
                 </button>
+                <button type="button" class="btn-header-new" id="btn-new-company" onclick="openCompanyModalCreate()"
+                        title="Nueva empresa" aria-label="Crear nueva empresa" style="display:none" aria-hidden="true">
+                    + Nueva empresa
+                </button>
                 <button type="button" class="btn-theme" id="theme-cycle" title="Cambiar tema" aria-label="Tema: automático, claro u oscuro">
                     <span class="btn-theme-icon" id="theme-cycle-icon" aria-hidden="true">◐</span>
                     <span id="theme-cycle-label">Auto</span>
@@ -1186,6 +1204,35 @@
             <div class="modal-actions">
                 <button type="button" class="modal-close" onclick="closeN8nPasswordModal()">Cerrar</button>
                 <button type="button" class="modal-copy" onclick="copyN8nPasswordLink()">Copiar enlace</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="company-modal" onclick="if (event.target === this) closeCompanyModal()">
+        <div class="modal-content" role="dialog" aria-modal="true" aria-labelledby="company-modal-title">
+            <h3 id="company-modal-title">Nueva empresa</h3>
+            <p id="company-modal-lede" class="create-modal-lede">Nombre y, opcionalmente, API keys (OpenAI y Google Gemini para n8n y LibreChat).</p>
+            <input type="hidden" id="company-modal-original-name" value="">
+            <div class="form-group">
+                <label for="company-modal-name">Nombre de la empresa</label>
+                <input type="text" id="company-modal-name" maxlength="64" autocomplete="organization" placeholder="ej. acme-corp">
+            </div>
+            <div class="form-group">
+                <label for="company-modal-openai">OpenAI (ChatGPT) — API key</label>
+                <input type="password" id="company-modal-openai" autocomplete="new-password" placeholder="sk-… (opcional)">
+            </div>
+            <div class="form-group">
+                <label for="company-modal-gemini">Google Gemini — API key</label>
+                <input type="password" id="company-modal-gemini" autocomplete="new-password" placeholder="API key de Google AI Studio (opcional)">
+            </div>
+            <p id="company-modal-masked-hint" class="create-modal-lede" style="display:none;margin-top:0;"></p>
+            <div id="company-modal-remove-row" style="display:none;margin-bottom:12px;">
+                <label><input type="checkbox" id="company-modal-remove-openai"> Quitar clave OpenAI guardada</label>
+                <label><input type="checkbox" id="company-modal-remove-gemini"> Quitar clave Gemini guardada</label>
+            </div>
+            <div class="modal-actions">
+                <button type="button" class="modal-close" onclick="closeCompanyModal()">Cancelar</button>
+                <button type="button" class="modal-save" onclick="saveCompanyModal()">Guardar</button>
             </div>
         </div>
     </div>
@@ -1515,7 +1562,7 @@
                 else foot.textContent = currentTab === 'n8n' ? 'Pestaña: n8n' : 'Pestaña: LibreChat';
             }
 
-            updateCreateUserButtonVisibility();
+            updateHeaderNewButtons();
             fillCompanySelects();
 
             const cached = getCachedUsers();
@@ -1527,6 +1574,7 @@
 
         function switchTab(tab) {
             closeCreateUserModal();
+            closeCompanyModal();
             document.querySelectorAll('.tab').forEach(t => {
                 t.classList.remove('active');
                 t.setAttribute('aria-selected', 'false');
@@ -1542,26 +1590,162 @@
             if (tab === 'estadisticas') {
                 footer.textContent = 'Estadísticas';
                 htmx.ajax('GET', '/gestion/charts-content', { target: '#main-content', swap: 'innerHTML' });
-                updateCreateUserButtonVisibility();
+                updateHeaderNewButtons();
                 return;
             }
             if (tab === 'empresas') {
                 footer.textContent = 'Empresas';
                 htmx.ajax('GET', '/gestion/content?tab=empresas', { target: '#main-content', swap: 'innerHTML' });
-                updateCreateUserButtonVisibility();
+                updateHeaderNewButtons();
                 return;
             }
             footer.textContent = tab === 'n8n' ? 'Pestaña: n8n' : 'Pestaña: LibreChat';
             htmx.ajax('GET', '/gestion/content?tab=' + encodeURIComponent(tab), { target: '#main-content', swap: 'innerHTML' });
-            updateCreateUserButtonVisibility();
+            updateHeaderNewButtons();
         }
 
-        function updateCreateUserButtonVisibility() {
-            const btn = document.getElementById('btn-new-user');
-            if (!btn) return;
-            const show = (currentTab === 'n8n' || currentTab === 'librechat');
-            btn.style.display = show ? '' : 'none';
-            btn.setAttribute('aria-hidden', show ? 'false' : 'true');
+        function updateHeaderNewButtons() {
+            const btnUser = document.getElementById('btn-new-user');
+            const btnCo = document.getElementById('btn-new-company');
+            if (btnUser) {
+                const showU = (currentTab === 'n8n' || currentTab === 'librechat');
+                btnUser.style.display = showU ? '' : 'none';
+                btnUser.setAttribute('aria-hidden', showU ? 'false' : 'true');
+            }
+            if (btnCo) {
+                const showC = (currentTab === 'empresas');
+                btnCo.style.display = showC ? '' : 'none';
+                btnCo.setAttribute('aria-hidden', showC ? 'false' : 'true');
+            }
+        }
+
+        function companyCsrfHeaders() {
+            var h = { 'Content-Type': 'application/json', 'Accept': 'application/json' };
+            var m = document.querySelector('meta[name="csrf-token"]');
+            if (m && m.content) h['X-CSRF-Token'] = m.content;
+            return h;
+        }
+
+        function openCompanyModalCreate() {
+            if (currentTab !== 'empresas') {
+                showToast('Abre primero la pestaña Empresas', 'error');
+                return;
+            }
+            document.getElementById('company-modal-original-name').value = '';
+            document.getElementById('company-modal-title').textContent = 'Nueva empresa';
+            document.getElementById('company-modal-lede').textContent = 'Nombre y, opcionalmente, API keys (OpenAI y Google Gemini para n8n y LibreChat).';
+            document.getElementById('company-modal-name').value = '';
+            document.getElementById('company-modal-openai').value = '';
+            document.getElementById('company-modal-gemini').value = '';
+            document.getElementById('company-modal-name').readOnly = false;
+            document.getElementById('company-modal-masked-hint').style.display = 'none';
+            document.getElementById('company-modal-remove-row').style.display = 'none';
+            document.getElementById('company-modal').classList.add('active');
+        }
+
+        async function openCompanyModalEdit(name) {
+            if (!name) return;
+            document.getElementById('company-modal-original-name').value = name;
+            document.getElementById('company-modal-title').textContent = 'Editar empresa';
+            document.getElementById('company-modal-lede').textContent = 'Puedes cambiar el nombre y las API keys. En n8n, Gemini usa la credencial «Google Gemini (PaLM) API» (tipo googlePalmApi).';
+            document.getElementById('company-modal-name').value = name;
+            document.getElementById('company-modal-openai').value = '';
+            document.getElementById('company-modal-gemini').value = '';
+            document.getElementById('company-modal-name').readOnly = false;
+            document.getElementById('company-modal-remove-openai').checked = false;
+            document.getElementById('company-modal-remove-gemini').checked = false;
+            document.getElementById('company-modal-masked-hint').style.display = 'block';
+            document.getElementById('company-modal-remove-row').style.display = 'block';
+            var parts = [];
+            try {
+                var r = await fetch('/gestion/api/companies', { headers: { 'Accept': 'application/json' } });
+                var j = await r.json().catch(function () { return {}; });
+                var prof = j.profiles && j.profiles[name];
+                if (prof && prof.credentials) {
+                    if (prof.credentials.openai && prof.credentials.openai.configured) {
+                        parts.push('OpenAI: ' + (prof.credentials.openai.apiKeyMasked || 'configurada'));
+                    }
+                    if (prof.credentials.google && prof.credentials.google.configured) {
+                        parts.push('Gemini: ' + (prof.credentials.google.apiKeyMasked || 'configurada'));
+                    }
+                }
+            } catch (e) {}
+            document.getElementById('company-modal-masked-hint').textContent = parts.length
+                ? (parts.join(' · ') + '. Escribe una nueva clave solo si quieres sustituirla.')
+                : 'Sin claves guardadas. Las casillas «Quitar» eliminan la clave del perfil y de la sync.';
+            document.getElementById('company-modal').classList.add('active');
+        }
+
+        function closeCompanyModal() {
+            var m = document.getElementById('company-modal');
+            if (m) m.classList.remove('active');
+        }
+
+        async function saveCompanyModal() {
+            var orig = (document.getElementById('company-modal-original-name').value || '').trim();
+            var name = (document.getElementById('company-modal-name').value || '').trim();
+            if (!name) {
+                showToast('Indica un nombre de empresa', 'error');
+                return;
+            }
+            var oa = document.getElementById('company-modal-openai');
+            var gm = document.getElementById('company-modal-gemini');
+            var ro = document.getElementById('company-modal-remove-openai');
+            var rg = document.getElementById('company-modal-remove-gemini');
+            var creds = {};
+            if (ro && ro.checked) creds.openai = { apiKey: '' };
+            if (rg && rg.checked) creds.google = { apiKey: '' };
+            if (oa && oa.value.trim()) creds.openai = { apiKey: oa.value.trim() };
+            if (gm && gm.value.trim()) creds.google = { apiKey: gm.value.trim() };
+
+            try {
+                if (!orig) {
+                    var body = { name: name };
+                    if (Object.keys(creds).length) body.credentials = creds;
+                    var r1 = await fetch('/gestion/api/companies', { method: 'POST', headers: companyCsrfHeaders(), body: JSON.stringify(body) });
+                    var j1 = await r1.json().catch(function () { return {}; });
+                    if (!r1.ok) { showToast(j1.error || 'Error al crear', 'error'); return; }
+                    showToast('Empresa creada', 'success');
+                } else {
+                    var finalName = name;
+                    var didRename = false;
+                    if (name !== orig) {
+                        var r2 = await fetch('/gestion/api/companies', {
+                            method: 'PUT',
+                            headers: companyCsrfHeaders(),
+                            body: JSON.stringify({ oldName: orig, newName: name })
+                        });
+                        var j2 = await r2.json().catch(function () { return {}; });
+                        if (!r2.ok) { showToast(j2.error || 'Error al renombrar', 'error'); return; }
+                        didRename = true;
+                        finalName = name;
+                    }
+                    var credKeys = Object.keys(creds);
+                    if (credKeys.length) {
+                        var r3 = await fetch('/gestion/api/companies', {
+                            method: 'PATCH',
+                            headers: companyCsrfHeaders(),
+                            body: JSON.stringify({ name: finalName, credentials: creds })
+                        });
+                        var j3 = await r3.json().catch(function () { return {}; });
+                        if (!r3.ok) { showToast(j3.error || 'Error al actualizar claves', 'error'); return; }
+                    } else if (!didRename) {
+                        showToast('Sin cambios', 'info');
+                        closeCompanyModal();
+                        if (typeof refreshGestionMeta === 'function') await refreshGestionMeta();
+                        htmx.ajax('GET', '/gestion/content?tab=empresas', { target: '#main-content', swap: 'innerHTML' });
+                        return;
+                    }
+                    if (didRename && credKeys.length) showToast('Nombre y claves actualizados', 'success');
+                    else if (didRename) showToast('Empresa renombrada', 'success');
+                    else showToast('Claves actualizadas', 'success');
+                }
+                closeCompanyModal();
+                if (typeof refreshGestionMeta === 'function') await refreshGestionMeta();
+                htmx.ajax('GET', '/gestion/content?tab=empresas', { target: '#main-content', swap: 'innerHTML' });
+            } catch (e) {
+                showToast('Error de red', 'error');
+            }
         }
 
         function openCreateUserModal() {
