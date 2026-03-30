@@ -237,15 +237,15 @@ type N8NProjectRelation struct {
 
 // N8NUser represents a user from n8n API.
 type N8NUser struct {
-	ID               string `json:"id"`
-	Email            string `json:"email"`
-	FirstName        string `json:"firstName"`
-	LastName         string `json:"lastName"`
-	Role             string `json:"role"`
-	IsPending        bool   `json:"isPending"`
-	InviteAcceptURL  string `json:"inviteAcceptUrl"`
+	ID               string               `json:"id"`
+	Email            string               `json:"email"`
+	FirstName        string               `json:"firstName"`
+	LastName         string               `json:"lastName"`
+	Role             string               `json:"role"`
+	IsPending        bool                 `json:"isPending"`
+	InviteAcceptURL  string               `json:"inviteAcceptUrl"`
 	ProjectRelations []N8NProjectRelation `json:"projectRelations"`
-	Company          string `json:"company,omitempty"`
+	Company          string               `json:"company,omitempty"`
 
 	WorkflowsAccesibles  int64   `json:"workflowsAccesibles"`
 	ProdExecutions       int64   `json:"prodExecutions"`
@@ -411,7 +411,8 @@ func HandleGestionSubmit(w http.ResponseWriter, r *http.Request) {
 	} else if tab == "n8n" {
 		_, err = createN8NUsersFromForm(r)
 	} else {
-		_, err = createLibreChatUsersFromForm(r)
+		// LibreChat: usar función unificada del API
+		err = createLibreChatUsersFromGestion(r)
 	}
 
 	if err != nil {
@@ -1018,24 +1019,23 @@ func createN8NUsersFromForm(r *http.Request) ([]byte, error) {
 	return data, nil
 }
 
-// Helper: create librechat users from form submission
-func createLibreChatUsersFromForm(r *http.Request) ([]byte, error) {
+// createLibreChatUsersFromGestion creates LibreChat users from dashboard HTMX form.
+// Reuses the internal function from the API layer.
+func createLibreChatUsersFromGestion(r *http.Request) error {
 	emails := r.Form["email"]
 	names := r.Form["name"]
 	passwords := r.Form["password"]
 
 	if len(emails) == 0 {
-		return nil, fmt.Errorf("no users to create")
+		return fmt.Errorf("no users to create")
 	}
 
-	type createReq struct {
-		Email    string `json:"email"`
-		Name     string `json:"name"`
-		Password string `json:"password"`
-		Role     string `json:"role"`
+	company := strings.TrimSpace(r.FormValue("company"))
+	if company == "" {
+		company = GestionDefaultCompany()
 	}
 
-	requests := make([]createReq, 0, len(emails))
+	requests := make([]createUserRequest, 0, len(emails))
 	for i, email := range emails {
 		name := email
 		if i < len(names) && names[i] != "" {
@@ -1045,92 +1045,15 @@ func createLibreChatUsersFromForm(r *http.Request) ([]byte, error) {
 		if i < len(passwords) {
 			password = passwords[i]
 		}
-		role := "USER"
-		requests = append(requests, createReq{Email: email, Name: name, Password: password, Role: role})
+		requests = append(requests, createUserRequest{
+			Email:    email,
+			Name:     name,
+			Password: password,
+			Role:     "USER",
+			Company:  company,
+		})
 	}
 
-	coll, client, err := mongoCollection(context.Background())
-	if err != nil {
-		return nil, fmt.Errorf("failed to connect to MongoDB: %w", err)
-	}
-	defer client.Disconnect(context.Background())
-
-	type result struct {
-		Email   string `json:"email"`
-		Created bool   `json:"created"`
-		Error   string `json:"error,omitempty"`
-	}
-
-	results := make([]result, 0, len(requests))
-
-	for _, req := range requests {
-		if req.Email == "" {
-			results = append(results, result{Email: req.Email, Created: false, Error: "email is required"})
-			continue
-		}
-		if req.Password == "" {
-			results = append(results, result{Email: req.Email, Created: false, Error: "password is required"})
-			continue
-		}
-
-		if req.Role != "" && req.Role != "USER" {
-			results = append(results, result{Email: req.Email, Created: false, Error: "solo se permite rol USER"})
-			continue
-		}
-
-		count, err := coll.CountDocuments(context.Background(), bson.M{"email": req.Email})
-		if err != nil {
-			results = append(results, result{Email: req.Email, Created: false, Error: "failed to check existing user"})
-			continue
-		}
-		if count > 0 {
-			results = append(results, result{Email: req.Email, Created: false, Error: "email already exists"})
-			continue
-		}
-
-		hash, err := bcrypt.GenerateFromPassword([]byte(req.Password), 12)
-		if err != nil {
-			results = append(results, result{Email: req.Email, Created: false, Error: "failed to hash password"})
-			continue
-		}
-
-		username := req.Email
-		if idx := strings.Index(req.Email, "@"); idx >= 0 {
-			username = req.Email[:idx]
-		}
-
-		co := strings.TrimSpace(r.FormValue("company"))
-		if co == "" {
-			co = GestionDefaultCompany()
-		}
-		if !IsValidGestionCompany(co) {
-			results = append(results, result{Email: req.Email, Created: false, Error: "empresa no válida"})
-			continue
-		}
-
-		now := time.Now()
-		u := lcUser{
-			ID:            primitive.NewObjectID(),
-			Name:          req.Name,
-			Username:      username,
-			Email:         req.Email,
-			Password:      string(hash),
-			Role:          "USER",
-			Company:       co,
-			Provider:      "local",
-			EmailVerified: true,
-			CreatedAt:     now,
-			UpdatedAt:     now,
-		}
-
-		_, err = coll.InsertOne(context.Background(), u)
-		if err != nil {
-			results = append(results, result{Email: req.Email, Created: false, Error: "failed to insert user"})
-			continue
-		}
-
-		results = append(results, result{Email: req.Email, Created: true})
-	}
-
-	return json.Marshal(results)
+	_, err := createLibreChatUsersInternal(requests)
+	return err
 }
