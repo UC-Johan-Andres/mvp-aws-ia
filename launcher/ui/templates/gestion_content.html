@@ -34,7 +34,8 @@
     <h4 class="section-title">Empresas</h4>
     <p class="form-hint" style="margin-bottom:16px;">
         El registro aplica a <strong>n8n</strong> (asignación en almacén local) y a <strong>LibreChat</strong> (campo <code>company</code> en MongoDB).
-        Puedes guardar API keys por proveedor (OpenAI, Gemini); se sincronizan en LibreChat (<code>keys</code>) y en n8n (credenciales en el proyecto personal). Al <strong>actualizar claves</strong> (PATCH) o <strong>renombrar</strong> la empresa, el launcher reaplica la sync en segundo plano. Manual: <code>POST /gestion/api/companies/sync</code> con <code>{"name":"empresa"}</code>.
+        Puedes guardar API keys por proveedor (OpenAI, Gemini); al <strong>crear</strong> o <strong>actualizar</strong> la empresa se dispara la sync en segundo plano hacia LibreChat (<code>keys</code>) y n8n (credenciales en el <strong>proyecto personal</strong> de cada usuario de esa empresa). Renombrar empresa también re-sincroniza. Manual: <code>POST /gestion/api/companies/sync</code> con <code>{"name":"empresa"}</code>.
+        En n8n, la credencial creada por el launcher se llama como <code>Launcher AI · OpenAI (ChatGPT) · tu@email</code>; al <strong>abrirla para editar</strong>, el campo API Key suele verse <strong>vacío</strong> (n8n no vuelve a mostrar secretos guardados): es normal. Comprueba que exista en la lista de credenciales y ejecuta un nodo OpenAI con esa credencial.
         La primera carga puede tomar valores de <code>GESTION_COMPANIES</code> si el JSON aún no tenía lista.
     </p>
     <div class="form-group" style="margin-bottom:20px;">

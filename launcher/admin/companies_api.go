@@ -45,6 +45,8 @@ func HandleGestionCompaniesAPI(w http.ResponseWriter, r *http.Request) {
 			jsonError(w, err.Error(), http.StatusBadRequest)
 			return
 		}
+		// Igual que PATCH: propagar credenciales a LibreChat/n8n para usuarios ya asignados a esta empresa.
+		GoSyncCompanyAIIntegrations(body.Name)
 		BroadcastUsersUpdate()
 		jsonOK(w, gestionCompaniesAPIPayload(true))
 	case http.MethodPatch:
