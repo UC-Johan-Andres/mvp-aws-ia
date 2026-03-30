@@ -9,6 +9,13 @@ import (
 )
 
 func SendEmail(to, subject, body string) error {
+	fmt.Printf("DEBUG SES: host=%s, port=%d, user=%s, from=%s\n",
+		config.SESSMTPHost,
+		465,
+		config.SESSMTPUser,
+		config.SESFromEmail,
+	)
+
 	m := gomail.NewMessage()
 	m.SetHeader("From", config.SESFromEmail)
 	m.SetHeader("To", to)
