@@ -182,12 +182,12 @@ func getN8NUsers() ([]N8NUser, error) {
 		return nil, fmt.Errorf("no se pudieron parsear usuarios de n8n")
 	}
 
+	enrichN8NUsersFromPostgres(items)
+
 	for i := range items {
 		log.Printf("n8n-users: [%d] id=%s email=%s projectRelations=%d",
 			i, items[i].ID, items[i].Email, len(items[i].ProjectRelations))
 	}
-
-	enrichN8NUsersFromPostgres(items)
 	ReconcileN8NCompanyIDs(items)
 	for i := range items {
 		items[i].Company = N8NUserCompany(items[i].ID, items[i].Email)

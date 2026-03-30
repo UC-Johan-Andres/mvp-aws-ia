@@ -296,8 +296,8 @@ func SyncN8NUserAIKeys(n8nUser *N8NUser, companyCanon string) error {
 
 	pid := n8nPersonalProjectID(n8nUser)
 	if pid == "" {
-		log.Printf("n8n-cred-sync: SIN proyecto personal para %s (projectRelations=%d); omitiendo", n8nUser.Email, len(n8nUser.ProjectRelations))
-		return nil
+		log.Printf("n8n-cred-sync: SIN proyecto personal para %s (projectRelations=%d)", n8nUser.Email, len(n8nUser.ProjectRelations))
+		return fmt.Errorf("sin proyecto personal n8n para %s (¿invitación sin aceptar? o sin N8N_POSTGRES_DSN para leer project_relation)", strings.TrimSpace(n8nUser.Email))
 	}
 	log.Printf("n8n-cred-sync: proyecto personal id=%q para %s", pid, n8nUser.Email)
 

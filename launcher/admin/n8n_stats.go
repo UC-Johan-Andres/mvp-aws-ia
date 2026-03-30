@@ -139,6 +139,74 @@ func FetchN8NStatsSeries(ctx context.Context) ([]N8NStatsSeriesItem, error) {
 
 var warnedN8NNoDSN sync.Once
 
+// n8nPersonalProjectsSQL: la API interna /rest/users a veces no incluye projectRelations;
+// leemos el proyecto personal (RBAC) desde la misma BD que usa n8n.
+const n8nPersonalProjectsSQL = `
+SELECT u.id::text, lower(trim(both from u.email)), pr."projectId"::text, pr.role, p.name
+FROM project_relation pr
+JOIN "user" u ON u.id = pr."userId"
+JOIN project p ON p.id = pr."projectId"
+WHERE pr.role = 'project:personalOwner'
+`
+
+func loadN8NPersonalProjectMaps(ctx context.Context, db *sql.DB) (byUserID, byEmail map[string]N8NProjectRelation, err error) {
+	rows, err := db.QueryContext(ctx, n8nPersonalProjectsSQL)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer rows.Close()
+
+	byUserID = make(map[string]N8NProjectRelation)
+	byEmail = make(map[string]N8NProjectRelation)
+	for rows.Next() {
+		var uid, em, pid, role string
+		var pname sql.NullString
+		if err := rows.Scan(&uid, &em, &pid, &role, &pname); err != nil {
+			return nil, nil, err
+		}
+		rel := N8NProjectRelation{
+			ID:   strings.TrimSpace(pid),
+			Role: strings.TrimSpace(role),
+			Name: strings.TrimSpace(pname.String),
+		}
+		uid = strings.TrimSpace(uid)
+		em = strings.TrimSpace(em)
+		if uid != "" {
+			byUserID[strings.ToLower(uid)] = rel
+		}
+		if em != "" {
+			byEmail[em] = rel
+		}
+	}
+	return byUserID, byEmail, rows.Err()
+}
+
+// applyPersonalProjectsFromMaps rellena ProjectRelations cuando la API /rest/users viene vacía.
+func applyPersonalProjectsFromMaps(users []N8NUser, byUserID, byEmail map[string]N8NProjectRelation) int {
+	n := 0
+	for i := range users {
+		if len(users[i].ProjectRelations) > 0 {
+			continue
+		}
+		uid := strings.TrimSpace(strings.ToLower(users[i].ID))
+		key := strings.TrimSpace(strings.ToLower(users[i].Email))
+		var rel N8NProjectRelation
+		var ok bool
+		if uid != "" {
+			rel, ok = byUserID[uid]
+		}
+		if !ok && key != "" {
+			rel, ok = byEmail[key]
+		}
+		if !ok {
+			continue
+		}
+		users[i].ProjectRelations = []N8NProjectRelation{rel}
+		n++
+	}
+	return n
+}
+
 func enrichN8NUsersFromPostgres(users []N8NUser) {
 	dsn := config.N8NPostgresDSN()
 	if dsn == "" {
@@ -169,6 +237,18 @@ func enrichN8NUsersFromPostgres(users []N8NUser) {
 	}
 
 	log.Printf("n8n postgres: %d filas de estadísticas en BD (fusionando por id/email)", len(byID))
+
+	pByUser, pByEmail, err := loadN8NPersonalProjectMaps(ctx, db)
+	if err != nil {
+		log.Printf("n8n postgres: projectRelations SQL: %v", err)
+	} else {
+		log.Printf("n8n postgres: %d proyecto(s) personal(es) en BD (mapa por usuario)", len(pByUser))
+		if n := applyPersonalProjectsFromMaps(users, pByUser, pByEmail); n > 0 {
+			log.Printf("n8n postgres: projectRelations aplicados a %d usuario(s) (API sin projectRelations)", n)
+		} else if len(users) > 0 && len(pByUser) > 0 {
+			log.Printf("n8n postgres: aviso: hay %d proyectos personales en BD pero 0 coincidencias con %d usuario(s) de la API (revisar id/email)", len(pByUser), len(users))
+		}
+	}
 
 	for i := range users {
 		var s n8nDBStatsRow
