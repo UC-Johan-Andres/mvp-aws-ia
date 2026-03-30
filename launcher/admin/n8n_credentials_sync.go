@@ -87,7 +87,7 @@ func n8nDecodeCredentialRows(data []byte) ([]n8nCredentialRow, error) {
 	if len(wrap.Items) > 0 {
 		return wrap.Items, nil
 	}
-	return nil, fmt.Errorf("formato de respuesta de credenciales n8n no reconocido")
+	return nil, nil
 }
 
 func n8nFilterRowsByProject(rows []n8nCredentialRow, projectID string) []n8nCredentialRow {
@@ -151,7 +151,8 @@ func n8nListCredentials(client *http.Client, cookies []*http.Cookie, projectID s
 		u := base + "?filter=" + url.QueryEscape(string(filt))
 		if b, code, err := do(u); err == nil && code == http.StatusOK {
 			rows, err := n8nDecodeCredentialRows(b)
-			if err == nil && len(rows) > 0 {
+			if err == nil {
+				log.Printf("n8n-cred-sync: listCredentials con filtro projectId=%q → %d filas", projectID, len(rows))
 				return rows, nil
 			}
 		}
@@ -168,11 +169,11 @@ func n8nListCredentials(client *http.Client, cookies []*http.Cookie, projectID s
 	if err != nil {
 		return nil, err
 	}
+	log.Printf("n8n-cred-sync: listCredentials sin filtro → %d filas totales", len(rows))
 	if projectID != "" {
 		sub := n8nFilterRowsByProject(rows, projectID)
-		if len(sub) > 0 {
-			return sub, nil
-		}
+		log.Printf("n8n-cred-sync: tras filtrar por projectId=%q → %d filas", projectID, len(sub))
+		return sub, nil
 	}
 	return rows, nil
 }
@@ -188,15 +189,18 @@ func n8nFindManagedCredID(rows []n8nCredentialRow, wantName string) string {
 
 func n8nPostCredential(client *http.Client, cookies []*http.Cookie, projectID, name, credType string, data map[string]any) error {
 	payload := map[string]any{
-		"name":      name,
-		"type":      credType,
-		"data":      data,
-		"projectId": projectID,
+		"name": name,
+		"type": credType,
+		"data": data,
+	}
+	if projectID != "" {
+		payload["projectId"] = projectID
 	}
 	b, err := json.Marshal(payload)
 	if err != nil {
 		return err
 	}
+	log.Printf("n8n-cred-sync POST /rest/credentials name=%q type=%q projectId=%q", name, credType, projectID)
 	u := strings.TrimRight(config.N8NInternalURL, "/") + "/rest/credentials"
 	req, err := http.NewRequest(http.MethodPost, u, bytes.NewReader(b))
 	if err != nil {
@@ -210,13 +214,19 @@ func n8nPostCredential(client *http.Client, cookies []*http.Cookie, projectID, n
 	n8nAddRequestCookies(req, cookies)
 	resp, err := client.Do(req)
 	if err != nil {
-		return err
+		return fmt.Errorf("POST /rest/credentials: %w", err)
 	}
 	defer resp.Body.Close()
 	body, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
+		log.Printf("n8n-cred-sync POST FAILED status=%d body=%s", resp.StatusCode, string(body))
 		return fmt.Errorf("status %d: %s", resp.StatusCode, string(body))
 	}
+	preview := string(body)
+	if len(preview) > 200 {
+		preview = preview[:200]
+	}
+	log.Printf("n8n-cred-sync POST OK name=%q resp=%s", name, preview)
 	return nil
 }
 
@@ -275,13 +285,21 @@ func n8nDeleteCredential(client *http.Client, cookies []*http.Cookie, credID str
 // SyncN8NUserAIKeys crea, actualiza o elimina credenciales IA gestionadas en el proyecto personal del usuario.
 func SyncN8NUserAIKeys(n8nUser *N8NUser, companyCanon string) error {
 	if config.N8NOwnerEmail == "" || config.N8NOwnerPass == "" || n8nUser == nil {
+		log.Printf("n8n-cred-sync: skip (owner creds vacías o user nil)")
 		return nil
 	}
+	log.Printf("n8n-cred-sync: inicio para email=%s company=%q projectRelations=%d",
+		n8nUser.Email, companyCanon, len(n8nUser.ProjectRelations))
+	for i, pr := range n8nUser.ProjectRelations {
+		log.Printf("n8n-cred-sync:   projectRelation[%d] id=%q role=%q name=%q", i, pr.ID, pr.Role, pr.Name)
+	}
+
 	pid := n8nPersonalProjectID(n8nUser)
 	if pid == "" {
-		log.Printf("gestión n8n: sin proyecto personal para %s; credenciales IA omitidas hasta que exista el proyecto", n8nUser.Email)
+		log.Printf("n8n-cred-sync: SIN proyecto personal para %s (projectRelations=%d); omitiendo", n8nUser.Email, len(n8nUser.ProjectRelations))
 		return nil
 	}
+	log.Printf("n8n-cred-sync: proyecto personal id=%q para %s", pid, n8nUser.Email)
 
 	client := n8nCredentialHTTPClient()
 	cookies, err := n8nLogin(client)
@@ -291,9 +309,16 @@ func SyncN8NUserAIKeys(n8nUser *N8NUser, companyCanon string) error {
 
 	rows, err := n8nListCredentials(client, cookies, pid)
 	if err != nil {
+		log.Printf("n8n-cred-sync: error listando credenciales pid=%q: %v", pid, err)
 		return err
 	}
-	rows = n8nFilterRowsForEmail(rows, n8nUser.Email)
+	log.Printf("n8n-cred-sync: %d credenciales encontradas en proyecto %q", len(rows), pid)
+	for _, r := range rows {
+		log.Printf("n8n-cred-sync:   cred id=%q name=%q type=%q", r.ID, r.Name, r.Type)
+	}
+
+	managedRows := n8nFilterRowsForEmail(rows, n8nUser.Email)
+	log.Printf("n8n-cred-sync: %d credenciales gestionadas (Launcher AI · …) para %s", len(managedRows), n8nUser.Email)
 
 	email := strings.TrimSpace(n8nUser.Email)
 	for _, p := range RegisteredProviders() {
@@ -302,28 +327,35 @@ func SyncN8NUserAIKeys(n8nUser *N8NUser, companyCanon string) error {
 		}
 		wantName := n8nManagedCredentialName(p.ID, email)
 		apiKey, hasKey := CompanyProviderCredentialForSync(companyCanon, p.ID)
-		existingID := n8nFindManagedCredID(rows, wantName)
+		existingID := n8nFindManagedCredID(managedRows, wantName)
+		log.Printf("n8n-cred-sync: proveedor=%s wantName=%q hasKey=%v existingID=%q", p.ID, wantName, hasKey, existingID)
 
 		if !hasKey || strings.TrimSpace(apiKey) == "" {
 			if existingID != "" {
+				log.Printf("n8n-cred-sync: borrando credencial existente %q", existingID)
 				if err := n8nDeleteCredential(client, cookies, existingID); err != nil {
-					log.Printf("gestión n8n: no se pudo borrar credencial %q: %v", wantName, err)
+					log.Printf("n8n-cred-sync: error borrando %q: %v", wantName, err)
 				}
+			} else {
+				log.Printf("n8n-cred-sync: sin key para %s y sin credencial existente → nada que hacer", p.ID)
 			}
 			continue
 		}
 
 		data := N8NCredentialData(p.ID, strings.TrimSpace(apiKey))
 		if existingID != "" {
+			log.Printf("n8n-cred-sync: PATCH credencial existente id=%q name=%q", existingID, wantName)
 			if err := n8nPatchCredential(client, cookies, existingID, wantName, p.N8NCredentialType, data); err != nil {
 				return fmt.Errorf("actualizar %s: %w", wantName, err)
 			}
 		} else {
+			log.Printf("n8n-cred-sync: POST nueva credencial name=%q type=%q en proyecto=%q", wantName, p.N8NCredentialType, pid)
 			if err := n8nPostCredential(client, cookies, pid, wantName, p.N8NCredentialType, data); err != nil {
 				return fmt.Errorf("crear %s: %w", wantName, err)
 			}
 		}
 	}
+	log.Printf("n8n-cred-sync: FIN para %s", n8nUser.Email)
 	return nil
 }
 
@@ -331,29 +363,39 @@ func SyncN8NUserAIKeys(n8nUser *N8NUser, companyCanon string) error {
 func SyncN8NAllUsersForCompany(ctx context.Context, companyCanon string) (int, error) {
 	_ = ctx
 	if config.N8NOwnerEmail == "" {
+		log.Printf("n8n-cred-sync: N8N_OWNER_EMAIL vacío, omitiendo sync")
 		return 0, nil
 	}
+	log.Printf("n8n-cred-sync: SyncN8NAllUsersForCompany empresa=%q", companyCanon)
 	users, err := getN8NUsers()
 	if err != nil {
+		log.Printf("n8n-cred-sync: error obteniendo usuarios n8n: %v", err)
 		return 0, err
 	}
+	log.Printf("n8n-cred-sync: %d usuarios n8n obtenidos", len(users))
 	n := 0
 	for i := range users {
 		u := &users[i]
 		co := N8NUserCompany(u.ID, u.Email)
 		c2, ok := CanonicalGestionCompany(co)
+		log.Printf("n8n-cred-sync: usuario %s (id=%s) company-store=%q canonical=%q ok=%v",
+			u.Email, u.ID, co, c2, ok)
 		if !ok {
+			log.Printf("n8n-cred-sync: skip %s — empresa %q no es canónica", u.Email, co)
 			continue
 		}
 		if c2 != companyCanon {
+			log.Printf("n8n-cred-sync: skip %s — empresa %q ≠ %q", u.Email, c2, companyCanon)
 			continue
 		}
+		log.Printf("n8n-cred-sync: MATCH %s → empresa %q, sincronizando…", u.Email, c2)
 		if err := SyncN8NUserAIKeys(u, c2); err != nil {
-			log.Printf("gestión n8n: sync %s: %v", u.Email, err)
+			log.Printf("n8n-cred-sync: ERROR sync %s: %v", u.Email, err)
 			continue
 		}
 		n++
 	}
+	log.Printf("n8n-cred-sync: SyncN8NAllUsersForCompany empresa=%q → %d usuario(s) procesados", companyCanon, n)
 	return n, nil
 }
 

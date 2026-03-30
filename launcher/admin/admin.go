@@ -133,22 +133,60 @@ func getN8NUsers() ([]N8NUser, error) {
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		data, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("n8n returned status %d: %s", resp.StatusCode, string(data))
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("n8n read body: %w", err)
 	}
 
-	var result struct {
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("n8n returned status %d: %s", resp.StatusCode, string(body))
+	}
+
+	var items []N8NUser
+
+	var paginated struct {
 		Data struct {
 			Count int       `json:"count"`
 			Items []N8NUser `json:"items"`
 		} `json:"data"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return nil, err
+	if err := json.Unmarshal(body, &paginated); err == nil && len(paginated.Data.Items) > 0 {
+		items = paginated.Data.Items
 	}
 
-	items := result.Data.Items
+	if len(items) == 0 {
+		var direct struct {
+			Count int       `json:"count"`
+			Items []N8NUser `json:"items"`
+		}
+		if err := json.Unmarshal(body, &direct); err == nil && len(direct.Items) > 0 {
+			items = direct.Items
+		}
+	}
+
+	if len(items) == 0 {
+		var arr struct {
+			Data []N8NUser `json:"data"`
+		}
+		if err := json.Unmarshal(body, &arr); err == nil && len(arr.Data) > 0 {
+			items = arr.Data
+		}
+	}
+
+	if len(items) == 0 {
+		preview := string(body)
+		if len(preview) > 500 {
+			preview = preview[:500]
+		}
+		log.Printf("n8n-users: no se pudieron parsear usuarios; raw=%s", preview)
+		return nil, fmt.Errorf("no se pudieron parsear usuarios de n8n")
+	}
+
+	for i := range items {
+		log.Printf("n8n-users: [%d] id=%s email=%s projectRelations=%d",
+			i, items[i].ID, items[i].Email, len(items[i].ProjectRelations))
+	}
+
 	enrichN8NUsersFromPostgres(items)
 	ReconcileN8NCompanyIDs(items)
 	for i := range items {

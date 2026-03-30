@@ -150,16 +150,23 @@ func HandleGestionCompanyIntegrationsSyncAPI(w http.ResponseWriter, r *http.Requ
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Minute)
 	defer cancel()
-	lc, nn, err := SyncCompanyAIIntegrations(ctx, body.Name)
-	if err != nil {
-		jsonError(w, err.Error(), http.StatusBadGateway)
-		return
+	res, err := SyncCompanyAIIntegrations(ctx, body.Name)
+	if res == nil {
+		res = &SyncResult{}
 	}
-	jsonOK(w, map[string]any{
-		"ok":             true,
-		"libreChatUsers": lc,
-		"n8nUsers":       nn,
-	})
+	out := map[string]any{
+		"ok":              err == nil,
+		"company":         res.Company,
+		"companyFound":    res.CompanyFound,
+		"providersFound":  res.ProvidersFound,
+		"libreChatUsers":  res.LibreChat,
+		"n8nUsers":        res.N8N,
+		"errors":          res.Errors,
+	}
+	if err != nil {
+		out["error"] = err.Error()
+	}
+	jsonOK(w, out)
 }
 
 // HandleGestionCompaniesDefaultAPI POST {"name"} — empresa predeterminada.

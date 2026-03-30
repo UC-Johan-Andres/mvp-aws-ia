@@ -80,6 +80,7 @@
                             {{if not .IsDefault}}
                             <button type="button" class="btn-small btn-invite" data-empresa="{{.Name}}" onclick="empresaSetDefault(this.dataset.empresa)">Predeterminada</button>
                             {{end}}
+                            <button type="button" class="btn-small btn-invite" data-empresa="{{.Name}}" onclick="empresaSync(this.dataset.empresa)">Sync AI</button>
                             <button type="button" class="btn-small btn-edit" data-empresa="{{.Name}}" onclick="empresaRenamePrompt(this.dataset.empresa)">Renombrar</button>
                             <button type="button" class="btn-small btn-delete" data-empresa="{{.Name}}" onclick="empresaDelete(this.dataset.empresa)">Eliminar</button>
                         </div>
@@ -148,6 +149,24 @@
             if (!r.ok) { if (typeof showToast === 'function') showToast(j.error || 'Error al renombrar', 'error'); return; }
             if (typeof refreshGestionMeta === 'function') await refreshGestionMeta();
             if (typeof showToast === 'function') showToast('Empresa renombrada (LibreChat actualizado)', 'success');
+            htmx.ajax('GET', '/gestion/content?tab=empresas', { target: '#main-content', swap: 'innerHTML' });
+        } catch (e) {
+            if (typeof showToast === 'function') showToast('Error de red', 'error');
+        }
+    };
+    window.empresaSync = async function (name) {
+        if (typeof showToast === 'function') showToast('Sincronizando credenciales IA para «' + name + '»…', 'info');
+        try {
+            var r = await fetch('/gestion/api/companies/sync', { method: 'POST', headers: csrfHeaders(), body: JSON.stringify({ name: name }) });
+            var j = await r.json().catch(function () { return {}; });
+            if (j.error) {
+                if (typeof showToast === 'function') showToast('Sync: ' + j.error, 'error');
+            } else {
+                var msg = 'Sync OK: LibreChat=' + (j.libreChatUsers || 0) + ', n8n=' + (j.n8nUsers || 0);
+                if (j.providersFound) msg += ' (proveedores: ' + j.providersFound.join(', ') + ')';
+                if (j.errors && j.errors.length) msg += ' — errores: ' + j.errors.join('; ');
+                if (typeof showToast === 'function') showToast(msg, (j.errors && j.errors.length) ? 'error' : 'success');
+            }
             htmx.ajax('GET', '/gestion/content?tab=empresas', { target: '#main-content', swap: 'innerHTML' });
         } catch (e) {
             if (typeof showToast === 'function') showToast('Error de red', 'error');
