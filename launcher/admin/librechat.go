@@ -106,71 +106,61 @@ type createUserRequest struct {
 	Company  string `json:"company"`
 }
 
-func createLibreChatUsers(w http.ResponseWriter, r *http.Request) {
-	if config.MongoURI == "" {
-		jsonError(w, "MongoDB not configured", http.StatusServiceUnavailable)
-		return
-	}
+type lcUserResult struct {
+	Email   string `json:"email"`
+	Created bool   `json:"created"`
+	Error   string `json:"error,omitempty"`
+}
 
-	var requests []createUserRequest
-	if err := json.NewDecoder(r.Body).Decode(&requests); err != nil {
-		jsonError(w, "invalid JSON body: "+err.Error(), http.StatusBadRequest)
-		return
+func createLibreChatUsersInternal(requests []createUserRequest) ([]lcUserResult, error) {
+	if config.MongoURI == "" {
+		return nil, fmt.Errorf("MongoDB not configured")
 	}
 
 	if len(requests) == 0 {
-		jsonError(w, "empty user list", http.StatusBadRequest)
-		return
+		return nil, fmt.Errorf("empty user list")
 	}
 
-	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
 	coll, client, err := mongoCollection(ctx)
 	if err != nil {
-		jsonError(w, "failed to connect to MongoDB: "+err.Error(), http.StatusInternalServerError)
-		return
+		return nil, fmt.Errorf("failed to connect to MongoDB: %w", err)
 	}
 	defer client.Disconnect(ctx)
 
-	type result struct {
-		Email   string `json:"email"`
-		Created bool   `json:"created"`
-		Error   string `json:"error,omitempty"`
-	}
-
-	results := make([]result, 0, len(requests))
+	results := make([]lcUserResult, 0, len(requests))
 
 	for _, req := range requests {
 		if req.Email == "" {
-			results = append(results, result{Email: req.Email, Created: false, Error: "email is required"})
+			results = append(results, lcUserResult{Email: req.Email, Created: false, Error: "email is required"})
 			continue
 		}
 		if req.Password == "" {
-			results = append(results, result{Email: req.Email, Created: false, Error: "password is required"})
+			results = append(results, lcUserResult{Email: req.Email, Created: false, Error: "password is required"})
 			continue
 		}
 
 		role := "USER"
 		if req.Role != "" && req.Role != "USER" {
-			results = append(results, result{Email: req.Email, Created: false, Error: "solo se permite crear usuarios con rol USER"})
+			results = append(results, lcUserResult{Email: req.Email, Created: false, Error: "solo se permite crear usuarios con rol USER"})
 			continue
 		}
 
-		// Check for existing user
 		count, err := coll.CountDocuments(ctx, bson.M{"email": req.Email})
 		if err != nil {
-			results = append(results, result{Email: req.Email, Created: false, Error: "failed to check existing user: " + err.Error()})
+			results = append(results, lcUserResult{Email: req.Email, Created: false, Error: "failed to check existing user: " + err.Error()})
 			continue
 		}
 		if count > 0 {
-			results = append(results, result{Email: req.Email, Created: false, Error: "email already exists"})
+			results = append(results, lcUserResult{Email: req.Email, Created: false, Error: "email already exists"})
 			continue
 		}
 
 		hash, err := bcrypt.GenerateFromPassword([]byte(req.Password), 12)
 		if err != nil {
-			results = append(results, result{Email: req.Email, Created: false, Error: "failed to hash password: " + err.Error()})
+			results = append(results, lcUserResult{Email: req.Email, Created: false, Error: "failed to hash password: " + err.Error()})
 			continue
 		}
 
@@ -189,7 +179,7 @@ func createLibreChatUsers(w http.ResponseWriter, r *http.Request) {
 			co = GestionDefaultCompany()
 		}
 		if !IsValidGestionCompany(co) {
-			results = append(results, result{Email: req.Email, Created: false, Error: "empresa no válida"})
+			results = append(results, lcUserResult{Email: req.Email, Created: false, Error: "empresa no válida"})
 			continue
 		}
 		if canon, ok := CanonicalGestionCompany(co); ok {
@@ -213,32 +203,128 @@ func createLibreChatUsers(w http.ResponseWriter, r *http.Request) {
 
 		_, err = coll.InsertOne(ctx, u)
 		if err != nil {
-			results = append(results, result{Email: req.Email, Created: false, Error: "failed to insert user: " + err.Error()})
+			results = append(results, lcUserResult{Email: req.Email, Created: false, Error: "failed to insert user: " + err.Error()})
 			continue
 		}
 		if err := SyncLibreChatUserProviderKeys(ctx, client, u.ID, co); err != nil {
 			log.Printf("gestion: sincronizar keys LibreChat para %s: %v", req.Email, err)
 		}
 
-		// Log para debug: usuario creado exitosamente
 		log.Printf("DEBUG: usuario creado en MongoDB: %s (empresa: %s)", req.Email, co)
 
-		// Enviar email con credenciales (best effort - no bloquea creación)
-		emailBody := fmt.Sprintf(
-			`<h2>Hola %s,</h2>
-			<p>Tu cuenta ha sido creada exitosamente.</p>
-			<p><strong>Usuario:</strong> %s</p>
-			<p><strong>Contraseña:</strong> %s</p>
-			<p>Saludos,<br>El equipo</p>`,
-			name,
-			req.Email,
-			req.Password,
-		)
+		emailBody := fmt.Sprintf(`<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tu cuenta ha sido creada</title>
+    <style>
+        body {
+            font-family: "Plus Jakarta Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            background: linear-gradient(165deg, #f8fafc 0%, #e2e8f0 100%);
+            margin: 0;
+            padding: 40px 20px;
+        }
+        .container {
+            max-width: 500px;
+            margin: 0 auto;
+            background: #ffffff;
+            border-radius: 16px;
+            box-shadow: 0 4px 24px rgba(15, 23, 42, 0.07);
+            overflow: hidden;
+        }
+        .header {
+            background: linear-gradient(90deg, #2563eb, #8b5cf6);
+            padding: 32px 24px;
+            text-align: center;
+        }
+        .header-title {
+            color: #ffffff;
+            font-size: 24px;
+            font-weight: 700;
+            margin: 0;
+        }
+        .content {
+            padding: 32px 24px;
+        }
+        .greeting {
+            color: #0f172a;
+            font-size: 18px;
+            margin-bottom: 24px;
+        }
+        .card {
+            background: #f8fafc;
+            border-radius: 10px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+        .label {
+            color: #64748b;
+            font-size: 13px;
+            font-weight: 600;
+            text-transform: uppercase;
+            margin-bottom: 4px;
+        }
+        .value {
+            color: #0f172a;
+            font-size: 16px;
+            font-weight: 500;
+        }
+        .footer {
+            padding: 24px;
+            text-align: center;
+            color: #64748b;
+            font-size: 14px;
+            border-top: 1px solid #e2e8f0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1 class="header-title">Cuenta creada</h1>
+        </div>
+        <div class="content">
+            <p class="greeting">Hola %s,</p>
+            <p>Tu cuenta ha sido creada exitosamente. Ya puedes acceder a LibreChat.</p>
+            
+            <div class="card">
+                <div class="label">Usuario</div>
+                <div class="value">%s</div>
+            </div>
+            
+            <div class="card">
+                <div class="label">Contraseña</div>
+                <div class="value">%s</div>
+            </div>
+        </div>
+        <div class="footer">
+            <p>Saludos,<br>El equipo de AI Ecosystem</p>
+        </div>
+    </div>
+</body>
+</html>`, name, req.Email, req.Password)
 		if err := email.SendEmail(req.Email, "Tus credenciales de acceso", emailBody); err != nil {
 			log.Printf("gestion: error enviando email de credenciales a %s: %v", req.Email, err)
 		}
 
-		results = append(results, result{Email: req.Email, Created: true})
+		results = append(results, lcUserResult{Email: req.Email, Created: true})
+	}
+
+	return results, nil
+}
+
+func createLibreChatUsers(w http.ResponseWriter, r *http.Request) {
+	var requests []createUserRequest
+	if err := json.NewDecoder(r.Body).Decode(&requests); err != nil {
+		jsonError(w, "invalid JSON body: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	results, err := createLibreChatUsersInternal(requests)
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
 	}
 
 	jsonOK(w, results)

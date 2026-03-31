@@ -284,15 +284,15 @@ type N8NProjectRelation struct {
 
 // N8NUser represents a user from n8n API.
 type N8NUser struct {
-	ID               string `json:"id"`
-	Email            string `json:"email"`
-	FirstName        string `json:"firstName"`
-	LastName         string `json:"lastName"`
-	Role             string `json:"role"`
-	IsPending        bool   `json:"isPending"`
-	InviteAcceptURL  string `json:"inviteAcceptUrl"`
+	ID               string               `json:"id"`
+	Email            string               `json:"email"`
+	FirstName        string               `json:"firstName"`
+	LastName         string               `json:"lastName"`
+	Role             string               `json:"role"`
+	IsPending        bool                 `json:"isPending"`
+	InviteAcceptURL  string               `json:"inviteAcceptUrl"`
 	ProjectRelations []N8NProjectRelation `json:"projectRelations"`
-	Company          string `json:"company,omitempty"`
+	Company          string               `json:"company,omitempty"`
 
 	WorkflowsAccesibles   int64   `json:"workflowsAccesibles"`
 	TotalExecutions       int64   `json:"totalExecutions"`
@@ -485,7 +485,8 @@ func HandleGestionSubmit(w http.ResponseWriter, r *http.Request) {
 	} else if tab == "n8n" {
 		_, err = createN8NUsersFromForm(r)
 	} else {
-		_, err = createLibreChatUsersFromForm(r)
+		// LibreChat: BFF hace HTTP call al API
+		err = callLibreChatAPI(r)
 	}
 
 	if err != nil {
@@ -1106,24 +1107,31 @@ func createN8NUsersFromForm(r *http.Request) ([]byte, error) {
 	return data, nil
 }
 
-// Helper: create librechat users from form submission
-func createLibreChatUsersFromForm(r *http.Request) ([]byte, error) {
+// callLibreChatAPI makes an HTTP call to the LibreChat API from the BFF.
+// This follows the BFF pattern: /gestion calls /admin/librechat/users internally.
+func callLibreChatAPI(r *http.Request) error {
 	emails := r.Form["email"]
 	names := r.Form["name"]
 	passwords := r.Form["password"]
 
 	if len(emails) == 0 {
-		return nil, fmt.Errorf("no users to create")
+		return fmt.Errorf("no users to create")
 	}
 
-	type createReq struct {
+	company := strings.TrimSpace(r.FormValue("company"))
+	if company == "" {
+		company = GestionDefaultCompany()
+	}
+
+	type createUserRequest struct {
 		Email    string `json:"email"`
 		Name     string `json:"name"`
 		Password string `json:"password"`
 		Role     string `json:"role"`
+		Company  string `json:"company"`
 	}
 
-	requests := make([]createReq, 0, len(emails))
+	requests := make([]createUserRequest, 0, len(emails))
 	for i, email := range emails {
 		name := email
 		if i < len(names) && names[i] != "" {
@@ -1133,20 +1141,18 @@ func createLibreChatUsersFromForm(r *http.Request) ([]byte, error) {
 		if i < len(passwords) {
 			password = passwords[i]
 		}
-		role := "USER"
-		requests = append(requests, createReq{Email: email, Name: name, Password: password, Role: role})
+		requests = append(requests, createUserRequest{
+			Email:    email,
+			Name:     name,
+			Password: password,
+			Role:     "USER",
+			Company:  company,
+		})
 	}
 
-	coll, client, err := mongoCollection(context.Background())
+	jsonData, err := json.Marshal(requests)
 	if err != nil {
-		return nil, fmt.Errorf("failed to connect to MongoDB: %w", err)
-	}
-	defer client.Disconnect(context.Background())
-
-	type result struct {
-		Email   string `json:"email"`
-		Created bool   `json:"created"`
-		Error   string `json:"error,omitempty"`
+		return fmt.Errorf("failed to marshal request: %w", err)
 	}
 
 	results := make([]result, 0, len(requests))
@@ -1226,5 +1232,20 @@ func createLibreChatUsersFromForm(r *http.Request) ([]byte, error) {
 		results = append(results, result{Email: req.Email, Created: true})
 	}
 
-	return json.Marshal(results)
+	apiReq.Header.Set("Content-Type", "application/json")
+	apiReq.Header.Set("Cookie", r.Header.Get("Cookie"))
+
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Do(apiReq)
+	if err != nil {
+		return fmt.Errorf("failed to call API: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("API returned status %d: %s", resp.StatusCode, string(body))
+	}
+
+	return nil
 }

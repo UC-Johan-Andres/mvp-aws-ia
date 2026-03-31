@@ -886,6 +886,10 @@
             margin-right: 8px;
             vertical-align: middle;
         }
+        .company-api-key-field {
+            font-family: ui-monospace, monospace;
+            font-size: 0.85rem;
+        }
         .create-modal-lede {
             font-size: 0.88rem;
             color: var(--text-muted);
@@ -1226,11 +1230,11 @@
             </div>
             <div class="form-group">
                 <label for="company-modal-openai">OpenAI (ChatGPT) — API key</label>
-                <input type="password" id="company-modal-openai" autocomplete="new-password" placeholder="sk-… (opcional)">
+                <input type="text" class="company-api-key-field" id="company-modal-openai" autocomplete="off" spellcheck="false" placeholder="sk-… (opcional)">
             </div>
             <div class="form-group">
                 <label for="company-modal-gemini">Google Gemini — API key</label>
-                <input type="password" id="company-modal-gemini" autocomplete="new-password" placeholder="Google AI Studio (opcional)">
+                <input type="text" class="company-api-key-field" id="company-modal-gemini" autocomplete="off" spellcheck="false" placeholder="Google AI Studio (opcional)">
                 <p class="form-hint" style="margin-top:6px;margin-bottom:0;font-size:0.8rem;">El plan gratuito de Google a veces responde 429 (límite de peticiones); no es un fallo de esta consola.</p>
             </div>
             <p id="company-modal-masked-hint" class="create-modal-lede" style="display:none;margin-top:0;"></p>
@@ -1645,6 +1649,8 @@
             document.getElementById('company-modal-name').value = '';
             document.getElementById('company-modal-openai').value = '';
             document.getElementById('company-modal-gemini').value = '';
+            document.getElementById('company-modal-openai').placeholder = 'sk-… (opcional)';
+            document.getElementById('company-modal-gemini').placeholder = 'Google AI Studio (opcional)';
             document.getElementById('company-modal-name').readOnly = false;
             document.getElementById('company-modal-masked-hint').style.display = 'none';
             document.getElementById('company-modal-remove-row').style.display = 'none';
@@ -1657,34 +1663,38 @@
             document.getElementById('company-modal-title').textContent = 'Editar empresa';
             document.getElementById('company-modal-lede').textContent = 'Puedes cambiar el nombre y las API keys. En n8n, Gemini usa la credencial «Google Gemini (PaLM) API» (tipo googlePalmApi).';
             document.getElementById('company-modal-name').value = name;
-            document.getElementById('company-modal-openai').value = '';
-            document.getElementById('company-modal-gemini').value = '';
+            var oaEl = document.getElementById('company-modal-openai');
+            var gmEl = document.getElementById('company-modal-gemini');
+            oaEl.value = '';
+            gmEl.value = '';
+            oaEl.placeholder = 'Sin clave guardada';
+            gmEl.placeholder = 'Sin clave guardada';
             document.getElementById('company-modal-name').readOnly = false;
             document.getElementById('company-modal-remove-openai').checked = false;
             document.getElementById('company-modal-remove-gemini').checked = false;
             document.getElementById('company-modal-masked-hint').style.display = 'block';
             document.getElementById('company-modal-remove-row').style.display = 'block';
-            var parts = [];
+            var hasAny = false;
             try {
                 var r = await fetch('/gestion/api/companies', { headers: { 'Accept': 'application/json' } });
                 var j = await r.json().catch(function () { return {}; });
                 var prof = j.profiles && j.profiles[name];
                 if (prof && prof.credentials) {
-                    if (prof.credentials.openai && prof.credentials.openai.configured) {
-                        parts.push('OpenAI: ' + (prof.credentials.openai.apiKey || 'configurada'));
-                        var oaiInp = document.getElementById('company-modal-openai-key');
-                        if (oaiInp) oaiInp.placeholder = prof.credentials.openai.apiKey || '';
+                    if (prof.credentials.openai && prof.credentials.openai.configured && prof.credentials.openai.apiKey) {
+                        oaEl.value = prof.credentials.openai.apiKey;
+                        oaEl.placeholder = 'sk-… (opcional)';
+                        hasAny = true;
                     }
-                    if (prof.credentials.google && prof.credentials.google.configured) {
-                        parts.push('Gemini: ' + (prof.credentials.google.apiKey || 'configurada'));
-                        var gemInp = document.getElementById('company-modal-google-key');
-                        if (gemInp) gemInp.placeholder = prof.credentials.google.apiKey || '';
+                    if (prof.credentials.google && prof.credentials.google.configured && prof.credentials.google.apiKey) {
+                        gmEl.value = prof.credentials.google.apiKey;
+                        gmEl.placeholder = 'Google AI Studio (opcional)';
+                        hasAny = true;
                     }
                 }
             } catch (e) {}
-            document.getElementById('company-modal-masked-hint').textContent = parts.length
-                ? 'Escribe una nueva clave solo si quieres sustituirla.'
-                : 'Sin claves guardadas.';
+            document.getElementById('company-modal-masked-hint').textContent = hasAny
+                ? 'Las claves guardadas se muestran arriba. Modifícalas aquí o marca «Quitar» para borrarlas del perfil y de la sync.'
+                : 'Sin claves guardadas. Puedes añadirlas abajo; «Quitar» solo aplica si ya existían.';
             document.getElementById('company-modal').classList.add('active');
         }
 
