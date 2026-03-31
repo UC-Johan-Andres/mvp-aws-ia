@@ -49,6 +49,57 @@ func encryptLibreChatKeyValue(plaintext string) (string, error) {
 	return hex.EncodeToString(ciphertext), nil
 }
 
+// decryptLibreChatKeyValue replica decrypt() legacy de LibreChat (solo tests y diagnóstico).
+func decryptLibreChatKeyValue(hexCipher string) (string, error) {
+	keyHex := strings.TrimSpace(os.Getenv("CREDS_KEY"))
+	ivHex := strings.TrimSpace(os.Getenv("CREDS_IV"))
+	key, err := hex.DecodeString(keyHex)
+	if err != nil {
+		return "", fmt.Errorf("CREDS_KEY: %w", err)
+	}
+	iv, err := hex.DecodeString(ivHex)
+	if err != nil {
+		return "", fmt.Errorf("CREDS_IV: %w", err)
+	}
+	if len(iv) != aes.BlockSize {
+		return "", fmt.Errorf("CREDS_IV debe ser %d bytes", aes.BlockSize)
+	}
+	ciphertext, err := hex.DecodeString(strings.TrimSpace(hexCipher))
+	if err != nil {
+		return "", err
+	}
+	if len(ciphertext)%aes.BlockSize != 0 {
+		return "", fmt.Errorf("longitud ciphertext inválida")
+	}
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		return "", err
+	}
+	plain := make([]byte, len(ciphertext))
+	cipher.NewCBCDecrypter(block, iv).CryptBlocks(plain, ciphertext)
+	unpadded, err := pkcs7Unpad(plain, aes.BlockSize)
+	if err != nil {
+		return "", err
+	}
+	return string(unpadded), nil
+}
+
+func pkcs7Unpad(data []byte, blockSize int) ([]byte, error) {
+	if len(data) == 0 || len(data)%blockSize != 0 {
+		return nil, fmt.Errorf("pkcs7: longitud inválida")
+	}
+	pad := int(data[len(data)-1])
+	if pad == 0 || pad > blockSize {
+		return nil, fmt.Errorf("pkcs7: padding inválido")
+	}
+	for i := 0; i < pad; i++ {
+		if data[len(data)-1-i] != byte(pad) {
+			return nil, fmt.Errorf("pkcs7: bytes de padding incoherentes")
+		}
+	}
+	return data[:len(data)-pad], nil
+}
+
 func pkcs7Pad(data []byte, blockSize int) []byte {
 	pad := blockSize - len(data)%blockSize
 	if pad == 0 {

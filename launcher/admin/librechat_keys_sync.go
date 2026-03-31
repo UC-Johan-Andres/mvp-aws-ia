@@ -39,9 +39,18 @@ func SyncLibreChatUserProviderKeys(ctx context.Context, client *mongo.Client, us
 		if err != nil {
 			return fmt.Errorf("keys %q (cifrado CREDS_*): %w", p.LibreChatKeyName, err)
 		}
+		// Quitar expiresAt: igual que updateUserKey de LibreChat sin expiry; si no, queda una
+		// fecha heredada de la UI, checkUserKeyExpiry() falla o el índice TTL borra el documento.
 		_, err = keyColl.UpdateOne(ctx,
 			bson.M{"userId": userID, "name": p.LibreChatKeyName},
-			bson.M{"$set": bson.M{"userId": userID, "name": p.LibreChatKeyName, "value": encVal}},
+			bson.M{
+				"$set": bson.M{
+					"userId": userID,
+					"name":   p.LibreChatKeyName,
+					"value":  encVal,
+				},
+				"$unset": bson.M{"expiresAt": ""},
+			},
 			options.Update().SetUpsert(true),
 		)
 		if err != nil {
