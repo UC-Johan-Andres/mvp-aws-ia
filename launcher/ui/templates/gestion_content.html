@@ -153,9 +153,6 @@
                     <th>Apellido(s)</th>
                     <th>Rol</th>
                     <th>Empresa</th>
-                    <th class="col-num" title="Todas las ejecuciones">Ejec.</th>
-                    <th class="col-num" title="Automáticas">Auto.</th>
-                    <th class="col-num" title="Manuales">Man.</th>
                     <th>Acciones</th>
                     {{else}}
                     <th>Email</th>
@@ -172,7 +169,7 @@
                 {{if eq (len $users) 0}}
                 {{if eq $tab "n8n"}}
                 <tr>
-                    <td colspan="9" class="empty-state empty-state-soft">
+                    <td colspan="6" class="empty-state empty-state-soft">
                         <div class="empty-state-icon" aria-hidden="true">👤</div>
                         <p class="empty-state-title">Aún no hay usuarios en n8n</p>
                         <p class="empty-state-sub"><strong>Nuevo usuario</strong> o la consola de n8n.</p>
@@ -203,11 +200,6 @@
                         </span>
                     </td>
                     <td>{{.Company}}</td>
-                    {{if eq $tab "n8n"}}
-                    <td class="col-num">{{.TotalExecutions}}</td>
-                    <td class="col-num">{{.ProdExecutions}}</td>
-                    <td class="col-num">{{.ManualExecutions}}</td>
-                    {{end}}
                     <td>
                         {{if and (eq $tab "n8n") .InviteURL}}
                         <button type="button" class="btn-small btn-invite"

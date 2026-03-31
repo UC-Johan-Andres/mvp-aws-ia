@@ -35,9 +35,13 @@ func SyncLibreChatUserProviderKeys(ctx context.Context, client *mongo.Client, us
 			_, _ = keyColl.DeleteOne(ctx, bson.M{"userId": userID, "name": p.LibreChatKeyName})
 			continue
 		}
-		_, err := keyColl.UpdateOne(ctx,
+		encVal, err := encryptLibreChatKeyValue(apiKey)
+		if err != nil {
+			return fmt.Errorf("keys %q (cifrado CREDS_*): %w", p.LibreChatKeyName, err)
+		}
+		_, err = keyColl.UpdateOne(ctx,
 			bson.M{"userId": userID, "name": p.LibreChatKeyName},
-			bson.M{"$set": bson.M{"userId": userID, "name": p.LibreChatKeyName, "value": apiKey}},
+			bson.M{"$set": bson.M{"userId": userID, "name": p.LibreChatKeyName, "value": encVal}},
 			options.Update().SetUpsert(true),
 		)
 		if err != nil {

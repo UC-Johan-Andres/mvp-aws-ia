@@ -2268,9 +2268,6 @@
                     <th>Apellido(s)</th>
                     <th>Rol</th>
                     <th>Empresa</th>
-                    <th class="col-num" title="Todas las ejecuciones">Ejec.</th>
-                    <th class="col-num" title="Automáticas">Auto.</th>
-                    <th class="col-num" title="Manuales">Man.</th>
                     <th>Acciones</th>
                 `;
                 const tbl = document.querySelector('#users-table table');
@@ -2289,7 +2286,7 @@
         }
 
         function generateUsersHTML(users, tab) {
-            const colspan = tab === 'n8n' ? 9 : 5;
+            const colspan = tab === 'n8n' ? 6 : 5;
             if (!users || users.length === 0) {
                 const icon = tab === 'n8n' ? '👤' : '💬';
                 const title = tab === 'n8n' ? 'Aún no hay usuarios en n8n' : 'No hay cuentas de LibreChat';
@@ -2352,10 +2349,6 @@
                 `;
 
                 if (tab === 'n8n') {
-                    const tot = Number(u.totalExecutions) || 0;
-                    const prod = Number(u.prodExecutions) || 0;
-                    let man = tot - prod;
-                    if (man < 0) man = 0;
                     return `
                     <tr>
                         <td>${escapeHtml(u.email)}</td>
@@ -2367,9 +2360,6 @@
                             </span>
                         </td>
                         <td>${escapeHtml(co)}</td>
-                        <td class="col-num">${tot}</td>
-                        <td class="col-num">${prod}</td>
-                        <td class="col-num">${man}</td>
                         <td>${actions}</td>
                     </tr>
                 `;

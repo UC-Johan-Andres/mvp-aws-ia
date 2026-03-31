@@ -273,8 +273,6 @@ type GestionUser struct {
 	FailedProdExecutions  int64
 	FailureRatePct        float64
 	RunTimeAvgSeconds     float64
-	// Ejecuciones manuales = total − automáticas (solo UI).
-	ManualExecutions int64
 }
 
 // N8NProjectRelation is a user's membership in an n8n project (RBAC).
@@ -352,10 +350,6 @@ func gestionUsersForTab(tab string) ([]GestionUser, error) {
 			if name == "" {
 				name = "-"
 			}
-			manual := u.TotalExecutions - u.ProdExecutions
-			if manual < 0 {
-				manual = 0
-			}
 			users = append(users, GestionUser{
 				ID:                   u.ID,
 				Email:                u.Email,
@@ -369,7 +363,6 @@ func gestionUsersForTab(tab string) ([]GestionUser, error) {
 				WorkflowsAccesibles:   u.WorkflowsAccesibles,
 				TotalExecutions:       u.TotalExecutions,
 				ProdExecutions:        u.ProdExecutions,
-				ManualExecutions:      manual,
 				FailedTotalExecutions: u.FailedTotalExecutions,
 				FailedProdExecutions:  u.FailedProdExecutions,
 				FailureRatePct:        u.FailureRatePct,
@@ -909,7 +902,7 @@ func HandleGestionUsersRows(w http.ResponseWriter, r *http.Request) {
 		n8nUsers, err := getN8NUsers()
 		if err != nil {
 			log.Printf("gestion users-rows n8n: %v", err)
-			ui.RenderGestionRows(w, tab, `<div class="table-responsive-wrap"><table class="data-table"><tbody><tr><td colspan="9" class="empty-state empty-state-error"><p>No se pudieron cargar los usuarios.</p><p class="empty-state-sub">Revisa credenciales de n8n y la red.</p></td></tr></tbody></table></div>`)
+			ui.RenderGestionRows(w, tab, `<div class="table-responsive-wrap"><table class="data-table"><tbody><tr><td colspan="6" class="empty-state empty-state-error"><p>No se pudieron cargar los usuarios.</p><p class="empty-state-sub">Revisa credenciales de n8n y la red.</p></td></tr></tbody></table></div>`)
 			return
 		}
 		ui.RenderGestionRows(w, tab, buildN8NUsersTableHTML(n8nUsers))
@@ -945,9 +938,9 @@ func fetchN8NUsers() ([]byte, error) {
 // buildN8NUsersTableHTML renders the users table for HTMX (tab n8n).
 func buildN8NUsersTableHTML(users []N8NUser) string {
 	var b strings.Builder
-	b.WriteString(`<div class="table-responsive-wrap"><table class="data-table gestion-table-n8n"><thead><tr><th>Email</th><th>Nombre</th><th>Apellido(s)</th><th>Rol</th><th>Empresa</th><th class="col-num" title="Todas las ejecuciones en workflows compartidos">Ejec.</th><th class="col-num" title="No manuales">Auto.</th><th class="col-num" title="Ejecuciones manuales">Man.</th><th>Acciones</th></tr></thead><tbody>`)
+	b.WriteString(`<div class="table-responsive-wrap"><table class="data-table gestion-table-n8n"><thead><tr><th>Email</th><th>Nombre</th><th>Apellido(s)</th><th>Rol</th><th>Empresa</th><th>Acciones</th></tr></thead><tbody>`)
 	if len(users) == 0 {
-		b.WriteString(`<tr><td colspan="9" class="empty-state empty-state-soft"><div class="empty-state-icon" aria-hidden="true">👤</div><p>Aún no hay usuarios en n8n</p><p class="empty-state-sub"><strong>Nuevo usuario</strong> o la consola de n8n.</p></td></tr>`)
+		b.WriteString(`<tr><td colspan="6" class="empty-state empty-state-soft"><div class="empty-state-icon" aria-hidden="true">👤</div><p>Aún no hay usuarios en n8n</p><p class="empty-state-sub"><strong>Nuevo usuario</strong> o la consola de n8n.</p></td></tr>`)
 		b.WriteString(`</tbody></table></div>`)
 		return b.String()
 	}
@@ -977,20 +970,13 @@ func buildN8NUsersTableHTML(users []N8NUser) string {
 		if uid == "" {
 			uid = u.Email
 		}
-		manual := u.TotalExecutions - u.ProdExecutions
-		if manual < 0 {
-			manual = 0
-		}
-		fmt.Fprintf(&b, `<tr><td>%s</td><td>%s</td><td>%s</td><td><span class="role-badge %s">%s</span></td><td>%s</td><td class="col-num">%d</td><td class="col-num">%d</td><td class="col-num">%d</td><td>%s<button type="button" class="btn-small btn-edit" data-tab="n8n" data-id="%s" data-email="%s" data-firstname="%s" data-lastname="%s" data-role="%s" data-company="%s" onclick="openEditModalFromDataset(this)">Editar</button> <button type="button" class="btn-small btn-delete" data-tab="n8n" data-id="%s" data-email="%s" onclick="deleteUser(this)">Eliminar</button></td></tr>`,
+		fmt.Fprintf(&b, `<tr><td>%s</td><td>%s</td><td>%s</td><td><span class="role-badge %s">%s</span></td><td>%s</td><td>%s<button type="button" class="btn-small btn-edit" data-tab="n8n" data-id="%s" data-email="%s" data-firstname="%s" data-lastname="%s" data-role="%s" data-company="%s" onclick="openEditModalFromDataset(this)">Editar</button> <button type="button" class="btn-small btn-delete" data-tab="n8n" data-id="%s" data-email="%s" onclick="deleteUser(this)">Eliminar</button></td></tr>`,
 			html.EscapeString(u.Email),
 			html.EscapeString(fn),
 			html.EscapeString(ln),
 			roleClass,
 			html.EscapeString(roleLabel),
 			html.EscapeString(u.Company),
-			u.TotalExecutions,
-			u.ProdExecutions,
-			manual,
 			invite,
 			html.EscapeString(uid),
 			html.EscapeString(u.Email),
