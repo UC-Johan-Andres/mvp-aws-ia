@@ -6,6 +6,10 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"go.mongodb.org/mongo-driver/bson/primitive"
+
+	"launcher/config"
 )
 
 func gestionCompaniesAPIPayload(ok bool) map[string]any {
@@ -113,17 +117,38 @@ func HandleGestionCompaniesAPI(w http.ResponseWriter, r *http.Request) {
 			jsonError(w, "empresa no encontrada", http.StatusNotFound)
 			return
 		}
-		ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
-		defer cancel()
-		n, err := countLibreChatUsersWithCompany(ctx, canon)
+		reassign, err := ReassignTargetForCompanyRemoval(canon)
 		if err != nil {
-			jsonError(w, "MongoDB: "+err.Error(), http.StatusBadGateway)
-			return
-		}
-		if err := DeleteGestionCompany(name, int(n)); err != nil {
 			jsonError(w, err.Error(), http.StatusBadRequest)
 			return
 		}
+		ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+		defer cancel()
+		var lcIDs []primitive.ObjectID
+		if config.MongoURI != "" {
+			lcIDs, err = libreChatUserIDsWithCompany(ctx, canon)
+			if err != nil {
+				jsonError(w, "MongoDB: "+err.Error(), http.StatusBadGateway)
+				return
+			}
+			if len(lcIDs) > 0 {
+				if _, err := mongoSetLibreChatUsersCompanyByIDs(ctx, lcIDs, reassign); err != nil {
+					jsonError(w, "MongoDB: "+err.Error(), http.StatusBadGateway)
+					return
+				}
+			}
+		}
+		if err := DeleteGestionCompany(name); err != nil {
+			if config.MongoURI != "" && len(lcIDs) > 0 {
+				if _, revErr := mongoSetLibreChatUsersCompanyByIDs(context.Background(), lcIDs, canon); revErr != nil {
+					jsonError(w, err.Error()+" (además falló revertir usuarios LibreChat en MongoDB: "+revErr.Error()+")", http.StatusInternalServerError)
+					return
+				}
+			}
+			jsonError(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		GoSyncCompanyAIIntegrations(reassign)
 		GoSyncCompanyAIIntegrations(GestionDefaultCompany())
 		BroadcastUsersUpdate()
 		jsonOK(w, gestionCompaniesAPIPayload(true))

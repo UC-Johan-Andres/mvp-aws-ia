@@ -426,9 +426,38 @@ func RenameGestionCompany(oldName, newName string) (oldCanon, newCanon string, e
 	return oldCanon, newCanon, saveCompanyStoreLocked()
 }
 
-// DeleteGestionCompany elimina una empresa. Los usuarios n8n del almacén local pasan a la empresa predeterminada
-// (o a otra superviviente si se borra la que era default). LibreChat sigue exigiendo reasignación previa.
-func DeleteGestionCompany(name string, lcUsersWithCompany int) error {
+// ReassignTargetForCompanyRemoval devuelve la empresa canónica del store a la que deben moverse usuarios
+// (LibreChat en Mongo y entradas n8n en JSON) al eliminar la empresa identificada por `canon`
+// (nombre canónico de GestionCompaniesList). Misma regla que DeleteGestionCompany para n8n.
+func ReassignTargetForCompanyRemoval(canon string) (reassign string, err error) {
+	companyStoreMu.RLock()
+	defer companyStoreMu.RUnlock()
+	ensureCompanyMaps()
+	if len(companyStoreData.Companies) <= 1 {
+		return "", fmt.Errorf("debe quedar al menos una empresa")
+	}
+	if _, ok := indexCompanyInsensitive(companyStoreData.Companies, canon); !ok {
+		return "", fmt.Errorf("empresa no encontrada")
+	}
+	reassign = defaultCompanyUnlocked()
+	if strings.EqualFold(reassign, canon) {
+		reassign = ""
+		for _, c := range companyStoreData.Companies {
+			if !strings.EqualFold(c, canon) {
+				reassign = c
+				break
+			}
+		}
+		if reassign == "" {
+			return "", fmt.Errorf("no hay empresa destino para reasignar usuarios")
+		}
+	}
+	return reassign, nil
+}
+
+// DeleteGestionCompany elimina una empresa. Los usuarios n8n del almacén local pasan a la predeterminada
+// u otra superviviente si se borra la que era default. Los usuarios LibreChat deben actualizarse en Mongo antes (companies_api).
+func DeleteGestionCompany(name string) error {
 	companyStoreMu.Lock()
 	defer companyStoreMu.Unlock()
 	ensureCompanyMaps()
@@ -441,9 +470,6 @@ func DeleteGestionCompany(name string, lcUsersWithCompany int) error {
 		return fmt.Errorf("empresa no encontrada")
 	}
 	canon := companyStoreData.Companies[idx]
-	if lcUsersWithCompany > 0 {
-		return fmt.Errorf("hay %d usuario(s) de LibreChat con esta empresa; reasígnalos antes", lcUsersWithCompany)
-	}
 
 	// A qué empresa canónica mover los n8n que apuntaban a `canon`.
 	reassign := defaultCompanyUnlocked()
