@@ -262,7 +262,9 @@ services:
       # Mongo: credenciales root (authSource=admin) + nombre de BD LibreChat en el path.
       # Si tu BD tiene otro nombre, cambia el path y/o define LIBRECHAT_MONGO_DB con el mismo nombre.
       - MONGO_URI=mongodb://${MONGO_ROOT_USERNAME}:${MONGO_ROOT_PASSWORD}@mongo:27017/LibreChat?authSource=admin
+      # Mismo valor que JWT_SECRET en .env.librechat (cualquiera de las dos variables basta en el launcher).
       - LIBRECHAT_JWT_SECRET=${LIBRECHAT_JWT_SECRET:-}
+      - JWT_SECRET=${JWT_SECRET:-}
       - CREDS_KEY=${CREDS_KEY:-}
       - CREDS_IV=${CREDS_IV:-}
       - LIBRECHAT_MONGO_DB=${LIBRECHAT_MONGO_DB:-LibreChat}

@@ -14,11 +14,30 @@ import (
 	"launcher/config"
 )
 
+// loadLibrechatJWTUser lee username/email/provider para firmar el mismo JWT que generateToken de LibreChat.
+func loadLibrechatJWTUser(ctx context.Context, client *mongo.Client, userID primitive.ObjectID) (librechatJWTUser, error) {
+	var row struct {
+		Username string `bson:"username"`
+		Email    string `bson:"email"`
+		Provider string `bson:"provider"`
+	}
+	usersColl := client.Database(config.LibreChatMongoDatabase()).Collection("users")
+	if err := usersColl.FindOne(ctx, bson.M{"_id": userID}).Decode(&row); err != nil {
+		return librechatJWTUser{}, err
+	}
+	return librechatJWTUser{
+		IDHex:    userID.Hex(),
+		Username: row.Username,
+		Email:    row.Email,
+		Provider: row.Provider,
+	}, nil
+}
+
 // SyncLibreChatUserProviderKeys escribe en LibreChat las API keys
 // definidas en el perfil de la empresa (proveedores con LibreChatKeyName no vacío).
 //
 // Estrategia:
-//  1. Si LIBRECHAT_JWT_SECRET está configurado → PUT /api/keys (LibreChat cifra).
+//  1. Si LIBRECHAT_JWT_SECRET o JWT_SECRET coinciden con LibreChat → PUT /api/keys (LibreChat cifra).
 //  2. Fallback (CREDS_KEY/CREDS_IV) → cifrado AES-CBC local + escritura Mongo directa.
 func SyncLibreChatUserProviderKeys(ctx context.Context, client *mongo.Client, userID primitive.ObjectID, companyField string) error {
 	if client == nil || config.MongoURI == "" {
@@ -32,21 +51,30 @@ func SyncLibreChatUserProviderKeys(ctx context.Context, client *mongo.Client, us
 	useHTTP := librechatHTTPKeysAvailable()
 	userHex := userID.Hex()
 
+	var jwtUser librechatJWTUser
+	if useHTTP {
+		var err error
+		jwtUser, err = loadLibrechatJWTUser(ctx, client, userID)
+		if err != nil {
+			return fmt.Errorf("usuario LibreChat %s para JWT (sync keys): %w", userHex, err)
+		}
+	}
+
 	for _, p := range RegisteredProviders() {
 		if p.LibreChatKeyName == "" {
 			continue
 		}
 		apiKey, has := CompanyProviderCredentialForSync(canon, p.ID)
 		if !has || apiKey == "" {
-			if err := deleteKey(ctx, client, userID, userHex, p.LibreChatKeyName, useHTTP); err != nil {
+			if err := deleteKey(ctx, client, userID, jwtUser, p.LibreChatKeyName, useHTTP); err != nil {
 				log.Printf("librechat-keys: borrar %q para %s: %v", p.LibreChatKeyName, userHex, err)
 			}
 			continue
 		}
 
 		if useHTTP {
-			if err := putLibreChatUserKey(userHex, p.LibreChatKeyName, apiKey); err != nil {
-				return fmt.Errorf("keys %q (HTTP): %w — asegúrate de que LibreChat esté encendido", p.LibreChatKeyName, err)
+			if err := putLibreChatUserKey(jwtUser, p.LibreChatKeyName, apiKey); err != nil {
+				return fmt.Errorf("keys %q (HTTP): %w — comprobar JWT_SECRET=LIBRECHAT_JWT_SECRET y que LibreChat esté encendido", p.LibreChatKeyName, err)
 			}
 			continue
 		}
@@ -58,9 +86,9 @@ func SyncLibreChatUserProviderKeys(ctx context.Context, client *mongo.Client, us
 	return nil
 }
 
-func deleteKey(ctx context.Context, client *mongo.Client, userID primitive.ObjectID, userHex, keyName string, useHTTP bool) error {
+func deleteKey(ctx context.Context, client *mongo.Client, userID primitive.ObjectID, jwtUser librechatJWTUser, keyName string, useHTTP bool) error {
 	if useHTTP {
-		return deleteLibreChatUserKeyHTTP(userHex, keyName)
+		return deleteLibreChatUserKeyHTTP(jwtUser, keyName)
 	}
 	db := client.Database(config.LibreChatMongoDatabase())
 	_, err := db.Collection("keys").DeleteOne(ctx, bson.M{"userId": userID, "name": keyName})

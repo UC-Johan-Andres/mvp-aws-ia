@@ -2,68 +2,69 @@ package admin
 
 import (
 	"bytes"
-	"crypto/hmac"
-	"crypto/sha256"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
+
+	"github.com/golang-jwt/jwt/v5"
 
 	"launcher/config"
 )
 
-// mintLibreChatJWT genera un JWT HS256 con el payload mínimo que acepta
-// el middleware requireJwtAuth de LibreChat (solo necesita "id").
-func mintLibreChatJWT(userIDHex string) (string, error) {
-	secret := strings.TrimSpace(config.LibreChatJWTSecret)
-	if secret == "" {
-		return "", fmt.Errorf("LIBRECHAT_JWT_SECRET no definido")
-	}
-
-	header := base64URLEncode([]byte(`{"alg":"HS256","typ":"JWT"}`))
-
-	now := time.Now().Unix()
-	payload := map[string]any{
-		"id":  userIDHex,
-		"iat": now,
-		"exp": now + 120, // 2 min — solo para esta llamada interna
-	}
-	payloadJSON, _ := json.Marshal(payload)
-	body := base64URLEncode(payloadJSON)
-
-	unsigned := header + "." + body
-	mac := hmac.New(sha256.New, []byte(secret))
-	mac.Write([]byte(unsigned))
-	sig := base64URLEncode(mac.Sum(nil))
-
-	return unsigned + "." + sig, nil
+// librechatJWTUser coincide con el payload que firma generateToken en LibreChat (user.ts + signPayload).
+type librechatJWTUser struct {
+	IDHex    string
+	Username string
+	Email    string
+	Provider string
 }
 
-func base64URLEncode(data []byte) string {
-	return strings.TrimRight(base64.URLEncoding.EncodeToString(data), "=")
+func mintLibreChatJWT(u librechatJWTUser) (string, error) {
+	secret := config.LibreChatJWTSecretForKeys()
+	if secret == "" {
+		return "", fmt.Errorf("LIBRECHAT_JWT_SECRET o JWT_SECRET deben coincidir con JWT_SECRET del contenedor librechat")
+	}
+	prov := strings.TrimSpace(u.Provider)
+	if prov == "" {
+		prov = "local"
+	}
+	now := time.Now()
+	claims := jwt.MapClaims{
+		"id":       u.IDHex,
+		"username": u.Username,
+		"email":    u.Email,
+		"provider": prov,
+		"iat":      now.Unix(),
+		"exp":      now.Add(15 * time.Minute).Unix(),
+	}
+	t := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	return t.SignedString([]byte(secret))
 }
 
 // putLibreChatUserKey llama PUT /api/keys de LibreChat para que él cifre y almacene la clave.
-// Devuelve nil si la operación fue exitosa.
-func putLibreChatUserKey(userIDHex, keyName, apiKeyPlaintext string) error {
+func putLibreChatUserKey(u librechatJWTUser, keyName, apiKeyPlaintext string) error {
 	baseURL := strings.TrimRight(config.LibreChatInternalURL, "/")
 	if baseURL == "" {
 		return fmt.Errorf("LIBRECHAT_INTERNAL_URL vacío")
 	}
 
-	token, err := mintLibreChatJWT(userIDHex)
+	token, err := mintLibreChatJWT(u)
 	if err != nil {
 		return err
 	}
 
-	body, _ := json.Marshal(map[string]string{
+	body, err := json.Marshal(map[string]string{
 		"name":  keyName,
 		"value": apiKeyPlaintext,
 	})
+	if err != nil {
+		return err
+	}
 
 	req, err := http.NewRequest(http.MethodPut, baseURL+"/api/keys", bytes.NewReader(body))
 	if err != nil {
@@ -88,18 +89,18 @@ func putLibreChatUserKey(userIDHex, keyName, apiKeyPlaintext string) error {
 }
 
 // deleteLibreChatUserKeyHTTP llama DELETE /api/keys/:name de LibreChat.
-func deleteLibreChatUserKeyHTTP(userIDHex, keyName string) error {
+func deleteLibreChatUserKeyHTTP(u librechatJWTUser, keyName string) error {
 	baseURL := strings.TrimRight(config.LibreChatInternalURL, "/")
 	if baseURL == "" {
 		return fmt.Errorf("LIBRECHAT_INTERNAL_URL vacío")
 	}
 
-	token, err := mintLibreChatJWT(userIDHex)
+	token, err := mintLibreChatJWT(u)
 	if err != nil {
 		return err
 	}
 
-	encodedName := strings.ReplaceAll(keyName, " ", "%20")
+	encodedName := url.PathEscape(keyName)
 	req, err := http.NewRequest(http.MethodDelete, baseURL+"/api/keys/"+encodedName, nil)
 	if err != nil {
 		return err
@@ -113,7 +114,7 @@ func deleteLibreChatUserKeyHTTP(userIDHex, keyName string) error {
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode >= 200 && resp.StatusCode < 300 || resp.StatusCode == 404 {
+	if resp.StatusCode >= 200 && resp.StatusCode < 300 || resp.StatusCode == http.StatusNotFound {
 		return nil
 	}
 
@@ -123,7 +124,7 @@ func deleteLibreChatUserKeyHTTP(userIDHex, keyName string) error {
 
 // librechatHTTPKeysAvailable indica si podemos usar la API HTTP de LibreChat para gestionar keys.
 func librechatHTTPKeysAvailable() bool {
-	return strings.TrimSpace(config.LibreChatJWTSecret) != "" &&
+	return config.LibreChatJWTSecretForKeys() != "" &&
 		strings.TrimSpace(config.LibreChatInternalURL) != ""
 }
 
@@ -131,6 +132,6 @@ func init() {
 	if librechatHTTPKeysAvailable() {
 		log.Println("librechat-keys: usando API HTTP de LibreChat (PUT /api/keys) para sincronizar claves")
 	} else {
-		log.Println("librechat-keys: LIBRECHAT_JWT_SECRET no definido — sync de claves usará cifrado local (CREDS_KEY/CREDS_IV)")
+		log.Println("librechat-keys: LIBRECHAT_JWT_SECRET/JWT_SECRET no definidos — sync usará cifrado local (CREDS_KEY/CREDS_IV)")
 	}
 }

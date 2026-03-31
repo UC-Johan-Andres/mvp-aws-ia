@@ -26,9 +26,8 @@ var (
 	MongoURI = getEnv("MONGO_URI", "")
 	// LibreChatMongoDB nombre de la base en Mongo (colecciones users, conversations, messages).
 	// Debe coincidir con el path de MONGO_URI (p. ej. .../LibreChat?authSource=admin).
-	LibreChatMongoDB = getEnv("LIBRECHAT_MONGO_DB", "LibreChat")
+	LibreChatMongoDB     = getEnv("LIBRECHAT_MONGO_DB", "LibreChat")
 	LibreChatInternalURL = getEnv("LIBRECHAT_INTERNAL_URL", "http://librechat:3080")
-	LibreChatJWTSecret   = getEnv("LIBRECHAT_JWT_SECRET", "")
 
 	N8NInternalURL   = getEnv("N8N_INTERNAL_URL", "http://n8n:5678")
 	N8NBasicUser     = getEnv("N8N_BASIC_AUTH_USER", "")
@@ -44,6 +43,15 @@ var (
 	SESFromEmail    = getEnv("SES_FROM_EMAIL", "")
 	SESRegion       = getEnv("SES_REGION", "us-east-1")
 )
+
+// LibreChatJWTSecretForKeys debe coincidir con JWT_SECRET del contenedor librechat (jsonwebtoken).
+// Orden: LIBRECHAT_JWT_SECRET; si vacío, JWT_SECRET (por si compose solo define JWT_SECRET).
+func LibreChatJWTSecretForKeys() string {
+	if v := strings.TrimSpace(os.Getenv("LIBRECHAT_JWT_SECRET")); v != "" {
+		return v
+	}
+	return strings.TrimSpace(os.Getenv("JWT_SECRET"))
+}
 
 // N8NPostgresDSN devuelve la cadena de conexión a la BD de n8n.
 // 1) Si N8N_POSTGRES_DSN está definida, se usa (debe coincidir con la contraseña real del rol en PostgreSQL).
