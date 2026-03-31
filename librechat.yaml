@@ -41,7 +41,7 @@ endpoints:
       apiKey: "user_provided"
       baseURL: "https://generativelanguage.googleapis.com/v1beta/openai"
       models:
-        default: ["gemini-2.0-flash", "gemini-2.0-flash-lite", "gemini-1.5-pro", "gemini-1.5-flash"]
+        default: ["gemini-2.0-flash", "gemini-2.0-flash-lite", "gemini-1.5-pro", "gemini-1.5-flash", "googleai/gemini-2.5-flash"]
         fetch: false
       userProvide: true
       titleConvo: true
