@@ -72,14 +72,18 @@ func SyncLibreChatUserProviderKeys(ctx context.Context, client *mongo.Client, us
 			continue
 		}
 
+		// LibreChat almacena el valor como JSON (p.ej. {"apiKey":"...","baseURL":""} o {"GOOGLE_API_KEY":"..."}).
+		// getUserKeyValues() hace JSON.parse() al leer; si recibe texto plano, falla con invalid_user_key.
+		valueJSON := LibreChatKeyValue(p.ID, apiKey)
+
 		if useHTTP {
-			if err := putLibreChatUserKey(jwtUser, p.LibreChatKeyName, apiKey); err != nil {
+			if err := putLibreChatUserKey(jwtUser, p.LibreChatKeyName, valueJSON); err != nil {
 				return fmt.Errorf("keys %q (HTTP): %w — comprobar JWT_SECRET=LIBRECHAT_JWT_SECRET y que LibreChat esté encendido", p.LibreChatKeyName, err)
 			}
 			continue
 		}
 
-		if err := upsertKeyMongo(ctx, client, userID, p.LibreChatKeyName, apiKey); err != nil {
+		if err := upsertKeyMongo(ctx, client, userID, p.LibreChatKeyName, valueJSON); err != nil {
 			return err
 		}
 	}

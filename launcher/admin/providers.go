@@ -1,6 +1,7 @@
 package admin
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 )
@@ -41,6 +42,21 @@ func N8NCredentialData(providerID, apiKey string) map[string]any {
 	default:
 		return map[string]any{"apiKey": apiKey}
 	}
+}
+
+// LibreChatKeyValue empaqueta la API key en el JSON que espera getUserKeyValues de LibreChat.
+// OpenAI/Custom: {"apiKey":"...","baseURL":""}
+// Google Gemini: {"GOOGLE_API_KEY":"..."}
+func LibreChatKeyValue(providerID, apiKey string) string {
+	var obj map[string]string
+	switch providerID {
+	case ProviderGoogle:
+		obj = map[string]string{"GOOGLE_API_KEY": apiKey}
+	default:
+		obj = map[string]string{"apiKey": apiKey, "baseURL": ""}
+	}
+	b, _ := json.Marshal(obj)
+	return string(b)
 }
 
 // ProviderCredential almacena secretos por proveedor (extensible con más campos).
