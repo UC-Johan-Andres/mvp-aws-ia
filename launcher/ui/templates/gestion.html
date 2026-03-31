@@ -379,6 +379,21 @@
         .data-table tbody tr:nth-child(even) { background: rgba(248, 250, 252, 0.8); }
         .data-table tbody tr:hover { background: rgba(37, 99, 235, 0.05); }
         .data-table tr:last-child td { border-bottom: none; }
+        [data-theme="dark"] .table-responsive-wrap {
+            box-shadow: var(--shadow-sm);
+        }
+        [data-theme="dark"] .data-table th {
+            background: linear-gradient(180deg, #334155 0%, #1e293b 100%);
+        }
+        [data-theme="dark"] .data-table td {
+            border-bottom-color: rgba(148, 163, 184, 0.12);
+        }
+        [data-theme="dark"] .data-table tbody tr:nth-child(even) {
+            background: rgba(255, 255, 255, 0.04);
+        }
+        [data-theme="dark"] .data-table tbody tr:hover {
+            background: rgba(96, 165, 250, 0.12);
+        }
         .data-table th.col-num, .data-table td.col-num {
             text-align: right;
             font-variant-numeric: tabular-nums;
@@ -397,6 +412,19 @@
         .role-user { background: rgba(37, 99, 235, 0.1); color: #1d4ed8; }
         .role-member { background: rgba(37, 99, 235, 0.1); color: #1d4ed8; }
         .role-owner { background: rgba(245, 158, 11, 0.15); color: #b45309; }
+        [data-theme="dark"] .role-admin {
+            background: rgba(52, 211, 153, 0.14);
+            color: #6ee7b7;
+        }
+        [data-theme="dark"] .role-user,
+        [data-theme="dark"] .role-member {
+            background: rgba(96, 165, 250, 0.16);
+            color: #93c5fd;
+        }
+        [data-theme="dark"] .role-owner {
+            background: rgba(251, 191, 36, 0.14);
+            color: #fcd34d;
+        }
         .btn-small {
             padding: 6px 12px;
             border: none;
