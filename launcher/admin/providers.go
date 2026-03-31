@@ -45,16 +45,9 @@ func N8NCredentialData(providerID, apiKey string) map[string]any {
 }
 
 // LibreChatKeyValue empaqueta la API key en el JSON que espera getUserKeyValues de LibreChat.
-// OpenAI/Custom: {"apiKey":"...","baseURL":""}
-// Google Gemini: {"GOOGLE_API_KEY":"..."}
+// Endpoints custom (todos los configurados en librechat.yaml) usan {"apiKey":"...","baseURL":""}.
 func LibreChatKeyValue(providerID, apiKey string) string {
-	var obj map[string]string
-	switch providerID {
-	case ProviderGoogle:
-		obj = map[string]string{"GOOGLE_API_KEY": apiKey}
-	default:
-		obj = map[string]string{"apiKey": apiKey, "baseURL": ""}
-	}
+	obj := map[string]string{"apiKey": apiKey, "baseURL": ""}
 	b, _ := json.Marshal(obj)
 	return string(b)
 }

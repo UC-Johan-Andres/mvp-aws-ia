@@ -1671,16 +1671,20 @@
                 var prof = j.profiles && j.profiles[name];
                 if (prof && prof.credentials) {
                     if (prof.credentials.openai && prof.credentials.openai.configured) {
-                        parts.push('OpenAI: ' + (prof.credentials.openai.apiKeyMasked || 'configurada'));
+                        parts.push('OpenAI: ' + (prof.credentials.openai.apiKey || 'configurada'));
+                        var oaiInp = document.getElementById('company-modal-openai-key');
+                        if (oaiInp) oaiInp.placeholder = prof.credentials.openai.apiKey || '';
                     }
                     if (prof.credentials.google && prof.credentials.google.configured) {
-                        parts.push('Gemini: ' + (prof.credentials.google.apiKeyMasked || 'configurada'));
+                        parts.push('Gemini: ' + (prof.credentials.google.apiKey || 'configurada'));
+                        var gemInp = document.getElementById('company-modal-google-key');
+                        if (gemInp) gemInp.placeholder = prof.credentials.google.apiKey || '';
                     }
                 }
             } catch (e) {}
             document.getElementById('company-modal-masked-hint').textContent = parts.length
-                ? (parts.join(' · ') + '. Escribe una nueva clave solo si quieres sustituirla.')
-                : 'Sin claves guardadas. Las casillas «Quitar» eliminan la clave del perfil y de la sync.';
+                ? 'Escribe una nueva clave solo si quieres sustituirla.'
+                : 'Sin claves guardadas.';
             document.getElementById('company-modal').classList.add('active');
         }
 

@@ -253,8 +253,9 @@ type CompanyProfileMasked struct {
 	Credentials map[string]ProviderCredentialMasked `json:"credentials,omitempty"`
 }
 
-// ProviderCredentialMasked solo máscaras por proveedor.
+// ProviderCredentialMasked info por proveedor para la UI.
 type ProviderCredentialMasked struct {
+	APIKey       string `json:"apiKey,omitempty"`
 	APIKeyMasked string `json:"apiKeyMasked,omitempty"`
 	Configured   bool   `json:"configured"`
 }
@@ -277,6 +278,7 @@ func CompanyProfileMaskedForName(companyCanon string) CompanyProfileMasked {
 			continue
 		}
 		out.Credentials[prov] = ProviderCredentialMasked{
+			APIKey:       k,
 			APIKeyMasked: MaskAPIKey(k),
 			Configured:   true,
 		}

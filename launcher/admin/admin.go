@@ -423,12 +423,12 @@ func buildEmpresaRowsForUI() []ui.EmpresaRowView {
 		masked := CompanyProfileMaskedForName(c)
 		row := ui.EmpresaRowView{Name: c, IsDefault: c == def}
 		if m, ok := masked.Credentials[ProviderOpenAI]; ok && m.Configured {
-			row.OpenAI = m.APIKeyMasked
+			row.OpenAI = m.APIKey
 		} else {
 			row.OpenAI = "—"
 		}
 		if m, ok := masked.Credentials[ProviderGoogle]; ok && m.Configured {
-			row.Gemini = m.APIKeyMasked
+			row.Gemini = m.APIKey
 		} else {
 			row.Gemini = "—"
 		}
