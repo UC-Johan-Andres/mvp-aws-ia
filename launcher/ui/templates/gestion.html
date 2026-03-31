@@ -1322,8 +1322,8 @@
                 <input type="text" id="edit-user-name" autocomplete="name">
             </div>
             <div id="edit-name-n8n-wrap" style="display:none;">
-                <div class="form-group">
-                    <label>Nombre</label>
+            <div class="form-group">
+                <label>Nombre</label>
                     <input type="text" id="edit-n8n-first" autocomplete="given-name">
                 </div>
                 <div class="form-group">
@@ -2336,7 +2336,7 @@
                         </button>
                     `;
                 }
-
+                
                 if (tab === 'n8n') {
                     actions += `
                         <button type="button" class="btn-small btn-edit" data-tab="n8n"
@@ -2353,7 +2353,7 @@
                             onclick="openEditModalFromDataset(this)">Editar</button>
                     `;
                 }
-
+                
                 actions += `
                     <button type="button" class="btn-small btn-delete" 
                             data-tab="${tab}" data-id="${escapeHtml(userId)}" data-email="${escapeHtml(u.email)}"
@@ -2363,7 +2363,7 @@
                 `;
 
                 if (tab === 'n8n') {
-                    return `
+                return `
                     <tr>
                         <td>${escapeHtml(u.email)}</td>
                         <td>${escapeHtml(fn)}</td>
@@ -2484,30 +2484,30 @@
                 message: 'Vas a eliminar la cuenta «' + email + '». Esta acción no se puede deshacer.',
                 confirmText: 'Eliminar usuario',
                 onConfirm: function() {
-                    btn.disabled = true;
-                    btn.textContent = '...';
-                    const endpoint = tab === 'n8n' ? '/admin/n8n/users' : '/admin/librechat/users';
-                    const body = tab === 'n8n' ? JSON.stringify({ id: userId }) : JSON.stringify({ email: email });
+            btn.disabled = true;
+            btn.textContent = '...';
+            const endpoint = tab === 'n8n' ? '/admin/n8n/users' : '/admin/librechat/users';
+            const body = tab === 'n8n' ? JSON.stringify({ id: userId }) : JSON.stringify({ email: email });
                     return fetch(endpoint, {
-                        method: 'DELETE',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: body,
-                        credentials: 'same-origin'
-                    })
+                method: 'DELETE',
+                headers: { 'Content-Type': 'application/json' },
+                body: body,
+                credentials: 'same-origin'
+            })
                     .then(function(response) {
-                        if (!response.ok) {
+                if (!response.ok) {
                             return response.json().then(function(err) { throw new Error(err.error || 'Error al eliminar'); });
-                        }
-                        return response.json();
-                    })
+                }
+                return response.json();
+            })
                     .then(function() {
-                        showToast('Usuario eliminado', 'success');
-                        removeFromLocalStorage(tab, email);
-                    })
+                showToast('Usuario eliminado', 'success');
+                removeFromLocalStorage(tab, email);
+            })
                     .catch(function(error) {
-                        showToast('Error: ' + error.message, 'error');
-                        btn.disabled = false;
-                        btn.textContent = 'Eliminar';
+                showToast('Error: ' + error.message, 'error');
+                btn.disabled = false;
+                btn.textContent = 'Eliminar';
                     });
                 }
             });

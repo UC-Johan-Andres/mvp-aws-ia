@@ -485,7 +485,6 @@ func HandleGestionSubmit(w http.ResponseWriter, r *http.Request) {
 	} else if tab == "n8n" {
 		_, err = createN8NUsersFromForm(r)
 	} else {
-		// LibreChat: BFF hace HTTP call al API
 		err = callLibreChatAPI(r)
 	}
 
@@ -1107,8 +1106,7 @@ func createN8NUsersFromForm(r *http.Request) ([]byte, error) {
 	return data, nil
 }
 
-// callLibreChatAPI makes an HTTP call to the LibreChat API from the BFF.
-// This follows the BFF pattern: /gestion calls /admin/librechat/users internally.
+// callLibreChatAPI crea usuarios LibreChat desde el formulario de gestión reutilizando la misma lógica que POST /admin/librechat/users.
 func callLibreChatAPI(r *http.Request) error {
 	emails := r.Form["email"]
 	names := r.Form["name"]
@@ -1121,14 +1119,6 @@ func callLibreChatAPI(r *http.Request) error {
 	company := strings.TrimSpace(r.FormValue("company"))
 	if company == "" {
 		company = GestionDefaultCompany()
-	}
-
-	type createUserRequest struct {
-		Email    string `json:"email"`
-		Name     string `json:"name"`
-		Password string `json:"password"`
-		Role     string `json:"role"`
-		Company  string `json:"company"`
 	}
 
 	requests := make([]createUserRequest, 0, len(emails))
@@ -1150,102 +1140,18 @@ func callLibreChatAPI(r *http.Request) error {
 		})
 	}
 
-	jsonData, err := json.Marshal(requests)
+	results, err := createLibreChatUsersInternal(requests)
 	if err != nil {
-		return fmt.Errorf("failed to marshal request: %w", err)
+		return err
 	}
-
-	results := make([]result, 0, len(requests))
-
-	for _, req := range requests {
-		if req.Email == "" {
-			results = append(results, result{Email: req.Email, Created: false, Error: "email is required"})
-			continue
+	var errs []string
+	for _, res := range results {
+		if res.Error != "" {
+			errs = append(errs, fmt.Sprintf("%s: %s", res.Email, res.Error))
 		}
-		if req.Password == "" {
-			results = append(results, result{Email: req.Email, Created: false, Error: "password is required"})
-			continue
-		}
-
-		if req.Role != "" && req.Role != "USER" {
-			results = append(results, result{Email: req.Email, Created: false, Error: "solo se permite rol USER"})
-			continue
-		}
-
-		count, err := coll.CountDocuments(context.Background(), bson.M{"email": req.Email})
-		if err != nil {
-			results = append(results, result{Email: req.Email, Created: false, Error: "failed to check existing user"})
-			continue
-		}
-		if count > 0 {
-			results = append(results, result{Email: req.Email, Created: false, Error: "email already exists"})
-			continue
-		}
-
-		hash, err := bcrypt.GenerateFromPassword([]byte(req.Password), 12)
-		if err != nil {
-			results = append(results, result{Email: req.Email, Created: false, Error: "failed to hash password"})
-			continue
-		}
-
-		username := req.Email
-		if idx := strings.Index(req.Email, "@"); idx >= 0 {
-			username = req.Email[:idx]
-		}
-
-		co := strings.TrimSpace(r.FormValue("company"))
-		if co == "" {
-			co = GestionDefaultCompany()
-		}
-		if !IsValidGestionCompany(co) {
-			results = append(results, result{Email: req.Email, Created: false, Error: "empresa no válida"})
-			continue
-		}
-		if canon, ok := CanonicalGestionCompany(co); ok {
-			co = canon
-		}
-
-		now := time.Now()
-		u := lcUser{
-			ID:            primitive.NewObjectID(),
-			Name:          req.Name,
-			Username:      username,
-			Email:         req.Email,
-			Password:      string(hash),
-			Role:          "USER",
-			Company:       co,
-			Provider:      "local",
-			EmailVerified: true,
-			CreatedAt:     now,
-			UpdatedAt:     now,
-		}
-
-		_, err = coll.InsertOne(context.Background(), u)
-		if err != nil {
-			results = append(results, result{Email: req.Email, Created: false, Error: "failed to insert user"})
-			continue
-		}
-		if err := SyncLibreChatUserProviderKeys(context.Background(), client, u.ID, co); err != nil {
-			log.Printf("gestion: sincronizar keys LibreChat (form) %s: %v", req.Email, err)
-		}
-
-		results = append(results, result{Email: req.Email, Created: true})
 	}
-
-	apiReq.Header.Set("Content-Type", "application/json")
-	apiReq.Header.Set("Cookie", r.Header.Get("Cookie"))
-
-	client := &http.Client{Timeout: 30 * time.Second}
-	resp, err := client.Do(apiReq)
-	if err != nil {
-		return fmt.Errorf("failed to call API: %w", err)
+	if len(errs) > 0 {
+		return fmt.Errorf("%s", strings.Join(errs, "; "))
 	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("API returned status %d: %s", resp.StatusCode, string(body))
-	}
-
 	return nil
 }
