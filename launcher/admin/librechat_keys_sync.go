@@ -3,6 +3,7 @@ package admin
 import (
 	"context"
 	"fmt"
+	"log"
 	"strings"
 
 	"go.mongodb.org/mongo-driver/bson"
@@ -13,8 +14,12 @@ import (
 	"launcher/config"
 )
 
-// SyncLibreChatUserProviderKeys escribe en la colección "keys" de LibreChat las API keys
+// SyncLibreChatUserProviderKeys escribe en LibreChat las API keys
 // definidas en el perfil de la empresa (proveedores con LibreChatKeyName no vacío).
+//
+// Estrategia:
+//  1. Si LIBRECHAT_JWT_SECRET está configurado → PUT /api/keys (LibreChat cifra).
+//  2. Fallback (CREDS_KEY/CREDS_IV) → cifrado AES-CBC local + escritura Mongo directa.
 func SyncLibreChatUserProviderKeys(ctx context.Context, client *mongo.Client, userID primitive.ObjectID, companyField string) error {
 	if client == nil || config.MongoURI == "" {
 		return nil
@@ -23,8 +28,9 @@ func SyncLibreChatUserProviderKeys(ctx context.Context, client *mongo.Client, us
 	if !ok {
 		return nil
 	}
-	db := client.Database(config.LibreChatMongoDatabase())
-	keyColl := db.Collection("keys")
+
+	useHTTP := librechatHTTPKeysAvailable()
+	userHex := userID.Hex()
 
 	for _, p := range RegisteredProviders() {
 		if p.LibreChatKeyName == "" {
@@ -32,30 +38,52 @@ func SyncLibreChatUserProviderKeys(ctx context.Context, client *mongo.Client, us
 		}
 		apiKey, has := CompanyProviderCredentialForSync(canon, p.ID)
 		if !has || apiKey == "" {
-			_, _ = keyColl.DeleteOne(ctx, bson.M{"userId": userID, "name": p.LibreChatKeyName})
+			if err := deleteKey(ctx, client, userID, userHex, p.LibreChatKeyName, useHTTP); err != nil {
+				log.Printf("librechat-keys: borrar %q para %s: %v", p.LibreChatKeyName, userHex, err)
+			}
 			continue
 		}
-		encVal, err := encryptLibreChatKeyValue(apiKey)
-		if err != nil {
-			return fmt.Errorf("keys %q (cifrado CREDS_*): %w", p.LibreChatKeyName, err)
+
+		if useHTTP {
+			if err := putLibreChatUserKey(userHex, p.LibreChatKeyName, apiKey); err != nil {
+				return fmt.Errorf("keys %q (HTTP): %w — asegúrate de que LibreChat esté encendido", p.LibreChatKeyName, err)
+			}
+			continue
 		}
-		// Quitar expiresAt: igual que updateUserKey de LibreChat sin expiry; si no, queda una
-		// fecha heredada de la UI, checkUserKeyExpiry() falla o el índice TTL borra el documento.
-		_, err = keyColl.UpdateOne(ctx,
-			bson.M{"userId": userID, "name": p.LibreChatKeyName},
-			bson.M{
-				"$set": bson.M{
-					"userId": userID,
-					"name":   p.LibreChatKeyName,
-					"value":  encVal,
-				},
-				"$unset": bson.M{"expiresAt": ""},
-			},
-			options.Update().SetUpsert(true),
-		)
-		if err != nil {
-			return fmt.Errorf("keys %q: %w", p.LibreChatKeyName, err)
+
+		if err := upsertKeyMongo(ctx, client, userID, p.LibreChatKeyName, apiKey); err != nil {
+			return err
 		}
+	}
+	return nil
+}
+
+func deleteKey(ctx context.Context, client *mongo.Client, userID primitive.ObjectID, userHex, keyName string, useHTTP bool) error {
+	if useHTTP {
+		return deleteLibreChatUserKeyHTTP(userHex, keyName)
+	}
+	db := client.Database(config.LibreChatMongoDatabase())
+	_, err := db.Collection("keys").DeleteOne(ctx, bson.M{"userId": userID, "name": keyName})
+	return err
+}
+
+// upsertKeyMongo: fallback con cifrado local (CREDS_KEY/CREDS_IV).
+func upsertKeyMongo(ctx context.Context, client *mongo.Client, userID primitive.ObjectID, keyName, apiKey string) error {
+	encVal, err := encryptLibreChatKeyValue(apiKey)
+	if err != nil {
+		return fmt.Errorf("keys %q (cifrado CREDS_*): %w", keyName, err)
+	}
+	db := client.Database(config.LibreChatMongoDatabase())
+	_, err = db.Collection("keys").UpdateOne(ctx,
+		bson.M{"userId": userID, "name": keyName},
+		bson.M{
+			"$set":   bson.M{"userId": userID, "name": keyName, "value": encVal},
+			"$unset": bson.M{"expiresAt": ""},
+		},
+		options.Update().SetUpsert(true),
+	)
+	if err != nil {
+		return fmt.Errorf("keys %q: %w", keyName, err)
 	}
 	return nil
 }

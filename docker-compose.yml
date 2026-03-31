@@ -251,7 +251,8 @@ services:
       dockerfile: Dockerfile
     container_name: launcher
     # Mismas credenciales BD que n8n (DB_POSTGRESDB_*) para métricas sin duplicar contraseña en N8N_POSTGRES_DSN.
-    # CREDS_KEY / CREDS_IV: mismos hex que en .env.librechat (cifrado colección Mongo keys de LibreChat).
+    # LIBRECHAT_JWT_SECRET: permite al launcher forjar JWT → PUT /api/keys (LibreChat cifra las claves).
+    # Fallback (CREDS_KEY/CREDS_IV): cifrado AES-CBC local si JWT_SECRET no está disponible.
     env_file:
       - .env.n8n
     environment:
@@ -261,6 +262,7 @@ services:
       # Mongo: credenciales root (authSource=admin) + nombre de BD LibreChat en el path.
       # Si tu BD tiene otro nombre, cambia el path y/o define LIBRECHAT_MONGO_DB con el mismo nombre.
       - MONGO_URI=mongodb://${MONGO_ROOT_USERNAME}:${MONGO_ROOT_PASSWORD}@mongo:27017/LibreChat?authSource=admin
+      - LIBRECHAT_JWT_SECRET=${LIBRECHAT_JWT_SECRET:-}
       - CREDS_KEY=${CREDS_KEY:-}
       - CREDS_IV=${CREDS_IV:-}
       - LIBRECHAT_MONGO_DB=${LIBRECHAT_MONGO_DB:-LibreChat}
