@@ -6,5 +6,6 @@ RUN go build -o launcher .
 FROM alpine:3.19
 COPY --from=builder /app/launcher /app/launcher
 WORKDIR /app
+RUN mkdir -p /app/data
 EXPOSE 8090
 CMD ["/app/launcher"]

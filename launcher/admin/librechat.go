@@ -16,7 +16,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 
 	"launcher/config"
-	"launcher/email"
+	emailpkg "launcher/email"
 )
 
 type lcUser struct {
@@ -34,11 +34,16 @@ type lcUser struct {
 }
 
 type lcUserPublic struct {
-	Email     string    `json:"email"`
-	Name      string    `json:"name"`
-	Role      string    `json:"role"`
-	Company   string    `json:"company,omitempty"`
-	CreatedAt time.Time `json:"createdAt"`
+	Email              string    `json:"email"`
+	Name               string    `json:"name"`
+	Role               string    `json:"role"`
+	Company            string    `json:"company,omitempty"`
+	CreatedAt          time.Time `json:"createdAt"`
+	VerificationStatus string    `json:"verificationStatus,omitempty"`
+	Attempts           int       `json:"attempts,omitempty"`
+	MaxAttempts        int       `json:"maxAttempts,omitempty"`
+	CanRetry           bool      `json:"canRetry,omitempty"`
+	RemainingAttempts  int       `json:"remainingAttempts,omitempty"`
 }
 
 func mongoCollection(ctx context.Context) (*mongo.Collection, *mongo.Client, error) {
@@ -86,12 +91,31 @@ func listLibreChatUsers(w http.ResponseWriter, r *http.Request) {
 		if co == "" {
 			co = defCo
 		}
+
+		verifStatus := "verified"
+		canRetry := false
+		remainingAttempts := 0
+
+		if !u.EmailVerified {
+			verifStatus = "pending"
+			if state, err := emailpkg.GetVerificationState(u.Email); err == nil {
+				verifStatus = string(state.Status)
+				remainingAttempts = state.MaxAttempts - state.Attempts
+				canRetry = state.Status != emailpkg.StatusVerified && state.Status != emailpkg.StatusBlocked && remainingAttempts > 0
+			}
+		}
+
 		result = append(result, lcUserPublic{
-			Email:     u.Email,
-			Name:      u.Name,
-			Role:      u.Role,
-			Company:   co,
-			CreatedAt: u.CreatedAt,
+			Email:              u.Email,
+			Name:               u.Name,
+			Role:               u.Role,
+			Company:            co,
+			CreatedAt:          u.CreatedAt,
+			VerificationStatus: verifStatus,
+			Attempts:           0,
+			MaxAttempts:        0,
+			CanRetry:           canRetry,
+			RemainingAttempts:  remainingAttempts,
 		})
 	}
 
@@ -196,7 +220,7 @@ func createLibreChatUsersInternal(requests []createUserRequest) ([]lcUserResult,
 			Role:          role,
 			Company:       co,
 			Provider:      "local",
-			EmailVerified: true,
+			EmailVerified: false,
 			CreatedAt:     now,
 			UpdatedAt:     now,
 		}
@@ -212,101 +236,13 @@ func createLibreChatUsersInternal(requests []createUserRequest) ([]lcUserResult,
 
 		log.Printf("DEBUG: usuario creado en MongoDB: %s (empresa: %s)", req.Email, co)
 
-		emailBody := fmt.Sprintf(`<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tu cuenta ha sido creada</title>
-    <style>
-        body {
-            font-family: "Plus Jakarta Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-            background: linear-gradient(165deg, #f8fafc 0%, #e2e8f0 100%);
-            margin: 0;
-            padding: 40px 20px;
-        }
-        .container {
-            max-width: 500px;
-            margin: 0 auto;
-            background: #ffffff;
-            border-radius: 16px;
-            box-shadow: 0 4px 24px rgba(15, 23, 42, 0.07);
-            overflow: hidden;
-        }
-        .header {
-            background: linear-gradient(90deg, #2563eb, #8b5cf6);
-            padding: 32px 24px;
-            text-align: center;
-        }
-        .header-title {
-            color: #ffffff;
-            font-size: 24px;
-            font-weight: 700;
-            margin: 0;
-        }
-        .content {
-            padding: 32px 24px;
-        }
-        .greeting {
-            color: #0f172a;
-            font-size: 18px;
-            margin-bottom: 24px;
-        }
-        .card {
-            background: #f8fafc;
-            border-radius: 10px;
-            padding: 20px;
-            margin: 20px 0;
-        }
-        .label {
-            color: #64748b;
-            font-size: 13px;
-            font-weight: 600;
-            text-transform: uppercase;
-            margin-bottom: 4px;
-        }
-        .value {
-            color: #0f172a;
-            font-size: 16px;
-            font-weight: 500;
-        }
-        .footer {
-            padding: 24px;
-            text-align: center;
-            color: #64748b;
-            font-size: 14px;
-            border-top: 1px solid #e2e8f0;
-        }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <div class="header">
-            <h1 class="header-title">Cuenta creada</h1>
-        </div>
-        <div class="content">
-            <p class="greeting">Hola %s,</p>
-            <p>Tu cuenta ha sido creada exitosamente. Ya puedes acceder a LibreChat.</p>
-            
-            <div class="card">
-                <div class="label">Usuario</div>
-                <div class="value">%s</div>
-            </div>
-            
-            <div class="card">
-                <div class="label">Contraseña</div>
-                <div class="value">%s</div>
-            </div>
-        </div>
-        <div class="footer">
-            <p>Saludos,<br>El equipo de AI Ecosystem</p>
-        </div>
-    </div>
-</body>
-</html>`, name, req.Email, req.Password)
-		if err := email.SendEmail(req.Email, "Tus credenciales de acceso", emailBody); err != nil {
-			log.Printf("gestion: error enviando email de credenciales a %s: %v", req.Email, err)
+		if err := emailpkg.SendVerificationEmail(req.Email, req.Password, name); err != nil {
+			log.Printf("gestion: error enviando email de verificación a %s: %v", req.Email, err)
+			results = append(results, lcUserResult{Email: req.Email, Created: true, Error: "usuario creado pero error en verificación de email"})
+			continue
 		}
+
+		go StartVerificationPolling(req.Email)
 
 		results = append(results, lcUserResult{Email: req.Email, Created: true})
 	}
@@ -471,4 +407,222 @@ func updateLibreChatUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	jsonOK(w, map[string]string{"updated": reqBody.Email})
+}
+
+func StartVerificationPolling(email string) {
+	pollInterval := time.Duration(config.VerificationPollInterval) * time.Minute
+	ticker := time.NewTicker(pollInterval)
+	defer ticker.Stop()
+
+	maxAttempts := config.VerificationMaxAttempts
+	attempts := 0
+
+	for {
+		<-ticker.C
+		attempts++
+
+		log.Printf("SSE: checking verification status for %s (attempt %d/%d)", email, attempts, maxAttempts)
+
+		state, err := emailpkg.CheckAndUpdateVerification(email)
+		if err != nil {
+			log.Printf("SSE: error checking verification for %s: %v", email, err)
+			continue
+		}
+
+		switch state.Status {
+		case emailpkg.StatusVerified:
+			log.Printf("SSE: email verified for %s, sending credentials", email)
+
+			password := ""
+			if state.EncryptedPassword != "" {
+				password, _ = emailpkg.DecryptPassword(state.EncryptedPassword)
+			}
+			sendCredentialsEmail(email, password, state.Name)
+			updateUserEmailVerified(email, true)
+			BroadcastVerificationUpdate(email, "verified", state)
+			return
+
+		case emailpkg.StatusBlocked:
+			log.Printf("SSE: email blocked for %s", email)
+			BroadcastVerificationUpdate(email, "blocked", state)
+			return
+
+		default:
+			if attempts >= maxAttempts {
+				log.Printf("SSE: max attempts reached for %s, blocking", email)
+				state.Status = emailpkg.StatusBlocked
+				state.ErrorMessage = "Max attempts reached"
+				BroadcastVerificationUpdate(email, "blocked", state)
+				return
+			}
+			BroadcastVerificationUpdate(email, "pending", state)
+		}
+	}
+}
+
+func sendCredentialsEmail(email, password, name string) error {
+	emailBody := fmt.Sprintf(`<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tu cuenta ha sido creada</title>
+    <style>
+        body {
+            font-family: "Plus Jakarta Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            background: linear-gradient(165deg, #f8fafc 0%, #e2e8f0 100%);
+            margin: 0;
+            padding: 40px 20px;
+        }
+        .container {
+            max-width: 500px;
+            margin: 0 auto;
+            background: #ffffff;
+            border-radius: 16px;
+            box-shadow: 0 4px 24px rgba(15, 23, 42, 0.07);
+            overflow: hidden;
+        }
+        .header {
+            background: linear-gradient(90deg, #2563eb, #8b5cf6);
+            padding: 32px 24px;
+            text-align: center;
+        }
+        .header-title {
+            color: #ffffff;
+            font-size: 24px;
+            font-weight: 700;
+            margin: 0;
+        }
+        .content {
+            padding: 32px 24px;
+        }
+        .greeting {
+            color: #0f172a;
+            font-size: 18px;
+            margin-bottom: 24px;
+        }
+        .card {
+            background: #f8fafc;
+            border-radius: 10px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+        .label {
+            color: #64748b;
+            font-size: 13px;
+            font-weight: 600;
+            text-transform: uppercase;
+            margin-bottom: 4px;
+        }
+        .value {
+            color: #0f172a;
+            font-size: 16px;
+            font-weight: 500;
+        }
+        .footer {
+            padding: 24px;
+            text-align: center;
+            color: #64748b;
+            font-size: 14px;
+            border-top: 1px solid #e2e8f0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1 class="header-title">Cuenta creada</h1>
+        </div>
+        <div class="content">
+            <p class="greeting">Hola %s,</p>
+            <p>Tu cuenta ha sido creada exitosamente. Ya puedes acceder a LibreChat.</p>
+            
+            <div class="card">
+                <div class="label">Usuario</div>
+                <div class="value">%s</div>
+            </div>
+            
+            <div class="card">
+                <div class="label">Contraseña</div>
+                <div class="value">%s</div>
+            </div>
+        </div>
+        <div class="footer">
+            <p>Saludos,<br>El equipo de AI Ecosystem</p>
+        </div>
+    </div>
+</body>
+</html>`, name, email, password)
+
+	return emailpkg.SendEmail(email, "Tus credenciales de acceso", emailBody)
+}
+
+func updateUserEmailVerified(email string, verified bool) error {
+	if config.MongoURI == "" {
+		return fmt.Errorf("MongoDB not configured")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	coll, client, err := mongoCollection(ctx)
+	if err != nil {
+		return err
+	}
+	defer client.Disconnect(ctx)
+
+	filter := bson.M{"email": email}
+	update := bson.M{"$set": bson.M{
+		"emailVerified": verified,
+		"updatedAt":     time.Now(),
+	}}
+
+	_, err = coll.UpdateOne(ctx, filter, update)
+	return err
+}
+
+type VerificationUpdate struct {
+	Email       string `json:"email"`
+	Status      string `json:"status"`
+	Attempts    int    `json:"attempts"`
+	MaxAttempts int    `json:"max_attempts"`
+	Message     string `json:"message,omitempty"`
+}
+
+func BroadcastVerificationUpdate(email, status string, state emailpkg.VerificationState) {
+	update := VerificationUpdate{
+		Email:       email,
+		Status:      status,
+		Attempts:    state.Attempts,
+		MaxAttempts: state.MaxAttempts,
+		Message:     state.ErrorMessage,
+	}
+	globalBroadcaster.Broadcast("verification_update", update)
+}
+
+func RetryVerification(email string) error {
+	state, err := emailpkg.GetVerificationState(email)
+	if err != nil {
+		return err
+	}
+
+	if state.Status == emailpkg.StatusVerified {
+		return fmt.Errorf("email already verified")
+	}
+
+	if state.Status == emailpkg.StatusBlocked {
+		return fmt.Errorf("email is blocked, cannot retry")
+	}
+
+	if state.Attempts >= state.MaxAttempts {
+		return fmt.Errorf("max attempts reached")
+	}
+
+	if err := emailpkg.SendVerificationEmail(email, "", ""); err != nil {
+		return err
+	}
+
+	go StartVerificationPolling(email)
+
+	return nil
 }

@@ -425,6 +425,60 @@
             background: rgba(251, 191, 36, 0.14);
             color: #fcd34d;
         }
+        
+        /* Badges de verificación de email */
+        .verification-badge {
+            display: inline-block;
+            font-size: 0.65rem;
+            font-weight: 600;
+            padding: 2px 8px;
+            border-radius: 999px;
+            margin-left: 6px;
+            vertical-align: middle;
+        }
+        .verification-pending {
+            background: rgba(245, 158, 11, 0.15);
+            color: #b45309;
+        }
+        .verification-verified {
+            background: rgba(5, 150, 105, 0.12);
+            color: #047857;
+        }
+        .verification-blocked {
+            background: rgba(220, 38, 38, 0.12);
+            color: #dc2626;
+        }
+        .verification-error {
+            background: rgba(107, 114, 128, 0.12);
+            color: #6b7280;
+        }
+        [data-theme="dark"] .verification-pending {
+            background: rgba(251, 191, 36, 0.18);
+            color: #fbbf24;
+        }
+        [data-theme="dark"] .verification-verified {
+            background: rgba(52, 211, 153, 0.14);
+            color: #6ee7b7;
+        }
+        [data-theme="dark"] .verification-blocked {
+            background: rgba(248, 113, 113, 0.14);
+            color: #fca5a5;
+        }
+        
+        /* Botón reintentar */
+        .btn-retry {
+            background: linear-gradient(135deg, #f59e0b, #d97706);
+            color: white;
+            margin-right: 6px;
+            box-shadow: 0 2px 8px rgba(245, 158, 11, 0.3);
+        }
+        .btn-retry:hover { filter: brightness(1.06); }
+        .btn-retry:disabled {
+            background: #94a3b8;
+            cursor: not-allowed;
+            box-shadow: none;
+        }
+        
         .btn-small {
             padding: 6px 12px;
             border: none;
@@ -1002,6 +1056,23 @@
         }
         .modal-save:hover { filter: brightness(1.06); }
 
+        /* Modal de verificación */
+        #verification-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(15, 23, 42, 0.45);
+            backdrop-filter: blur(6px);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 2200;
+            padding: 20px;
+        }
+        #verification-modal.active { display: flex; }
+
         /* Módulo estadísticas / gráficos */
         .charts-root {
             padding: 8px 4px 4px;
@@ -1136,7 +1207,7 @@
 </head>
 <body>
     <script>window.__GESTION_META = {{.GestionMetaJSON}};</script>
-    <div hx-ext="sse" sse-connect="/gestion/stream" sse-swap="init,users_updated" id="sse-container"></div>
+    <div hx-ext="sse" sse-connect="/gestion/stream" sse-swap="init,users_updated,verification_update" id="sse-container"></div>
     <div class="container" id="app-container" data-initial-tab="{{.Tab}}">
         <header class="header">
             <div class="header-brand">
@@ -1332,6 +1403,18 @@
                         <button type="submit" class="btn-submit">Crear usuario(s)</button>
                     </div>
                 </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal de verificación de email -->
+    <div id="verification-modal" onclick="if (event.target === this) closeVerificationModal()">
+        <div class="modal-content">
+            <h3 id="verification-modal-title">Estado de verificación</h3>
+            <p id="verification-modal-message" class="panel-muted"></p>
+            <div class="modal-actions">
+                <button type="button" class="modal-close" onclick="closeVerificationModal()">Cerrar</button>
+                <button type="button" id="verification-modal-retry" class="btn-retry" style="display:none;" onclick="confirmRetryVerification()">Reintentar</button>
             </div>
         </div>
     </div>
@@ -2468,6 +2551,34 @@
             }
         });
 
+        // SSE: Manejar eventos de verificación de email
+        document.body.addEventListener('htmx:sseBeforeMessage', function(evt) {
+            const eventName = evt.detail.type;
+            
+            if (eventName === 'verification_update') {
+                try {
+                    const data = JSON.parse(evt.detail.data);
+                    console.log('Verification update:', data);
+                    
+                    evt.preventDefault();
+                    
+                    // Actualizar el usuario en cache
+                    updateUserVerificationStatus(data);
+                    
+                    // Mostrar notificación según estado
+                    showVerificationNotification(data);
+                    
+                    // Refrescar la tabla si estamos en LibreChat
+                    if (currentTab === 'librechat') {
+                        renderUsersFromCache(currentTab);
+                    }
+                } catch (e) {
+                    console.error('SSE verification: failed to parse message', e);
+                    evt.preventDefault();
+                }
+            }
+        });
+
         function openInviteModalDirect(email, inviteUrl) {
             currentInviteLink = inviteUrl;
             document.getElementById('invite-link-box').textContent = inviteUrl;
@@ -2501,6 +2612,97 @@
             toast.textContent = message;
             container.appendChild(toast);
             setTimeout(() => toast.remove(), 4000);
+        }
+
+        // Funciones de verificación de email
+        let currentRetryEmail = '';
+
+        function updateUserVerificationStatus(data) {
+            const dataCache = getCachedUsers();
+            if (dataCache.librechat) {
+                const user = dataCache.librechat.find(u => u.email === data.email);
+                if (user) {
+                    user.verificationStatus = data.status;
+                    user.attempts = data.attempts;
+                    user.maxAttempts = data.maxAttempts;
+                    user.canRetry = data.status === 'pending' && data.attempts < data.maxAttempts;
+                    user.remainingAttempts = data.maxAttempts - data.attempts;
+                    setCachedUsers(dataCache);
+                }
+            }
+        }
+
+        function showVerificationNotification(data) {
+            switch (data.status) {
+                case 'verified':
+                    showToast('Email verificado: credenciales enviadas a ' + data.email, 'success');
+                    break;
+                case 'blocked':
+                    showToast('Email bloqueado: ' + data.email, 'error');
+                    break;
+                case 'pending':
+                    const remaining = data.maxAttempts - data.attempts;
+                    showToast('Verificación pendiente: ' + data.email + ' (' + remaining + ' intentos restantes)', 'info');
+                    break;
+                default:
+                    if (data.message) {
+                        showToast('Error de verificación: ' + data.message, 'error');
+                    }
+            }
+        }
+
+        function closeVerificationModal() {
+            document.getElementById('verification-modal').classList.remove('active');
+            currentRetryEmail = '';
+        }
+
+        function retryVerification(email) {
+            currentRetryEmail = email;
+            const data = getCachedUsers();
+            const user = data.librechat ? data.librechat.find(u => u.email === email) : null;
+            
+            const title = document.getElementById('verification-modal-title');
+            const message = document.getElementById('verification-modal-message');
+            const retryBtn = document.getElementById('verification-modal-retry');
+            
+            title.textContent = 'Reintentar verificación';
+            
+            if (user && user.verificationStatus === 'blocked') {
+                message.textContent = 'El email ' + email + ' ha sido bloqueado tras múltiples intentos. ¿Deseas reintentar?';
+                retryBtn.style.display = 'inline-flex';
+            } else {
+                const remaining = user ? user.remainingAttempts : '?';
+                message.textContent = 'El email ' + email + ' aún está pendiente. Quedan ' + remaining + ' intentos disponibles.';
+                retryBtn.style.display = 'inline-flex';
+            }
+            
+            document.getElementById('verification-modal').classList.add('active');
+        }
+
+        function confirmRetryVerification() {
+            if (!currentRetryEmail) return;
+            
+            const retryBtn = document.getElementById('verification-modal-retry');
+            retryBtn.disabled = true;
+            retryBtn.textContent = '...';
+            
+            fetch('/admin/verification/retry', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email: currentRetryEmail }),
+                credentials: 'same-origin'
+            })
+            .then(function(r) { return r.json().then(function(j) { return { ok: r.ok, j: j }; }); })
+            .then(function(x) {
+                if (!x.ok) throw new Error(x.j.error || 'Error al reintentar');
+                showToast('Reintento de verificación iniciado', 'success');
+                closeVerificationModal();
+            })
+            .catch(function(e) {
+                showToast(e.message || 'Error', 'error');
+                retryBtn.disabled = false;
+                retryBtn.textContent = 'Reintentar';
+            });
         }
 
         function deleteUser(btn) {

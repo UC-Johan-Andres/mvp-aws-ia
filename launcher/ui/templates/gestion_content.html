@@ -198,6 +198,11 @@
                         <span class="role-badge {{if or (eq .Role "ADMIN") (eq .Role "global:admin") (eq .Role "global:owner")}}role-admin{{else}}role-user{{end}}">
                             {{.Role}}{{if .IsPending}} (pendiente){{end}}
                         </span>
+                        {{if eq $tab "librechat"}}
+                        <span class="verification-badge verification-{{.VerificationStatus}}">
+                            {{if .VerificationStatus}}{{.VerificationStatus}}{{else}}—{{end}}
+                        </span>
+                        {{end}}
                     </td>
                     <td>{{.Company}}</td>
                     <td>
@@ -219,6 +224,13 @@
                                 data-tab="librechat" data-id="{{.ID}}" data-email="{{.Email}}"
                                 data-name="{{.Name}}" data-role="{{.Role}}" data-company="{{.Company}}"
                                 onclick="openEditModalFromDataset(this)">Editar</button>
+                        {{if .CanRetry}}
+                        <button type="button" class="btn-small btn-retry"
+                                data-email="{{.Email}}"
+                                onclick="retryVerification('{{.Email}}')">
+                            Reintentar ({{.RemainingAttempts}})
+                        </button>
+                        {{end}}
                         {{end}}
                         <button type="button" class="btn-small btn-delete"
                                 data-tab="{{$tab}}" data-id="{{.ID}}" data-email="{{.Email}}"

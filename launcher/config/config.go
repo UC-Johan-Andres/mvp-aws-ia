@@ -5,6 +5,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -29,11 +30,11 @@ var (
 	LibreChatMongoDB     = getEnv("LIBRECHAT_MONGO_DB", "LibreChat")
 	LibreChatInternalURL = getEnv("LIBRECHAT_INTERNAL_URL", "http://librechat:3080")
 
-	N8NInternalURL   = getEnv("N8N_INTERNAL_URL", "http://n8n:5678")
-	N8NBasicUser     = getEnv("N8N_BASIC_AUTH_USER", "")
-	N8NBasicPass     = getEnv("N8N_BASIC_AUTH_PASSWORD", "")
-	N8NOwnerEmail    = getEnv("N8N_OWNER_EMAIL", "")
-	N8NOwnerPass     = getEnv("N8N_OWNER_PASSWORD", "")
+	N8NInternalURL = getEnv("N8N_INTERNAL_URL", "http://n8n:5678")
+	N8NBasicUser   = getEnv("N8N_BASIC_AUTH_USER", "")
+	N8NBasicPass   = getEnv("N8N_BASIC_AUTH_PASSWORD", "")
+	N8NOwnerEmail  = getEnv("N8N_OWNER_EMAIL", "")
+	N8NOwnerPass   = getEnv("N8N_OWNER_PASSWORD", "")
 
 	// SES Email configuration
 	SESSMTPHost     = getEnv("SES_SMTP_HOST", "email-smtp.us-east-1.amazonaws.com")
@@ -42,6 +43,16 @@ var (
 	SESSMTPPassword = getEnv("SES_SMTP_PASSWORD", "")
 	SESFromEmail    = getEnv("SES_FROM_EMAIL", "")
 	SESRegion       = getEnv("SES_REGION", "us-east-1")
+
+	// AWS SES API v2 Configuration
+	AWSAccessKeyID     = getEnv("AWS_ACCESS_KEY_ID", "")
+	AWSSecretAccessKey = getEnv("AWS_SECRET_ACCESS_KEY", "")
+	AWSRegion          = getEnv("AWS_REGION", "us-east-1")
+
+	// Email Verification Configuration
+	VerificationMaxAttempts  = getEnvInt("VERIFICATION_MAX_ATTEMPTS", 3)
+	VerificationPollInterval = getEnvInt("VERIFICATION_POLL_INTERVAL", 3)
+	VerificationDataPath     = getEnv("VERIFICATION_DATA_PATH", "/app/data")
 )
 
 // LibreChatJWTSecretForKeys debe coincidir con JWT_SECRET del contenedor librechat (jsonwebtoken).
@@ -96,6 +107,15 @@ var Companions = map[string][]string{
 func getEnv(key, fallback string) string {
 	if v := os.Getenv(key); v != "" {
 		return v
+	}
+	return fallback
+}
+
+func getEnvInt(key string, fallback int) int {
+	if v := os.Getenv(key); v != "" {
+		if val, err := strconv.Atoi(v); err == nil {
+			return val
+		}
 	}
 	return fallback
 }

@@ -37,6 +37,34 @@ func HandleLibreChatUsers(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// HandleVerificationRetry handles POST /admin/verification/retry
+func HandleVerificationRetry(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req struct {
+		Email string `json:"email"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		jsonError(w, "invalid JSON body: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if req.Email == "" {
+		jsonError(w, "email is required", http.StatusBadRequest)
+		return
+	}
+
+	if err := RetryVerification(req.Email); err != nil {
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	jsonOK(w, map[string]string{"retry": "started", "email": req.Email})
+}
+
 // HandleLibreChatDeleteUser handles DELETE /admin/librechat/users/{email}
 func HandleLibreChatDeleteUser(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodDelete {
@@ -351,15 +379,15 @@ func gestionUsersForTab(tab string) ([]GestionUser, error) {
 				name = "-"
 			}
 			users = append(users, GestionUser{
-				ID:                   u.ID,
-				Email:                u.Email,
-				Name:                 name,
-				FirstName:            u.FirstName,
-				LastName:             u.LastName,
-				Role:                 u.Role,
-				Company:              u.Company,
-				InviteURL:            u.InviteAcceptURL,
-				IsPending:            u.IsPending,
+				ID:                    u.ID,
+				Email:                 u.Email,
+				Name:                  name,
+				FirstName:             u.FirstName,
+				LastName:              u.LastName,
+				Role:                  u.Role,
+				Company:               u.Company,
+				InviteURL:             u.InviteAcceptURL,
+				IsPending:             u.IsPending,
 				WorkflowsAccesibles:   u.WorkflowsAccesibles,
 				TotalExecutions:       u.TotalExecutions,
 				ProdExecutions:        u.ProdExecutions,

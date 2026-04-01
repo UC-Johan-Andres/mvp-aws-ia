@@ -7,6 +7,7 @@ import (
 	"launcher/admin"
 	"launcher/auth"
 	"launcher/config"
+	"launcher/email"
 	"launcher/services"
 	"launcher/ui"
 )
@@ -14,6 +15,10 @@ import (
 func main() {
 	if err := admin.InitCompanyStore(); err != nil {
 		log.Printf("gestión empresas (JSON): %v", err)
+	}
+
+	if err := email.LoadVerificationStore(); err != nil {
+		log.Printf("verificación email (JSON): %v", err)
 	}
 
 	mux := http.NewServeMux()
@@ -41,6 +46,7 @@ func main() {
 	mux.HandleFunc("/admin/librechat/users", auth.RequireAuth(admin.HandleLibreChatUsers))
 	mux.HandleFunc("/admin/n8n/users", auth.RequireAuth(admin.HandleN8NUsers))
 	mux.HandleFunc("POST /admin/n8n/users/password-reset-link", auth.RequireAuth(admin.HandleN8NPasswordResetLink))
+	mux.HandleFunc("/admin/verification/retry", auth.RequireAuth(admin.HandleVerificationRetry))
 
 	// Gestion dashboard
 	mux.HandleFunc("GET /gestion", auth.RequireAuth(admin.HandleGestion))
