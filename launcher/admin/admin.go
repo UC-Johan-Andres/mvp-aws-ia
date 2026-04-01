@@ -18,6 +18,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 
 	"launcher/config"
+	emailpkg "launcher/email"
 	"launcher/ui"
 )
 
@@ -283,16 +284,17 @@ func getLibreChatUsers() ([]LibreChatUser, error) {
 
 // GestionUser represents a user for template rendering.
 type GestionUser struct {
-	ID        string
-	Email     string
-	Name      string
-	FirstName string
-	LastName  string
-	Role      string
-	Company   string
-	InviteURL string
-	IsPending bool
-	CreatedAt string
+	ID                 string
+	Email              string
+	Name               string
+	FirstName          string
+	LastName           string
+	Role               string
+	Company            string
+	InviteURL          string
+	IsPending          bool
+	CreatedAt          string
+	VerificationStatus string
 	// n8n: estadísticas desde PostgreSQL (misma consulta que en psql)
 	WorkflowsAccesibles   int64
 	TotalExecutions       int64
@@ -410,12 +412,13 @@ func gestionUsersForTab(tab string) ([]GestionUser, error) {
 			id = u.Email
 		}
 		users = append(users, GestionUser{
-			ID:        id,
-			Email:     u.Email,
-			Name:      u.Name,
-			Role:      u.Role,
-			Company:   u.Company,
-			CreatedAt: u.CreatedAt,
+			ID:                 id,
+			Email:              u.Email,
+			Name:               u.Name,
+			Role:               u.Role,
+			Company:            u.Company,
+			CreatedAt:          u.CreatedAt,
+			VerificationStatus: getVerificationStatusForEmail(u.Email),
 		})
 	}
 	return users, nil
@@ -1182,4 +1185,12 @@ func callLibreChatAPI(r *http.Request) error {
 		return fmt.Errorf("%s", strings.Join(errs, "; "))
 	}
 	return nil
+}
+
+func getVerificationStatusForEmail(email string) string {
+	state, err := emailpkg.GetVerificationState(email)
+	if err != nil || state.Status == "" {
+		return ""
+	}
+	return string(state.Status)
 }
