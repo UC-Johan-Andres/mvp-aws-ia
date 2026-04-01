@@ -295,6 +295,8 @@ type GestionUser struct {
 	IsPending          bool
 	CreatedAt          string
 	VerificationStatus string
+	CanRetry           bool
+	RemainingAttempts  int
 	// n8n: estadísticas desde PostgreSQL (misma consulta que en psql)
 	WorkflowsAccesibles   int64
 	TotalExecutions       int64
@@ -411,6 +413,7 @@ func gestionUsersForTab(tab string) ([]GestionUser, error) {
 		if id == "" {
 			id = u.Email
 		}
+		canRetry, remainingAttempts := getVerificationRetryInfo(u.Email)
 		users = append(users, GestionUser{
 			ID:                 id,
 			Email:              u.Email,
@@ -419,6 +422,8 @@ func gestionUsersForTab(tab string) ([]GestionUser, error) {
 			Company:            u.Company,
 			CreatedAt:          u.CreatedAt,
 			VerificationStatus: getVerificationStatusForEmail(u.Email),
+			CanRetry:           canRetry,
+			RemainingAttempts:  remainingAttempts,
 		})
 	}
 	return users, nil
@@ -1193,4 +1198,12 @@ func getVerificationStatusForEmail(email string) string {
 		return ""
 	}
 	return string(state.Status)
+}
+
+func getVerificationRetryInfo(email string) (bool, int) {
+	canRetry, remaining, err := emailpkg.CanRetry(email)
+	if err != nil {
+		return false, 0
+	}
+	return canRetry, remaining
 }
