@@ -2448,22 +2448,31 @@
                     `;
                 }
                 
-                if (tab === 'n8n') {
-                    actions += `
-                        <button type="button" class="btn-small btn-edit" data-tab="n8n"
+				if (tab === 'n8n') {
+					actions += `
+						<button type="button" class="btn-small btn-edit" data-tab="n8n"
                             data-id="${escapeHtml(userId)}" data-email="${escapeHtml(u.email)}"
                             data-firstname="${escapeHtml(u.firstName || '')}" data-lastname="${escapeHtml(u.lastName || '')}"
                             data-role="${escapeHtml(u.role || '')}" data-company="${escapeHtml(co)}"
                             onclick="openEditModalFromDataset(this)">Editar</button>
                     `;
-                } else {
-                    actions += `
-                        <button type="button" class="btn-small btn-edit" data-tab="librechat"
-                            data-id="${escapeHtml(userId)}" data-email="${escapeHtml(u.email)}"
-                            data-name="${escapeHtml(u.name || '')}" data-role="${escapeHtml(u.role || '')}" data-company="${escapeHtml(co)}"
-                            onclick="openEditModalFromDataset(this)">Editar</button>
-                    `;
-                }
+				} else {
+					actions += `
+						<button type="button" class="btn-small btn-edit" data-tab="librechat"
+							data-id="${escapeHtml(userId)}" data-email="${escapeHtml(u.email)}"
+							data-name="${escapeHtml(u.name || '')}" data-role="${escapeHtml(u.role || '')}" data-company="${escapeHtml(co)}"
+							onclick="openEditModalFromDataset(this)">Editar</button>
+					`;
+					if (u.canRetry) {
+						actions += `
+							<button type="button" class="btn-small btn-retry"
+								data-email="${escapeHtml(u.email)}"
+								onclick="retryVerification('${escapeHtml(u.email)}')">
+								Reintentar (${Number(u.remainingAttempts || 0)})
+							</button>
+						`;
+					}
+				}
                 
                 actions += `
                     <button type="button" class="btn-small btn-delete" 
@@ -2489,19 +2498,22 @@
                     </tr>
                 `;
                 }
-                return `
-                    <tr>
-                        <td>${escapeHtml(u.email)}</td>
-                        <td>${escapeHtml(lcName)}</td>
-                        <td>
-                            <span class="role-badge ${roleClass}">
-                                ${escapeHtml(u.role)}${isPending ? ' (pendiente)' : ''}
-                            </span>
-                        </td>
-                        <td>${escapeHtml(co)}</td>
-                        <td>${actions}</td>
-                    </tr>
-                `;
+				return `
+					<tr>
+						<td>${escapeHtml(u.email)}</td>
+						<td>${escapeHtml(lcName)}</td>
+						<td>
+							<span class="role-badge ${roleClass}">
+								${escapeHtml(u.role)}${isPending ? ' (pendiente)' : ''}
+							</span>
+							<span class="verification-badge verification-${escapeHtml(u.verificationStatus || '')}">
+								${escapeHtml(u.verificationStatus || '—')}
+							</span>
+						</td>
+						<td>${escapeHtml(co)}</td>
+						<td>${actions}</td>
+					</tr>
+				`;
             }).join('');
         }
 

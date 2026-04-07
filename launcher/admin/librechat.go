@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"go.mongodb.org/mongo-driver/bson"
@@ -95,11 +96,15 @@ func listLibreChatUsers(w http.ResponseWriter, r *http.Request) {
 		verifStatus := "verified"
 		canRetry := false
 		remainingAttempts := 0
+		attempts := 0
+		maxAttempts := 0
 
 		if !u.EmailVerified {
 			verifStatus = "pending"
 			if state, err := emailpkg.GetVerificationState(u.Email); err == nil {
 				verifStatus = string(state.Status)
+				attempts = state.Attempts
+				maxAttempts = state.MaxAttempts
 				remainingAttempts = state.MaxAttempts - state.Attempts
 				canRetry = state.Status != emailpkg.StatusVerified && state.Status != emailpkg.StatusBlocked && remainingAttempts > 0
 			}
@@ -112,8 +117,8 @@ func listLibreChatUsers(w http.ResponseWriter, r *http.Request) {
 			Company:            co,
 			CreatedAt:          u.CreatedAt,
 			VerificationStatus: verifStatus,
-			Attempts:           0,
-			MaxAttempts:        0,
+			Attempts:           attempts,
+			MaxAttempts:        maxAttempts,
 			CanRetry:           canRetry,
 			RemainingAttempts:  remainingAttempts,
 		})
@@ -135,6 +140,11 @@ type lcUserResult struct {
 	Created bool   `json:"created"`
 	Error   string `json:"error,omitempty"`
 }
+
+var (
+	verificationPollMu     sync.Mutex
+	verificationPollingNow = map[string]bool{}
+)
 
 func createLibreChatUsersInternal(requests []createUserRequest) ([]lcUserResult, error) {
 	if config.MongoURI == "" {
@@ -242,7 +252,18 @@ func createLibreChatUsersInternal(requests []createUserRequest) ([]lcUserResult,
 			continue
 		}
 
-		go StartVerificationPolling(req.Email)
+		state, stateErr := emailpkg.GetVerificationState(req.Email)
+		if stateErr == nil && state.Status == emailpkg.StatusVerified {
+			if err := updateUserEmailVerified(req.Email, true); err != nil {
+				log.Printf("gestion: no se pudo marcar emailVerified=true para %s: %v", req.Email, err)
+			}
+			BroadcastVerificationUpdate(req.Email, "verified", state)
+		} else {
+			if stateErr == nil {
+				BroadcastVerificationUpdate(req.Email, "pending", state)
+			}
+			go StartVerificationPolling(req.Email)
+		}
 
 		results = append(results, lcUserResult{Email: req.Email, Created: true})
 	}
@@ -410,6 +431,19 @@ func updateLibreChatUser(w http.ResponseWriter, r *http.Request) {
 }
 
 func StartVerificationPolling(email string) {
+	verificationPollMu.Lock()
+	if verificationPollingNow[email] {
+		verificationPollMu.Unlock()
+		return
+	}
+	verificationPollingNow[email] = true
+	verificationPollMu.Unlock()
+	defer func() {
+		verificationPollMu.Lock()
+		delete(verificationPollingNow, email)
+		verificationPollMu.Unlock()
+	}()
+
 	pollInterval := time.Duration(config.VerificationPollInterval) * time.Minute
 	ticker := time.NewTicker(pollInterval)
 	defer ticker.Stop()
@@ -470,7 +504,7 @@ func sendCredentialsEmail(email, password, name string) error {
     <style>
         body {
             font-family: "Plus Jakarta Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-            background: linear-gradient(165deg, #f8fafc 0%, #e2e8f0 100%);
+            background: linear-gradient(165deg, #f8fafc 0%%, #e2e8f0 100%%);
             margin: 0;
             padding: 40px 20px;
         }
@@ -618,10 +652,20 @@ func RetryVerification(email string) error {
 		return fmt.Errorf("max attempts reached")
 	}
 
-	if err := emailpkg.SendVerificationEmail(email, "", ""); err != nil {
+	newState, err := emailpkg.RetryVerificationEmail(email)
+	if err != nil {
 		return err
 	}
 
+	if newState.Status == emailpkg.StatusVerified {
+		if err := updateUserEmailVerified(email, true); err != nil {
+			log.Printf("gestion: no se pudo marcar emailVerified=true tras retry para %s: %v", email, err)
+		}
+		BroadcastVerificationUpdate(email, "verified", newState)
+		return nil
+	}
+
+	BroadcastVerificationUpdate(email, "pending", newState)
 	go StartVerificationPolling(email)
 
 	return nil

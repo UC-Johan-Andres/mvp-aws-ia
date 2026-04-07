@@ -5,7 +5,9 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -16,6 +18,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/sesv2"
 	"github.com/aws/aws-sdk-go-v2/service/sesv2/types"
+	"github.com/aws/smithy-go"
 	appconfig "launcher/config"
 )
 
@@ -154,6 +157,14 @@ func StartVerificationWorkerPool(workers int) {
 	for i := 0; i < workers; i++ {
 		go verificationWorker(i)
 	}
+}
+
+func QueueVerification(email string) {
+	if verificationQueue == nil {
+		processVerification(email)
+		return
+	}
+	verificationQueue <- email
 }
 
 func verificationWorker(id int) {
@@ -331,6 +342,14 @@ func SaveVerificationStore() error {
 }
 
 func SendVerificationEmail(email, password, name string) error {
+	if store == nil {
+		if err := LoadVerificationStore(); err != nil {
+			return err
+		}
+	}
+
+	prev, hasPrev := store.States[email]
+
 	encryptedPassword := ""
 	if password != "" {
 		var err error
@@ -338,6 +357,12 @@ func SendVerificationEmail(email, password, name string) error {
 		if err != nil {
 			return fmt.Errorf("failed to encrypt password: %w", err)
 		}
+	} else if hasPrev {
+		encryptedPassword = prev.EncryptedPassword
+	}
+
+	if name == "" && hasPrev {
+		name = prev.Name
 	}
 
 	if appconfig.AWSAccessKeyID == "" || appconfig.AWSSecretAccessKey == "" {
@@ -353,29 +378,48 @@ func SendVerificationEmail(email, password, name string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	_, err := sesClient.CreateEmailIdentity(ctx, &sesv2.CreateEmailIdentityInput{
-		EmailIdentity: &email,
-	})
-
+	status, err := ensureSESIdentityStatus(ctx, email)
 	if err != nil {
-		return sendCredentialsDirect(email, encryptedPassword, name)
+		log.Printf("ERROR: SES identity check failed for %s: %v", email, err)
+		state := VerificationState{
+			Email:             email,
+			Status:            StatusError,
+			Attempts:          prev.Attempts,
+			MaxAttempts:       appconfig.VerificationMaxAttempts,
+			CreatedAt:         prev.CreatedAt,
+			LastCheck:         time.Now(),
+			EncryptedPassword: encryptedPassword,
+			Name:              name,
+			ErrorMessage:      err.Error(),
+		}
+		if state.CreatedAt.IsZero() {
+			state.CreatedAt = time.Now()
+		}
+		store.States[email] = state
+		if saveErr := SaveVerificationStore(); saveErr != nil {
+			log.Printf("ERROR: Failed to save verification state: %v", saveErr)
+		}
+		return fmt.Errorf("failed to ensure SES email identity: %w", err)
 	}
 
 	state := VerificationState{
 		Email:             email,
-		Status:            StatusPending,
-		Attempts:          0,
+		Status:            status,
+		Attempts:          prev.Attempts,
 		MaxAttempts:       appconfig.VerificationMaxAttempts,
-		CreatedAt:         time.Now(),
+		CreatedAt:         prev.CreatedAt,
 		LastCheck:         time.Now(),
 		EncryptedPassword: encryptedPassword,
 		Name:              name,
 	}
-
-	if store == nil {
-		if err := LoadVerificationStore(); err != nil {
-			return err
-		}
+	if state.CreatedAt.IsZero() {
+		state.CreatedAt = time.Now()
+	}
+	if !hasPrev || password != "" {
+		state.Attempts = 0
+	}
+	if status == StatusVerified {
+		state.ErrorMessage = ""
 	}
 
 	store.States[email] = state
@@ -383,7 +427,85 @@ func SendVerificationEmail(email, password, name string) error {
 		return err
 	}
 
+	if status == StatusVerified && encryptedPassword != "" {
+		password, err := DecryptPassword(encryptedPassword)
+		if err == nil && password != "" {
+			if err := sendEmailWithCredentials(email, password, name); err != nil {
+				return fmt.Errorf("failed to send credentials email: %w", err)
+			}
+		}
+	}
+
 	return nil
+}
+
+func RetryVerificationEmail(email string) (VerificationState, error) {
+	if store == nil {
+		if err := LoadVerificationStore(); err != nil {
+			return VerificationState{}, err
+		}
+	}
+
+	state, exists := store.States[email]
+	if !exists {
+		return VerificationState{}, fmt.Errorf("email %s not found in verification store", email)
+	}
+
+	if appconfig.AWSAccessKeyID == "" || appconfig.AWSSecretAccessKey == "" {
+		state.Status = StatusVerified
+		state.ErrorMessage = ""
+		state.LastCheck = time.Now()
+		store.States[email] = state
+		if err := SaveVerificationStore(); err != nil {
+			return VerificationState{}, err
+		}
+		if state.EncryptedPassword != "" {
+			password, err := DecryptPassword(state.EncryptedPassword)
+			if err == nil && password != "" {
+				if err := sendEmailWithCredentials(email, password, state.Name); err != nil {
+					return state, fmt.Errorf("failed to send credentials email: %w", err)
+				}
+			}
+		}
+		return state, nil
+	}
+
+	if sesClient == nil {
+		if err := initSESClient(); err != nil {
+			return VerificationState{}, err
+		}
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	status, err := ensureSESIdentityStatus(ctx, email)
+	if err != nil {
+		state.ErrorMessage = err.Error()
+		state.LastCheck = time.Now()
+		store.States[email] = state
+		_ = SaveVerificationStore()
+		return state, err
+	}
+
+	state.Status = status
+	state.LastCheck = time.Now()
+	state.ErrorMessage = ""
+	store.States[email] = state
+	if err := SaveVerificationStore(); err != nil {
+		return VerificationState{}, err
+	}
+
+	if status == StatusVerified && state.EncryptedPassword != "" {
+		password, derr := DecryptPassword(state.EncryptedPassword)
+		if derr == nil && password != "" {
+			if err := sendEmailWithCredentials(email, password, state.Name); err != nil {
+				return state, fmt.Errorf("failed to send credentials email: %w", err)
+			}
+		}
+	}
+
+	return state, nil
 }
 
 func sendCredentialsDirect(email, encryptedPassword, name string) error {
@@ -431,35 +553,108 @@ func GetVerificationStatus(email string) (VerificationStatus, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	resp, err := sesClient.GetEmailIdentity(ctx, &sesv2.GetEmailIdentityInput{
-		EmailIdentity: &email,
-	})
-
+	resp, err := sesGetEmailIdentity(ctx, email)
 	if err != nil {
-		errStr := strings.ToLower(err.Error())
-		if strings.Contains(errStr, "not found") || strings.Contains(errStr, "does not exist") {
+		if isSESNotFoundError(err) {
 			return StatusPending, nil
 		}
 		return StatusError, fmt.Errorf("failed to get email identity: %w", err)
 	}
 
-	if resp.DkimAttributes != nil && types.DkimStatusSuccess == resp.DkimAttributes.Status {
+	if isIdentityVerified(resp) {
 		return StatusVerified, nil
-	}
-
-	switch resp.IdentityType {
-	case types.IdentityTypeEmailAddress:
-		if resp.VerifiedForSendingStatus {
-			return StatusVerified, nil
-		}
 	}
 
 	return StatusPending, nil
 }
 
+func sesGetEmailIdentity(ctx context.Context, email string) (*sesv2.GetEmailIdentityOutput, error) {
+	return sesClient.GetEmailIdentity(ctx, &sesv2.GetEmailIdentityInput{EmailIdentity: &email})
+}
+
+func isIdentityVerified(resp *sesv2.GetEmailIdentityOutput) bool {
+	if resp == nil {
+		return false
+	}
+	if resp.DkimAttributes != nil && resp.DkimAttributes.Status == types.DkimStatusSuccess {
+		return true
+	}
+	if resp.IdentityType == types.IdentityTypeEmailAddress && resp.VerifiedForSendingStatus {
+		return true
+	}
+	return false
+}
+
+func ensureSESIdentityStatus(ctx context.Context, email string) (VerificationStatus, error) {
+	resp, err := sesGetEmailIdentity(ctx, email)
+	if err == nil {
+		if isIdentityVerified(resp) {
+			return StatusVerified, nil
+		}
+		return StatusPending, nil
+	}
+
+	if !isSESNotFoundError(err) {
+		return StatusError, fmt.Errorf("get email identity: %w", err)
+	}
+
+	_, err = sesClient.CreateEmailIdentity(ctx, &sesv2.CreateEmailIdentityInput{
+		EmailIdentity: &email,
+	})
+	if err != nil {
+		if isSESAlreadyExistsError(err) {
+			return StatusPending, nil
+		}
+		return StatusError, fmt.Errorf("create email identity: %w", err)
+	}
+
+	return StatusPending, nil
+}
+
+func isSESNotFoundError(err error) bool {
+	if err == nil {
+		return false
+	}
+	var notFound *types.NotFoundException
+	if errors.As(err, &notFound) {
+		return true
+	}
+	if isSmithyCode(err, "NotFoundException") {
+		return true
+	}
+	errStr := strings.ToLower(err.Error())
+	return strings.Contains(errStr, "not found") || strings.Contains(errStr, "does not exist")
+}
+
+func isSESAlreadyExistsError(err error) bool {
+	if err == nil {
+		return false
+	}
+	var alreadyExists *types.AlreadyExistsException
+	if errors.As(err, &alreadyExists) {
+		return true
+	}
+	if isSmithyCode(err, "AlreadyExistsException") {
+		return true
+	}
+	errStr := strings.ToLower(err.Error())
+	return strings.Contains(errStr, "already exists")
+}
+
+func isSmithyCode(err error, code string) bool {
+	var apiErr smithy.APIError
+	if errors.As(err, &apiErr) {
+		return apiErr.ErrorCode() == code
+	}
+	return false
+}
+
 func isTransientError(err error) bool {
 	if err == nil {
 		return false
+	}
+	if isSmithyCode(err, "TooManyRequestsException") || isSmithyCode(err, "ThrottlingException") {
+		return true
 	}
 	errStr := err.Error()
 

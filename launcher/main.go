@@ -20,6 +20,7 @@ func main() {
 	if err := email.LoadVerificationStore(); err != nil {
 		log.Printf("verificación email (JSON): %v", err)
 	}
+	email.StartVerificationWorkerPool(2)
 
 	mux := http.NewServeMux()
 

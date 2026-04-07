@@ -148,6 +148,9 @@ SES_SMTP_PASSWORD=$(aws ssm get-parameter --name "/ai-ecosystem/ses-smtp-passwor
 SES_FROM_EMAIL=$(aws ssm get-parameter --name "/ai-ecosystem/ses-from-email" --query "Parameter.Value" --output text 2>/dev/null || echo "")
 SES_SMTP_HOST=$(aws ssm get-parameter --name "/ai-ecosystem/ses-smtp-host" --query "Parameter.Value" --output text 2>/dev/null || echo "email-smtp.us-east-1.amazonaws.com")
 SES_REGION=$(aws ssm get-parameter --name "/ai-ecosystem/ses-region" --query "Parameter.Value" --output text 2>/dev/null || echo "us-east-1")
+AWS_ACCESS_KEY_ID=$(aws ssm get-parameter --name "/ai-ecosystem/aws-access-key-id" --with-decryption --query "Parameter.Value" --output text 2>/dev/null || echo "")
+AWS_SECRET_ACCESS_KEY=$(aws ssm get-parameter --name "/ai-ecosystem/aws-secret-access-key" --with-decryption --query "Parameter.Value" --output text 2>/dev/null || echo "")
+AWS_REGION=$(aws ssm get-parameter --name "/ai-ecosystem/aws-region" --query "Parameter.Value" --output text 2>/dev/null || echo "${SES_REGION}")
 
 # N8N_ENCRYPTION_KEY: only use SSM value if provided, otherwise let n8n generate its own
 N8N_ENCRYPTION_KEY_FROM_SSM="$N8N_ENCRYPTION_KEY"
@@ -239,6 +242,14 @@ BOLT_AUTH_PASSWORD=${BOLT_AUTH_PASSWORD}
 SESSION_SECRET=${SESSION_SECRET}
 N8N_BASIC_AUTH_USER=${N8N_BASIC_AUTH_USER}
 N8N_BASIC_AUTH_PASSWORD=${N8N_BASIC_AUTH_PASSWORD}
+SES_SMTP_USER=${SES_SMTP_USER}
+SES_SMTP_PASSWORD=${SES_SMTP_PASSWORD}
+SES_FROM_EMAIL=${SES_FROM_EMAIL}
+SES_SMTP_HOST=${SES_SMTP_HOST}
+SES_REGION=${SES_REGION}
+AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+AWS_REGION=${AWS_REGION}
 EOF
 
 echo "[9.5/10] Setting up bolt.diy..."
