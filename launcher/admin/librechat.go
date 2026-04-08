@@ -416,6 +416,42 @@ func updateLibreChatUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	passwordNotificationQueued := false
+	if reqBody.Password != "" {
+		notificationBody := fmt.Sprintf(`<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cambio de contraseña</title>
+    <style>
+        body { font-family: "Plus Jakarta Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #f8fafc; margin: 0; padding: 28px 16px; }
+        .wrap { max-width: 520px; margin: 0 auto; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 14px; overflow: hidden; }
+        .hd { background: #0f172a; color: #ffffff; padding: 20px; font-size: 18px; font-weight: 700; }
+        .bd { padding: 22px; color: #0f172a; line-height: 1.55; }
+        .muted { color: #64748b; font-size: 14px; }
+    </style>
+</head>
+<body>
+    <div class="wrap">
+        <div class="hd">Cambio de contraseña</div>
+        <div class="bd">
+            <p>Hola %s,</p>
+            <p>Te informamos que un administrador cambió la contraseña de tu cuenta de LibreChat.</p>
+            <p>Si no reconoces este cambio, contacta al administrador de tu plataforma.</p>
+            <p class="muted">Cuenta: %s</p>
+        </div>
+    </div>
+</body>
+</html>`, reqBody.Name, reqBody.Email)
+		queued, mailErr := emailpkg.SendEmailWhenVerified(reqBody.Email, "Cambio de contraseña en tu cuenta", notificationBody)
+		if mailErr != nil {
+			log.Printf("gestion: error enviando notificación cambio contraseña a %s: %v", reqBody.Email, mailErr)
+		} else {
+			passwordNotificationQueued = queued
+		}
+	}
+
 	var u lcUser
 	if err := coll.FindOne(ctx, bson.M{"email": reqBody.Email}).Decode(&u); err == nil {
 		co := strings.TrimSpace(u.Company)
@@ -427,7 +463,7 @@ func updateLibreChatUser(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	jsonOK(w, map[string]string{"updated": reqBody.Email})
+	jsonOK(w, map[string]interface{}{"updated": reqBody.Email, "queued": passwordNotificationQueued})
 }
 
 func StartVerificationPolling(email string) {

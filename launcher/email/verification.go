@@ -192,6 +192,7 @@ func processVerification(email string) {
 	}
 
 	if state.Status == StatusVerified {
+		flushPendingEmailTasksForAddress(email)
 		password := ""
 		if state.EncryptedPassword != "" {
 			password, _ = DecryptPassword(state.EncryptedPassword)
@@ -264,12 +265,25 @@ type VerificationStore struct {
 	States map[string]VerificationState `json:"states"`
 }
 
+type PendingEmailTask struct {
+	Email     string    `json:"email"`
+	Subject   string    `json:"subject"`
+	Body      string    `json:"body"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+type PendingEmailQueue struct {
+	Tasks []PendingEmailTask `json:"tasks"`
+}
+
 var (
 	sesClient         *sesv2.Client
 	store             *VerificationStore
+	pendingEmailQueue *PendingEmailQueue
 	verificationQueue chan string
 	activePolling     = make(map[string]bool)
 	pollingMu         sync.Mutex
+	pendingEmailMu    sync.Mutex
 )
 
 func initSESClient() error {
@@ -339,6 +353,242 @@ func SaveVerificationStore() error {
 	}
 
 	return nil
+}
+
+func pendingEmailQueueFilePath() string {
+	dataPath := appconfig.VerificationDataPath
+	if dataPath == "" {
+		dataPath = "/app/data"
+	}
+	return filepath.Join(dataPath, "pending_email_queue.json")
+}
+
+func loadPendingEmailQueue() error {
+	if pendingEmailQueue != nil {
+		return nil
+	}
+	pendingEmailQueue = &PendingEmailQueue{Tasks: []PendingEmailTask{}}
+	filePath := pendingEmailQueueFilePath()
+	if _, err := os.Stat(filePath); err == nil {
+		data, err := os.ReadFile(filePath)
+		if err != nil {
+			return fmt.Errorf("failed to read pending email queue: %w", err)
+		}
+		if len(data) > 0 {
+			if err := json.Unmarshal(data, pendingEmailQueue); err != nil {
+				return fmt.Errorf("failed to parse pending email queue: %w", err)
+			}
+		}
+	}
+	if pendingEmailQueue.Tasks == nil {
+		pendingEmailQueue.Tasks = []PendingEmailTask{}
+	}
+	return nil
+}
+
+func savePendingEmailQueue() error {
+	if pendingEmailQueue == nil {
+		pendingEmailQueue = &PendingEmailQueue{Tasks: []PendingEmailTask{}}
+	}
+	filePath := pendingEmailQueueFilePath()
+	if err := os.MkdirAll(filepath.Dir(filePath), 0755); err != nil {
+		return fmt.Errorf("failed to create pending queue directory: %w", err)
+	}
+	data, err := json.MarshalIndent(pendingEmailQueue, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to marshal pending email queue: %w", err)
+	}
+	if err := os.WriteFile(filePath, data, 0644); err != nil {
+		return fmt.Errorf("failed to save pending email queue: %w", err)
+	}
+	return nil
+}
+
+func queuePendingEmailTask(task PendingEmailTask) error {
+	pendingEmailMu.Lock()
+	defer pendingEmailMu.Unlock()
+
+	if err := loadPendingEmailQueue(); err != nil {
+		return err
+	}
+
+	for _, existing := range pendingEmailQueue.Tasks {
+		if strings.EqualFold(existing.Email, task.Email) && existing.Subject == task.Subject && existing.Body == task.Body {
+			return nil
+		}
+	}
+
+	if task.CreatedAt.IsZero() {
+		task.CreatedAt = time.Now()
+	}
+	pendingEmailQueue.Tasks = append(pendingEmailQueue.Tasks, task)
+	return savePendingEmailQueue()
+}
+
+func ensureVerificationStateForEmail(email string) error {
+	if store == nil {
+		if err := LoadVerificationStore(); err != nil {
+			return err
+		}
+	}
+	if _, exists := store.States[email]; exists {
+		return nil
+	}
+	store.States[email] = VerificationState{
+		Email:       email,
+		Status:      StatusPending,
+		Attempts:    0,
+		MaxAttempts: appconfig.VerificationMaxAttempts,
+		CreatedAt:   time.Now(),
+		LastCheck:   time.Now(),
+	}
+	return SaveVerificationStore()
+}
+
+func flushPendingEmailTasksForAddress(email string) {
+	pendingEmailMu.Lock()
+	defer pendingEmailMu.Unlock()
+
+	if err := loadPendingEmailQueue(); err != nil {
+		log.Printf("ERROR: load pending queue: %v", err)
+		return
+	}
+
+	if len(pendingEmailQueue.Tasks) == 0 {
+		return
+	}
+
+	keep := make([]PendingEmailTask, 0, len(pendingEmailQueue.Tasks))
+	for _, task := range pendingEmailQueue.Tasks {
+		if !strings.EqualFold(task.Email, email) {
+			keep = append(keep, task)
+			continue
+		}
+		if err := SendEmail(task.Email, task.Subject, task.Body); err != nil {
+			log.Printf("ERROR: failed sending queued email to %s: %v", task.Email, err)
+			keep = append(keep, task)
+		}
+	}
+	pendingEmailQueue.Tasks = keep
+	if err := savePendingEmailQueue(); err != nil {
+		log.Printf("ERROR: save pending queue: %v", err)
+	}
+}
+
+func StartPendingEmailDispatcher() {
+	go func() {
+		interval := time.Duration(appconfig.VerificationPollInterval) * time.Minute
+		if interval < time.Minute {
+			interval = time.Minute
+		}
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+
+		for range ticker.C {
+			_ = DispatchPendingEmailQueue()
+		}
+	}()
+}
+
+func DispatchPendingEmailQueue() error {
+	if appconfig.AWSAccessKeyID == "" || appconfig.AWSSecretAccessKey == "" {
+		pendingEmailMu.Lock()
+		defer pendingEmailMu.Unlock()
+		if err := loadPendingEmailQueue(); err != nil {
+			return err
+		}
+		if len(pendingEmailQueue.Tasks) == 0 {
+			return nil
+		}
+		keep := make([]PendingEmailTask, 0, len(pendingEmailQueue.Tasks))
+		for _, task := range pendingEmailQueue.Tasks {
+			if err := SendEmail(task.Email, task.Subject, task.Body); err != nil {
+				keep = append(keep, task)
+			}
+		}
+		pendingEmailQueue.Tasks = keep
+		return savePendingEmailQueue()
+	}
+
+	if sesClient == nil {
+		if err := initSESClient(); err != nil {
+			return err
+		}
+	}
+
+	pendingEmailMu.Lock()
+	if err := loadPendingEmailQueue(); err != nil {
+		pendingEmailMu.Unlock()
+		return err
+	}
+	tasks := append([]PendingEmailTask(nil), pendingEmailQueue.Tasks...)
+	pendingEmailMu.Unlock()
+
+	if len(tasks) == 0 {
+		return nil
+	}
+
+	byEmail := map[string]string{}
+	for _, task := range tasks {
+		key := strings.ToLower(task.Email)
+		if _, exists := byEmail[key]; !exists {
+			byEmail[key] = task.Email
+		}
+	}
+
+	for _, email := range byEmail {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		status, err := ensureSESIdentityStatus(ctx, email)
+		cancel()
+		if err != nil {
+			continue
+		}
+		if status == StatusVerified {
+			flushPendingEmailTasksForAddress(email)
+		} else {
+			_ = ensureVerificationStateForEmail(email)
+		}
+	}
+
+	return nil
+}
+
+func SendEmailWhenVerified(email, subject, body string) (bool, error) {
+	if appconfig.AWSAccessKeyID == "" || appconfig.AWSSecretAccessKey == "" {
+		if err := SendEmail(email, subject, body); err != nil {
+			return false, err
+		}
+		return false, nil
+	}
+
+	if sesClient == nil {
+		if err := initSESClient(); err != nil {
+			return false, err
+		}
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	status, err := ensureSESIdentityStatus(ctx, email)
+	cancel()
+	if err != nil {
+		return false, err
+	}
+
+	if status == StatusVerified {
+		if err := SendEmail(email, subject, body); err != nil {
+			return false, err
+		}
+		return false, nil
+	}
+
+	if err := ensureVerificationStateForEmail(email); err != nil {
+		return true, err
+	}
+	if err := queuePendingEmailTask(PendingEmailTask{Email: email, Subject: subject, Body: body}); err != nil {
+		return true, err
+	}
+	QueueVerification(email)
+	return true, nil
 }
 
 func SendVerificationEmail(email, password, name string) error {

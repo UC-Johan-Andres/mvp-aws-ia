@@ -158,6 +158,7 @@
                     <th>Email</th>
                     <th>Nombre</th>
                     <th>Rol</th>
+                    <th>Status</th>
                     <th>Empresa</th>
                     <th>Acciones</th>
                     {{end}}
@@ -177,7 +178,7 @@
                 </tr>
                 {{else}}
                 <tr>
-                    <td colspan="5" class="empty-state empty-state-soft">
+                    <td colspan="6" class="empty-state empty-state-soft">
                         <div class="empty-state-icon" aria-hidden="true">💬</div>
                         <p class="empty-state-title">No hay cuentas de LibreChat</p>
                         <p class="empty-state-sub">Usa <strong>Nuevo usuario</strong> en esta pestaña para dar de alta el primer acceso.</p>
@@ -198,12 +199,14 @@
                         <span class="role-badge {{if or (eq .Role "ADMIN") (eq .Role "global:admin") (eq .Role "global:owner")}}role-admin{{else}}role-user{{end}}">
                             {{.Role}}{{if .IsPending}} (pendiente){{end}}
                         </span>
-                        {{if eq $tab "librechat"}}
+                    </td>
+                    {{if eq $tab "librechat"}}
+                    <td>
                         <span class="verification-badge verification-{{.VerificationStatus}}">
                             {{if .VerificationStatus}}{{.VerificationStatus}}{{else}}—{{end}}
                         </span>
-                        {{end}}
                     </td>
+                    {{end}}
                     <td>{{.Company}}</td>
                     <td>
                         {{if and (eq $tab "n8n") .InviteURL}}

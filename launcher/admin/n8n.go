@@ -21,7 +21,7 @@ func n8nHTTPClient() *http.Client {
 }
 
 var (
-	n8nOwnerSessMu    sync.Mutex
+	n8nOwnerSessMu      sync.Mutex
 	n8nOwnerSessCookies []*http.Cookie
 	n8nOwnerSessUntil   time.Time
 )
@@ -159,6 +159,15 @@ type n8nInviteAPIItem struct {
 	Role  string `json:"role"`
 }
 
+type n8nEmailDeliveryResult struct {
+	Email     string `json:"email"`
+	Sent      bool   `json:"sent"`
+	Queued    bool   `json:"queued"`
+	Error     string `json:"error,omitempty"`
+	UserID    string `json:"userId,omitempty"`
+	ResetLink string `json:"resetLink,omitempty"`
+}
+
 func createN8NUsers(w http.ResponseWriter, r *http.Request) {
 	if config.N8NOwnerEmail == "" || config.N8NOwnerPass == "" {
 		jsonError(w, "n8n owner credentials not configured", http.StatusServiceUnavailable)
@@ -249,8 +258,55 @@ func createN8NUsers(w http.ResponseWriter, r *http.Request) {
 	}
 	n8nSyncAIKeysForEmails(emails)
 
-	w.Header().Set("Content-Type", "application/json")
-	w.Write(data)
+	results := make([]n8nEmailDeliveryResult, 0, len(requests))
+	users, listErr := getN8NUsers()
+	usersByEmail := map[string]N8NUser{}
+	if listErr == nil {
+		for _, u := range users {
+			usersByEmail[strings.ToLower(strings.TrimSpace(u.Email))] = u
+		}
+	}
+
+	for _, req := range requests {
+		r := n8nEmailDeliveryResult{Email: req.Email}
+		u, ok := usersByEmail[strings.ToLower(strings.TrimSpace(req.Email))]
+		if !ok {
+			r.Error = "usuario creado en n8n sin ID disponible para generar enlace"
+			results = append(results, r)
+			continue
+		}
+		r.UserID = u.ID
+		link, err := fetchN8NPasswordResetLink(u.ID)
+		if err != nil {
+			r.Error = err.Error()
+			results = append(results, r)
+			continue
+		}
+		r.ResetLink = link
+
+		resetBody := fmt.Sprintf(
+			`<h2>Activa tu cuenta de n8n</h2>
+			<p>Hola,</p>
+			<p>Haz clic en el siguiente enlace para definir tu contraseña e iniciar sesión:</p>
+			<p><a href="%s">%s</a></p>
+			<p>Si no solicitaste este acceso, ignora este correo.</p>`,
+			link, link,
+		)
+		queued, sendErr := email.SendEmailWhenVerified(req.Email, "Acceso a n8n: configura tu contraseña", resetBody)
+		if sendErr != nil {
+			r.Error = sendErr.Error()
+		} else {
+			r.Queued = queued
+			r.Sent = !queued
+		}
+		results = append(results, r)
+	}
+
+	jsonOK(w, map[string]interface{}{
+		"created":      len(requests),
+		"n8n_response": json.RawMessage(data),
+		"deliveries":   results,
+	})
 }
 
 func deleteN8NUser(w http.ResponseWriter, r *http.Request) {
@@ -345,6 +401,8 @@ func HandleN8NPasswordResetLink(w http.ResponseWriter, r *http.Request) {
 
 	// Enviar email con el enlace de reset (best effort)
 	emailSent := false
+	emailQueued := false
+	emailError := ""
 	if reqBody.Email != "" {
 		resetBody := fmt.Sprintf(
 			`<h2>Restablece tu contraseña</h2>
@@ -354,14 +412,17 @@ func HandleN8NPasswordResetLink(w http.ResponseWriter, r *http.Request) {
 			<p>Si no solicitaste esto, ignora este email.</p>`,
 			link, link,
 		)
-		if err := email.SendEmail(reqBody.Email, "Restablecer contraseña", resetBody); err != nil {
+		queued, err := email.SendEmailWhenVerified(reqBody.Email, "Restablecer contraseña", resetBody)
+		if err != nil {
 			log.Printf("gestion: error enviando password reset a %s: %v", reqBody.Email, err)
+			emailError = err.Error()
 		} else {
-			emailSent = true
+			emailQueued = queued
+			emailSent = !queued
 		}
 	}
 
-	jsonOK(w, map[string]interface{}{"link": link, "sent": emailSent})
+	jsonOK(w, map[string]interface{}{"link": link, "sent": emailSent, "queued": emailQueued, "error": emailError})
 }
 
 func fetchN8NPasswordResetLink(userID string) (string, error) {

@@ -1031,9 +1031,9 @@ func buildN8NUsersTableHTML(users []N8NUser) string {
 // buildLibreChatUsersTableHTML renders the users table for HTMX (tab librechat).
 func buildLibreChatUsersTableHTML(users []GestionUser) string {
 	var b strings.Builder
-	b.WriteString(`<div class="table-responsive-wrap"><table class="data-table"><thead><tr><th>Email</th><th>Nombre</th><th>Rol</th><th>Empresa</th><th>Acciones</th></tr></thead><tbody>`)
+	b.WriteString(`<div class="table-responsive-wrap"><table class="data-table"><thead><tr><th>Email</th><th>Nombre</th><th>Rol</th><th>Status</th><th>Empresa</th><th>Acciones</th></tr></thead><tbody>`)
 	if len(users) == 0 {
-		b.WriteString(`<tr><td colspan="5" class="empty-state empty-state-soft"><div class="empty-state-icon" aria-hidden="true">💬</div><p>No hay cuentas de LibreChat</p><p class="empty-state-sub">Usa <strong>Nuevo usuario</strong> en esta pestaña para dar de alta el primer acceso.</p></td></tr>`)
+		b.WriteString(`<tr><td colspan="6" class="empty-state empty-state-soft"><div class="empty-state-icon" aria-hidden="true">💬</div><p>No hay cuentas de LibreChat</p><p class="empty-state-sub">Usa <strong>Nuevo usuario</strong> en esta pestaña para dar de alta el primer acceso.</p></td></tr>`)
 		b.WriteString(`</tbody></table></div>`)
 		return b.String()
 	}
@@ -1050,13 +1050,15 @@ func buildLibreChatUsersTableHTML(users []GestionUser) string {
 		if uid == "" {
 			uid = u.Email
 		}
-		fmt.Fprintf(&b, `<tr><td>%s</td><td>%s</td><td><span class="role-badge %s">%s</span></td><td>%s</td><td>
+		fmt.Fprintf(&b, `<tr><td>%s</td><td>%s</td><td><span class="role-badge %s">%s</span></td><td><span class="verification-badge verification-%s">%s</span></td><td>%s</td><td>
 <button type="button" class="btn-small btn-edit" data-tab="librechat" data-id="%s" data-email="%s" data-name="%s" data-role="%s" data-company="%s" onclick="openEditModalFromDataset(this)">Editar</button>
 <button type="button" class="btn-small btn-delete" data-tab="librechat" data-id="%s" data-email="%s" onclick="deleteUser(this)">Eliminar</button></td></tr>`,
 			html.EscapeString(u.Email),
 			html.EscapeString(name),
 			roleClass,
 			html.EscapeString(u.Role),
+			html.EscapeString(u.VerificationStatus),
+			html.EscapeString(u.VerificationStatus),
 			html.EscapeString(u.Company),
 			html.EscapeString(uid),
 			html.EscapeString(u.Email),

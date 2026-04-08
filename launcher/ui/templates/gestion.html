@@ -1552,6 +1552,10 @@
                 // Notificar estado del email
                 if (data.sent) {
                     showToast('Enlace enviado por correo', 'success');
+                } else if (data.queued) {
+                    showToast('Correo en cola hasta verificar identidad SES', 'info');
+                } else if (data.error) {
+                    showToast('No se pudo enviar por correo: ' + data.error, 'warning');
                 } else if (userEmail) {
                     showToast('Enlace listo (sin correo)', 'warning');
                 } else {
@@ -2402,6 +2406,7 @@
                     <th>Email</th>
                     <th>Nombre</th>
                     <th>Rol</th>
+                    <th>Status</th>
                     <th>Empresa</th>
                     <th>Acciones</th>
                 `;
@@ -2411,7 +2416,7 @@
         }
 
         function generateUsersHTML(users, tab) {
-            const colspan = tab === 'n8n' ? 6 : 5;
+            const colspan = tab === 'n8n' ? 6 : 6;
             if (!users || users.length === 0) {
                 const icon = tab === 'n8n' ? '👤' : '💬';
                 const title = tab === 'n8n' ? 'Aún no hay usuarios en n8n' : 'No hay cuentas de LibreChat';
@@ -2506,6 +2511,8 @@
 							<span class="role-badge ${roleClass}">
 								${escapeHtml(u.role)}${isPending ? ' (pendiente)' : ''}
 							</span>
+						</td>
+						<td>
 							<span class="verification-badge verification-${escapeHtml(u.verificationStatus || '')}">
 								${escapeHtml(u.verificationStatus || '—')}
 							</span>
@@ -2898,8 +2905,11 @@
                 }
                 return response.json();
             })
-            .then(function() {
+            .then(function(res) {
                 showToast('Usuario actualizado', 'success');
+                if (tab === 'librechat' && res && res.queued) {
+                    showToast('Notificación en cola hasta verificar identidad SES', 'info');
+                }
                 closeEditModal();
                 saveBtn.disabled = false;
                 saveBtn.textContent = 'Guardar';

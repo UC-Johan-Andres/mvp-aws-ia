@@ -21,6 +21,7 @@ func main() {
 		log.Printf("verificación email (JSON): %v", err)
 	}
 	email.StartVerificationWorkerPool(2)
+	email.StartPendingEmailDispatcher()
 
 	mux := http.NewServeMux()
 
