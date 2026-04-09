@@ -11,17 +11,19 @@ import (
 )
 
 const (
-	MaxServices  = 2
-	Port         = ":8090"
-	CookieName   = "bolt_session"
-	CookieDomain = ".soylideria.com"
-	CookieTTL    = 24 * time.Hour
+	MaxServices         = 2
+	Port                = ":8090"
+	CookieName          = "bolt_session"
+	DefaultCookieDomain = ".soylideria.com"
+	CookieTTL           = 24 * time.Hour
 )
 
 var (
 	AuthUser      = getEnv("AUTH_USER", "admin")
 	AuthPassword  = getEnv("AUTH_PASSWORD", "")
 	SessionSecret = getEnv("SESSION_SECRET", "change_me")
+	CookieDomain  = getEnvAllowEmpty("COOKIE_DOMAIN", DefaultCookieDomain)
+	CookieSecure  = getEnvBool("COOKIE_SECURE", true)
 	AgentSocket   = getEnv("AGENT_SOCKET", "/var/run/docker-agent.sock")
 
 	MongoURI = getEnv("MONGO_URI", "")
@@ -111,6 +113,14 @@ func getEnv(key, fallback string) string {
 	return fallback
 }
 
+func getEnvAllowEmpty(key, fallback string) string {
+	v, ok := os.LookupEnv(key)
+	if ok {
+		return v
+	}
+	return fallback
+}
+
 func getEnvInt(key string, fallback int) int {
 	if v := os.Getenv(key); v != "" {
 		if val, err := strconv.Atoi(v); err == nil {
@@ -118,6 +128,21 @@ func getEnvInt(key string, fallback int) int {
 		}
 	}
 	return fallback
+}
+
+func getEnvBool(key string, fallback bool) bool {
+	v := strings.TrimSpace(strings.ToLower(os.Getenv(key)))
+	if v == "" {
+		return fallback
+	}
+	switch v {
+	case "1", "true", "yes", "on":
+		return true
+	case "0", "false", "no", "off":
+		return false
+	default:
+		return fallback
+	}
 }
 
 // GestionCompanyStorePath ruta del JSON con registro de empresas y asignaciones n8n (email/id → empresa).

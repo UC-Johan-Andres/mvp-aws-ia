@@ -68,7 +68,7 @@ func HandleLogin(w http.ResponseWriter, r *http.Request, renderFn func(http.Resp
 				Path:     "/",
 				Domain:   config.CookieDomain,
 				HttpOnly: true,
-				Secure:   true,
+				Secure:   config.CookieSecure,
 				SameSite: http.SameSiteLaxMode,
 				MaxAge:   int(config.CookieTTL.Seconds()),
 			})

@@ -168,43 +168,30 @@ type n8nEmailDeliveryResult struct {
 	ResetLink string `json:"resetLink,omitempty"`
 }
 
-func createN8NUsers(w http.ResponseWriter, r *http.Request) {
+func createN8NUsersInternal(requests []n8nUserRequest) (map[string]interface{}, error) {
 	if config.N8NOwnerEmail == "" || config.N8NOwnerPass == "" {
-		jsonError(w, "n8n owner credentials not configured", http.StatusServiceUnavailable)
-		return
+		return nil, fmt.Errorf("n8n owner credentials not configured")
 	}
-
-	var requests []n8nUserRequest
-	if err := json.NewDecoder(r.Body).Decode(&requests); err != nil {
-		jsonError(w, "invalid JSON body: "+err.Error(), http.StatusBadRequest)
-		return
-	}
-
 	if len(requests) == 0 {
-		jsonError(w, "empty user list", http.StatusBadRequest)
-		return
+		return nil, fmt.Errorf("empty user list")
 	}
 
 	for _, req := range requests {
 		if req.Role != "global:owner" && req.Role != "global:member" {
-			jsonError(w, fmt.Sprintf("invalid role %q: must be global:owner or global:member", req.Role), http.StatusBadRequest)
-			return
+			return nil, fmt.Errorf("invalid role %q: must be global:owner or global:member", req.Role)
 		}
 	}
 	for _, req := range requests {
 		c := strings.TrimSpace(req.Company)
 		if c != "" && !IsValidGestionCompany(c) {
-			jsonError(w, fmt.Sprintf("empresa no válida: %q", req.Company), http.StatusBadRequest)
-			return
+			return nil, fmt.Errorf("empresa no válida: %q", req.Company)
 		}
 	}
 
 	client := n8nHTTPClient()
-
 	cookies, err := n8nOwnerCookies(client)
 	if err != nil {
-		jsonError(w, "n8n authentication failed: "+err.Error(), http.StatusBadGateway)
-		return
+		return nil, fmt.Errorf("n8n authentication failed: %w", err)
 	}
 
 	apiPayload := make([]n8nInviteAPIItem, len(requests))
@@ -215,8 +202,7 @@ func createN8NUsers(w http.ResponseWriter, r *http.Request) {
 
 	req, err := http.NewRequest(http.MethodPost, config.N8NInternalURL+"/rest/invitations", bytes.NewReader(body))
 	if err != nil {
-		jsonError(w, "failed to create request: "+err.Error(), http.StatusInternalServerError)
-		return
+		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 	if config.N8NBasicUser != "" {
@@ -228,20 +214,48 @@ func createN8NUsers(w http.ResponseWriter, r *http.Request) {
 
 	resp, err := client.Do(req)
 	if err != nil {
-		jsonError(w, "failed to create n8n users: "+err.Error(), http.StatusBadGateway)
-		return
+		return nil, fmt.Errorf("failed to create n8n users: %w", err)
 	}
 	defer resp.Body.Close()
 
 	data, err := io.ReadAll(resp.Body)
 	if err != nil {
-		jsonError(w, "failed to read n8n response: "+err.Error(), http.StatusInternalServerError)
-		return
+		return nil, fmt.Errorf("failed to read n8n response: %w", err)
+	}
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
+		return nil, fmt.Errorf("n8n returned status %d: %s", resp.StatusCode, string(data))
 	}
 
-	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
-		jsonError(w, fmt.Sprintf("n8n returned status %d: %s", resp.StatusCode, string(data)), http.StatusBadGateway)
-		return
+	type n8nInviteResp struct {
+		Data []struct {
+			User struct {
+				ID              string `json:"id"`
+				Email           string `json:"email"`
+				InviteAcceptURL string `json:"inviteAcceptUrl"`
+			} `json:"user"`
+			Error string `json:"error"`
+		} `json:"data"`
+	}
+
+	invitesByEmail := map[string]struct {
+		UserID string
+		Link   string
+	}{}
+	var invitePayload n8nInviteResp
+	if err := json.Unmarshal(data, &invitePayload); err == nil {
+		for _, item := range invitePayload.Data {
+			emailKey := strings.ToLower(strings.TrimSpace(item.User.Email))
+			if emailKey == "" {
+				continue
+			}
+			invitesByEmail[emailKey] = struct {
+				UserID string
+				Link   string
+			}{
+				UserID: strings.TrimSpace(item.User.ID),
+				Link:   strings.TrimSpace(item.User.InviteAcceptURL),
+			}
+		}
 	}
 
 	rows := make([]N8NEmailCompanyRow, 0, len(requests))
@@ -269,25 +283,38 @@ func createN8NUsers(w http.ResponseWriter, r *http.Request) {
 
 	for _, req := range requests {
 		r := n8nEmailDeliveryResult{Email: req.Email}
-		u, ok := usersByEmail[strings.ToLower(strings.TrimSpace(req.Email))]
+		emailKey := strings.ToLower(strings.TrimSpace(req.Email))
+		u, ok := usersByEmail[emailKey]
+		inv, hasInvite := invitesByEmail[emailKey]
+		if !ok && hasInvite && inv.UserID != "" {
+			u = N8NUser{ID: inv.UserID, Email: req.Email}
+			ok = true
+		}
 		if !ok {
 			r.Error = "usuario creado en n8n sin ID disponible para generar enlace"
 			results = append(results, r)
 			continue
 		}
 		r.UserID = u.ID
-		link, err := fetchN8NPasswordResetLink(u.ID)
-		if err != nil {
-			r.Error = err.Error()
-			results = append(results, r)
-			continue
+
+		link := ""
+		if hasInvite {
+			link = strings.TrimSpace(inv.Link)
+		}
+		if link == "" {
+			link, err = fetchN8NPasswordResetLink(u.ID)
+			if err != nil {
+				r.Error = err.Error()
+				results = append(results, r)
+				continue
+			}
 		}
 		r.ResetLink = link
 
 		resetBody := fmt.Sprintf(
 			`<h2>Activa tu cuenta de n8n</h2>
 			<p>Hola,</p>
-			<p>Haz clic en el siguiente enlace para definir tu contraseña e iniciar sesión:</p>
+			<p>Haz clic en el siguiente enlace para aceptar la invitación y completar tu acceso:</p>
 			<p><a href="%s">%s</a></p>
 			<p>Si no solicitaste este acceso, ignora este correo.</p>`,
 			link, link,
@@ -302,11 +329,33 @@ func createN8NUsers(w http.ResponseWriter, r *http.Request) {
 		results = append(results, r)
 	}
 
-	jsonOK(w, map[string]interface{}{
+	return map[string]interface{}{
 		"created":      len(requests),
 		"n8n_response": json.RawMessage(data),
 		"deliveries":   results,
-	})
+	}, nil
+}
+
+func createN8NUsers(w http.ResponseWriter, r *http.Request) {
+	var requests []n8nUserRequest
+	if err := json.NewDecoder(r.Body).Decode(&requests); err != nil {
+		jsonError(w, "invalid JSON body: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+	result, err := createN8NUsersInternal(requests)
+	if err != nil {
+		msg := err.Error()
+		status := http.StatusBadGateway
+		if strings.Contains(msg, "owner credentials") {
+			status = http.StatusServiceUnavailable
+		} else if strings.Contains(msg, "invalid role") || strings.Contains(msg, "empty user list") || strings.Contains(msg, "empresa no válida") {
+			status = http.StatusBadRequest
+		}
+		jsonError(w, msg, status)
+		return
+	}
+
+	jsonOK(w, result)
 }
 
 func deleteN8NUser(w http.ResponseWriter, r *http.Request) {

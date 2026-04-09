@@ -9,3 +9,4 @@ bridge/.env
 docker-compose.override.yml
 bolt.diy/
 deploy-gestion.sh
+docs/

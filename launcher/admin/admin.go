@@ -1,7 +1,6 @@
 package admin
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -519,7 +518,7 @@ func HandleGestionSubmit(w http.ResponseWriter, r *http.Request) {
 	} else if r.FormValue("users_json") != "" {
 		_, err = createUsersFromJSON(tab, r.FormValue("users_json"))
 	} else if tab == "n8n" {
-		_, err = createN8NUsersFromForm(r)
+		err = callN8NCreateAPI(r)
 	} else {
 		err = callLibreChatAPI(r)
 	}
@@ -609,67 +608,18 @@ func createUsersFromJSON(tab string, usersJSON string) ([]byte, error) {
 
 		requests := make([]n8nUserRequest, 0, len(rawUsers))
 		for _, u := range rawUsers {
-			email := u["email"]
 			requests = append(requests, n8nUserRequest{
-				Email:   email,
+				Email:   strings.TrimSpace(u["email"]),
 				Role:    "global:member",
-				Company: u["company"],
+				Company: strings.TrimSpace(u["company"]),
 			})
 		}
 
-		apiPayload := make([]n8nInviteAPIItem, len(requests))
-		for i, req := range requests {
-			apiPayload[i] = n8nInviteAPIItem{Email: req.Email, Role: req.Role}
-		}
-		body, _ := json.Marshal(apiPayload)
-		client := &http.Client{Timeout: 15 * time.Second}
-
-		cookies, err := n8nOwnerCookies(client)
-		if err != nil {
-			return nil, fmt.Errorf("n8n authentication failed: %w", err)
-		}
-
-		req, err := http.NewRequest(http.MethodPost, config.N8NInternalURL+"/rest/invitations", bytes.NewReader(body))
+		result, err := createN8NUsersInternal(requests)
 		if err != nil {
 			return nil, err
 		}
-		req.Header.Set("Content-Type", "application/json")
-		if config.N8NBasicUser != "" {
-			req.SetBasicAuth(config.N8NBasicUser, config.N8NBasicPass)
-		}
-		for _, c := range cookies {
-			req.AddCookie(c)
-		}
-
-		resp, err := client.Do(req)
-		if err != nil {
-			return nil, fmt.Errorf("failed to create n8n users: %w", err)
-		}
-		defer resp.Body.Close()
-
-		data, err := io.ReadAll(resp.Body)
-		if err != nil {
-			return nil, err
-		}
-		if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
-			return nil, fmt.Errorf("n8n status %d: %s", resp.StatusCode, string(data))
-		}
-
-		rows := make([]N8NEmailCompanyRow, 0, len(requests))
-		for _, req := range requests {
-			rows = append(rows, N8NEmailCompanyRow{Email: req.Email, Company: req.Company})
-		}
-		if err := PersistN8NEmailCompanies(rows); err != nil {
-			log.Printf("gestion: persistir empresa n8n (import): %v", err)
-		}
-
-		emails := make([]string, 0, len(requests))
-		for _, req := range requests {
-			emails = append(emails, req.Email)
-		}
-		n8nSyncAIKeysForEmails(emails)
-
-		return data, nil
+		return json.Marshal(result)
 	}
 
 	type result struct {
@@ -1073,52 +1023,13 @@ func buildLibreChatUsersTableHTML(users []GestionUser) string {
 	return b.String()
 }
 
-// Helper: create n8n users from form submission
-func createN8NUsersFromForm(r *http.Request) ([]byte, error) {
+// callN8NCreateAPI crea usuarios n8n desde el formulario de gestión
+// reutilizando la misma lógica central que POST /admin/n8n/users.
+func callN8NCreateAPI(r *http.Request) error {
 	emails := r.Form["email"]
 
 	if len(emails) == 0 {
-		return nil, fmt.Errorf("no users to create")
-	}
-
-	requests := make([]n8nUserRequest, 0, len(emails))
-	for _, email := range emails {
-		requests = append(requests, n8nUserRequest{Email: email, Role: "global:member"})
-	}
-
-	body, _ := json.Marshal(requests)
-
-	client := &http.Client{Timeout: 15 * time.Second}
-
-	cookies, err := n8nOwnerCookies(client)
-	if err != nil {
-		return nil, fmt.Errorf("n8n authentication failed: %w", err)
-	}
-
-	req, err := http.NewRequest(http.MethodPost, config.N8NInternalURL+"/rest/invitations", bytes.NewReader(body))
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Content-Type", "application/json")
-	if config.N8NBasicUser != "" {
-		req.SetBasicAuth(config.N8NBasicUser, config.N8NBasicPass)
-	}
-	for _, c := range cookies {
-		req.AddCookie(c)
-	}
-
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create n8n users: %w", err)
-	}
-	defer resp.Body.Close()
-
-	data, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
-	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
-		return nil, fmt.Errorf("n8n status %d: %s", resp.StatusCode, string(data))
+		return fmt.Errorf("no users to create")
 	}
 
 	company := strings.TrimSpace(r.FormValue("company"))
@@ -1126,22 +1037,53 @@ func createN8NUsersFromForm(r *http.Request) ([]byte, error) {
 		company = GestionDefaultCompany()
 	}
 	if !IsValidGestionCompany(company) {
-		return nil, fmt.Errorf("empresa no válida")
+		return fmt.Errorf("empresa no válida")
 	}
-	var emailsOK []string
+
+	requests := make([]n8nUserRequest, 0, len(emails))
 	for _, email := range emails {
 		e := strings.TrimSpace(email)
-		if e != "" {
-			emailsOK = append(emailsOK, e)
+		if e == "" {
+			continue
+		}
+		requests = append(requests, n8nUserRequest{Email: e, Role: "global:member", Company: company})
+	}
+	if len(requests) == 0 {
+		return fmt.Errorf("no users to create")
+	}
+
+	result, err := createN8NUsersInternal(requests)
+	if err != nil {
+		return err
+	}
+
+	data, _ := json.Marshal(result)
+	var out struct {
+		Deliveries []n8nEmailDeliveryResult `json:"deliveries"`
+	}
+	_ = json.Unmarshal(data, &out)
+
+	var errs []string
+	for _, d := range out.Deliveries {
+		if d.Error != "" {
+			errs = append(errs, fmt.Sprintf("%s: %s", d.Email, d.Error))
 		}
 	}
-	if err := PersistN8NInviteCompanies(emailsOK, company); err != nil {
-		log.Printf("gestion: persistir empresa n8n: %v", err)
+	if len(errs) > 0 {
+		return fmt.Errorf("%s", strings.Join(errs, "; "))
 	}
 
-	n8nSyncAIKeysForEmails(emailsOK)
+	queued := 0
+	for _, d := range out.Deliveries {
+		if d.Queued {
+			queued++
+		}
+	}
+	if queued > 0 {
+		log.Printf("gestion n8n: %d invitaciones en cola por verificación SES", queued)
+	}
 
-	return data, nil
+	return nil
 }
 
 // callLibreChatAPI crea usuarios LibreChat desde el formulario de gestión reutilizando la misma lógica que POST /admin/librechat/users.
