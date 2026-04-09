@@ -655,7 +655,7 @@ type VerificationUpdate struct {
 	Email       string `json:"email"`
 	Status      string `json:"status"`
 	Attempts    int    `json:"attempts"`
-	MaxAttempts int    `json:"max_attempts"`
+	MaxAttempts int    `json:"maxAttempts"`
 	Message     string `json:"message,omitempty"`
 }
 

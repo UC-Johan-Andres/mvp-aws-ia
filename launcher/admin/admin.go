@@ -264,13 +264,25 @@ func getLibreChatUsers() ([]LibreChatUser, error) {
 		if co == "" {
 			co = defCo
 		}
+		verifStatus := getVerificationStatusForEmail(u.Email)
+		if verifStatus == "" {
+			if u.EmailVerified {
+				verifStatus = "verified"
+			} else {
+				verifStatus = "pending"
+			}
+		}
+		canRetry, remainingAttempts := getVerificationRetryInfo(u.Email)
 		result = append(result, LibreChatUser{
-			ID:        u.ID.Hex(),
-			Email:     u.Email,
-			Name:      u.Name,
-			Role:      u.Role,
-			Company:   co,
-			CreatedAt: u.CreatedAt.Format(time.RFC3339),
+			ID:                 u.ID.Hex(),
+			Email:              u.Email,
+			Name:               u.Name,
+			Role:               u.Role,
+			Company:            co,
+			CreatedAt:          u.CreatedAt.Format(time.RFC3339),
+			VerificationStatus: verifStatus,
+			CanRetry:           canRetry,
+			RemainingAttempts:  remainingAttempts,
 		})
 	}
 
@@ -332,16 +344,21 @@ type N8NUser struct {
 	FailedProdExecutions  int64   `json:"failedProdExecutions"`
 	FailureRatePct        float64 `json:"failureRatePct"`
 	RunTimeAvgSeconds     float64 `json:"runTimeAvgSeconds"`
+
+	VerificationStatus string `json:"verificationStatus"`
 }
 
 // LibreChatUser represents a user from LibreChat.
 type LibreChatUser struct {
-	ID        string `json:"id"`
-	Email     string `json:"email"`
-	Name      string `json:"name"`
-	Role      string `json:"role"`
-	Company   string `json:"company,omitempty"`
-	CreatedAt string `json:"createdAt"`
+	ID                 string `json:"id"`
+	Email              string `json:"email"`
+	Name               string `json:"name"`
+	Role               string `json:"role"`
+	Company            string `json:"company,omitempty"`
+	CreatedAt          string `json:"createdAt"`
+	VerificationStatus string `json:"verificationStatus"`
+	CanRetry           bool   `json:"canRetry"`
+	RemainingAttempts  int    `json:"remainingAttempts"`
 }
 
 // gestionTab reads tab from query (GET /gestion/content?tab=) or form field (POST /gestion).
@@ -381,6 +398,7 @@ func gestionUsersForTab(tab string) ([]GestionUser, error) {
 			if name == "" {
 				name = "-"
 			}
+			n8nStatus := computeN8NVerificationStatus(u)
 			users = append(users, GestionUser{
 				ID:                    u.ID,
 				Email:                 u.Email,
@@ -391,6 +409,7 @@ func gestionUsersForTab(tab string) ([]GestionUser, error) {
 				Company:               u.Company,
 				InviteURL:             u.InviteAcceptURL,
 				IsPending:             u.IsPending,
+				VerificationStatus:    n8nStatus,
 				WorkflowsAccesibles:   u.WorkflowsAccesibles,
 				TotalExecutions:       u.TotalExecutions,
 				ProdExecutions:        u.ProdExecutions,
@@ -412,7 +431,6 @@ func gestionUsersForTab(tab string) ([]GestionUser, error) {
 		if id == "" {
 			id = u.Email
 		}
-		canRetry, remainingAttempts := getVerificationRetryInfo(u.Email)
 		users = append(users, GestionUser{
 			ID:                 id,
 			Email:              u.Email,
@@ -420,9 +438,9 @@ func gestionUsersForTab(tab string) ([]GestionUser, error) {
 			Role:               u.Role,
 			Company:            u.Company,
 			CreatedAt:          u.CreatedAt,
-			VerificationStatus: getVerificationStatusForEmail(u.Email),
-			CanRetry:           canRetry,
-			RemainingAttempts:  remainingAttempts,
+			VerificationStatus: u.VerificationStatus,
+			CanRetry:           u.CanRetry,
+			RemainingAttempts:  u.RemainingAttempts,
 		})
 	}
 	return users, nil
@@ -512,13 +530,14 @@ func HandleGestionSubmit(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var err error
+	var n8nSentCount, n8nQueuedCount, n8nErrorCount int
 
 	if r.FormValue("csv_data") != "" {
 		err = fmt.Errorf("la creación por CSV está deshabilitada")
 	} else if r.FormValue("users_json") != "" {
 		_, err = createUsersFromJSON(tab, r.FormValue("users_json"))
 	} else if tab == "n8n" {
-		err = callN8NCreateAPI(r)
+		n8nSentCount, n8nQueuedCount, n8nErrorCount, err = callN8NCreateAPI(r)
 	} else {
 		err = callLibreChatAPI(r)
 	}
@@ -545,6 +564,9 @@ func HandleGestionSubmit(w http.ResponseWriter, r *http.Request) {
 		Tab:            tab,
 		Users:          users,
 		ShowInviteSent: showInviteSent,
+		N8NSentCount:   n8nSentCount,
+		N8NQueuedCount: n8nQueuedCount,
+		N8NErrorCount:  n8nErrorCount,
 	})
 }
 
@@ -888,7 +910,7 @@ func HandleGestionUsersRows(w http.ResponseWriter, r *http.Request) {
 		n8nUsers, err := getN8NUsers()
 		if err != nil {
 			log.Printf("gestion users-rows n8n: %v", err)
-			ui.RenderGestionRows(w, tab, `<div class="table-responsive-wrap"><table class="data-table"><tbody><tr><td colspan="6" class="empty-state empty-state-error"><p>No se pudieron cargar los usuarios.</p><p class="empty-state-sub">Revisa credenciales de n8n y la red.</p></td></tr></tbody></table></div>`)
+			ui.RenderGestionRows(w, tab, `<div class="table-responsive-wrap"><table class="data-table"><tbody><tr><td colspan="7" class="empty-state empty-state-error"><p>No se pudieron cargar los usuarios.</p><p class="empty-state-sub">Revisa credenciales de n8n y la red.</p></td></tr></tbody></table></div>`)
 			return
 		}
 		ui.RenderGestionRows(w, tab, buildN8NUsersTableHTML(n8nUsers))
@@ -898,7 +920,7 @@ func HandleGestionUsersRows(w http.ResponseWriter, r *http.Request) {
 	lcList, err := getLibreChatUsers()
 	if err != nil {
 		log.Printf("gestion users-rows librechat: %v", err)
-		ui.RenderGestionRows(w, tab, `<div class="table-responsive-wrap"><table class="data-table"><tbody><tr><td colspan="5" class="empty-state empty-state-error"><p>No se pudieron cargar los usuarios.</p><p class="empty-state-sub">Comprueba MongoDB y variables de entorno.</p></td></tr></tbody></table></div>`)
+		ui.RenderGestionRows(w, tab, `<div class="table-responsive-wrap"><table class="data-table"><tbody><tr><td colspan="6" class="empty-state empty-state-error"><p>No se pudieron cargar los usuarios.</p><p class="empty-state-sub">Comprueba MongoDB y variables de entorno.</p></td></tr></tbody></table></div>`)
 		return
 	}
 	gu := make([]GestionUser, 0, len(lcList))
@@ -907,7 +929,16 @@ func HandleGestionUsersRows(w http.ResponseWriter, r *http.Request) {
 		if id == "" {
 			id = u.Email
 		}
-		gu = append(gu, GestionUser{ID: id, Email: u.Email, Name: u.Name, Role: u.Role, Company: u.Company})
+		gu = append(gu, GestionUser{
+			ID:                 id,
+			Email:              u.Email,
+			Name:               u.Name,
+			Role:               u.Role,
+			Company:            u.Company,
+			VerificationStatus: u.VerificationStatus,
+			CanRetry:           u.CanRetry,
+			RemainingAttempts:  u.RemainingAttempts,
+		})
 	}
 	ui.RenderGestionRows(w, tab, buildLibreChatUsersTableHTML(gu))
 }
@@ -924,9 +955,9 @@ func fetchN8NUsers() ([]byte, error) {
 // buildN8NUsersTableHTML renders the users table for HTMX (tab n8n).
 func buildN8NUsersTableHTML(users []N8NUser) string {
 	var b strings.Builder
-	b.WriteString(`<div class="table-responsive-wrap"><table class="data-table gestion-table-n8n"><thead><tr><th>Email</th><th>Nombre</th><th>Apellido(s)</th><th>Rol</th><th>Empresa</th><th>Acciones</th></tr></thead><tbody>`)
+	b.WriteString(`<div class="table-responsive-wrap"><table class="data-table gestion-table-n8n"><thead><tr><th>Email</th><th>Nombre</th><th>Apellido(s)</th><th>Rol</th><th>Status</th><th>Empresa</th><th>Acciones</th></tr></thead><tbody>`)
 	if len(users) == 0 {
-		b.WriteString(`<tr><td colspan="6" class="empty-state empty-state-soft"><div class="empty-state-icon" aria-hidden="true">👤</div><p>Aún no hay usuarios en n8n</p><p class="empty-state-sub"><strong>Nuevo usuario</strong> o la consola de n8n.</p></td></tr>`)
+		b.WriteString(`<tr><td colspan="7" class="empty-state empty-state-soft"><div class="empty-state-icon" aria-hidden="true">👤</div><p>Aún no hay usuarios en n8n</p><p class="empty-state-sub"><strong>Nuevo usuario</strong> o la consola de n8n.</p></td></tr>`)
 		b.WriteString(`</tbody></table></div>`)
 		return b.String()
 	}
@@ -947,6 +978,7 @@ func buildN8NUsersTableHTML(users []N8NUser) string {
 		if u.IsPending {
 			roleLabel += " (pendiente)"
 		}
+		n8nStatus := computeN8NVerificationStatus(u)
 		invite := ""
 		if u.InviteAcceptURL != "" {
 			invite = fmt.Sprintf(`<button type="button" class="btn-small btn-invite" onclick="openInviteModalDirect('%s','%s')">Invitar</button> `,
@@ -956,12 +988,14 @@ func buildN8NUsersTableHTML(users []N8NUser) string {
 		if uid == "" {
 			uid = u.Email
 		}
-		fmt.Fprintf(&b, `<tr><td>%s</td><td>%s</td><td>%s</td><td><span class="role-badge %s">%s</span></td><td>%s</td><td>%s<button type="button" class="btn-small btn-edit" data-tab="n8n" data-id="%s" data-email="%s" data-firstname="%s" data-lastname="%s" data-role="%s" data-company="%s" onclick="openEditModalFromDataset(this)">Editar</button> <button type="button" class="btn-small btn-delete" data-tab="n8n" data-id="%s" data-email="%s" onclick="deleteUser(this)">Eliminar</button></td></tr>`,
+		fmt.Fprintf(&b, `<tr><td>%s</td><td>%s</td><td>%s</td><td><span class="role-badge %s">%s</span></td><td><span class="verification-badge verification-%s">%s</span></td><td>%s</td><td>%s<button type="button" class="btn-small btn-edit" data-tab="n8n" data-id="%s" data-email="%s" data-firstname="%s" data-lastname="%s" data-role="%s" data-company="%s" onclick="openEditModalFromDataset(this)">Editar</button> <button type="button" class="btn-small btn-delete" data-tab="n8n" data-id="%s" data-email="%s" onclick="deleteUser(this)">Eliminar</button></td></tr>`,
 			html.EscapeString(u.Email),
 			html.EscapeString(fn),
 			html.EscapeString(ln),
 			roleClass,
 			html.EscapeString(roleLabel),
+			html.EscapeString(n8nStatus),
+			html.EscapeString(n8nStatus),
 			html.EscapeString(u.Company),
 			invite,
 			html.EscapeString(uid),
@@ -1000,9 +1034,25 @@ func buildLibreChatUsersTableHTML(users []GestionUser) string {
 		if uid == "" {
 			uid = u.Email
 		}
-		fmt.Fprintf(&b, `<tr><td>%s</td><td>%s</td><td><span class="role-badge %s">%s</span></td><td><span class="verification-badge verification-%s">%s</span></td><td>%s</td><td>
-<button type="button" class="btn-small btn-edit" data-tab="librechat" data-id="%s" data-email="%s" data-name="%s" data-role="%s" data-company="%s" onclick="openEditModalFromDataset(this)">Editar</button>
-<button type="button" class="btn-small btn-delete" data-tab="librechat" data-id="%s" data-email="%s" onclick="deleteUser(this)">Eliminar</button></td></tr>`,
+		actions := fmt.Sprintf(`<button type="button" class="btn-small btn-edit" data-tab="librechat" data-id="%s" data-email="%s" data-name="%s" data-role="%s" data-company="%s" onclick="openEditModalFromDataset(this)">Editar</button>`,
+			html.EscapeString(uid),
+			html.EscapeString(u.Email),
+			html.EscapeString(name),
+			html.EscapeString(u.Role),
+			html.EscapeString(u.Company),
+		)
+		if u.CanRetry {
+			actions += fmt.Sprintf(` <button type="button" class="btn-small btn-retry" data-email="%s" onclick="retryVerification('%s')">Reintentar (%d)</button>`,
+				html.EscapeString(u.Email),
+				html.EscapeString(u.Email),
+				u.RemainingAttempts,
+			)
+		}
+		actions += fmt.Sprintf(` <button type="button" class="btn-small btn-delete" data-tab="librechat" data-id="%s" data-email="%s" onclick="deleteUser(this)">Eliminar</button>`,
+			html.EscapeString(uid),
+			html.EscapeString(u.Email),
+		)
+		fmt.Fprintf(&b, `<tr><td>%s</td><td>%s</td><td><span class="role-badge %s">%s</span></td><td><span class="verification-badge verification-%s">%s</span></td><td>%s</td><td>%s</td></tr>`,
 			html.EscapeString(u.Email),
 			html.EscapeString(name),
 			roleClass,
@@ -1010,13 +1060,7 @@ func buildLibreChatUsersTableHTML(users []GestionUser) string {
 			html.EscapeString(u.VerificationStatus),
 			html.EscapeString(u.VerificationStatus),
 			html.EscapeString(u.Company),
-			html.EscapeString(uid),
-			html.EscapeString(u.Email),
-			html.EscapeString(name),
-			html.EscapeString(u.Role),
-			html.EscapeString(u.Company),
-			html.EscapeString(uid),
-			html.EscapeString(u.Email),
+			actions,
 		)
 	}
 	b.WriteString(`</tbody></table></div>`)
@@ -1025,11 +1069,11 @@ func buildLibreChatUsersTableHTML(users []GestionUser) string {
 
 // callN8NCreateAPI crea usuarios n8n desde el formulario de gestión
 // reutilizando la misma lógica central que POST /admin/n8n/users.
-func callN8NCreateAPI(r *http.Request) error {
+func callN8NCreateAPI(r *http.Request) (int, int, int, error) {
 	emails := r.Form["email"]
 
 	if len(emails) == 0 {
-		return fmt.Errorf("no users to create")
+		return 0, 0, 0, fmt.Errorf("no users to create")
 	}
 
 	company := strings.TrimSpace(r.FormValue("company"))
@@ -1037,7 +1081,7 @@ func callN8NCreateAPI(r *http.Request) error {
 		company = GestionDefaultCompany()
 	}
 	if !IsValidGestionCompany(company) {
-		return fmt.Errorf("empresa no válida")
+		return 0, 0, 0, fmt.Errorf("empresa no válida")
 	}
 
 	requests := make([]n8nUserRequest, 0, len(emails))
@@ -1049,12 +1093,12 @@ func callN8NCreateAPI(r *http.Request) error {
 		requests = append(requests, n8nUserRequest{Email: e, Role: "global:member", Company: company})
 	}
 	if len(requests) == 0 {
-		return fmt.Errorf("no users to create")
+		return 0, 0, 0, fmt.Errorf("no users to create")
 	}
 
 	result, err := createN8NUsersInternal(requests)
 	if err != nil {
-		return err
+		return 0, 0, 0, err
 	}
 
 	data, _ := json.Marshal(result)
@@ -1070,11 +1114,15 @@ func callN8NCreateAPI(r *http.Request) error {
 		}
 	}
 	if len(errs) > 0 {
-		return fmt.Errorf("%s", strings.Join(errs, "; "))
+		return 0, 0, len(errs), fmt.Errorf("%s", strings.Join(errs, "; "))
 	}
 
+	sent := 0
 	queued := 0
 	for _, d := range out.Deliveries {
+		if d.Sent {
+			sent++
+		}
 		if d.Queued {
 			queued++
 		}
@@ -1083,7 +1131,7 @@ func callN8NCreateAPI(r *http.Request) error {
 		log.Printf("gestion n8n: %d invitaciones en cola por verificación SES", queued)
 	}
 
-	return nil
+	return sent, queued, 0, nil
 }
 
 // callLibreChatAPI crea usuarios LibreChat desde el formulario de gestión reutilizando la misma lógica que POST /admin/librechat/users.
@@ -1150,4 +1198,14 @@ func getVerificationRetryInfo(email string) (bool, int) {
 		return false, 0
 	}
 	return canRetry, remaining
+}
+
+func computeN8NVerificationStatus(u N8NUser) string {
+	if u.IsPending && u.InviteAcceptURL != "" {
+		return "invited"
+	}
+	if u.IsPending {
+		return "pending"
+	}
+	return "active"
 }

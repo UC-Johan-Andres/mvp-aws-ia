@@ -172,6 +172,9 @@ type GestionData struct {
 	Users           interface{}
 	Error           string
 	ShowInviteSent  bool
+	N8NSentCount    int
+	N8NQueuedCount  int
+	N8NErrorCount   int
 	GestionMetaJSON template.JS
 	Companies       []string
 	DefaultCompany  string

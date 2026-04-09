@@ -452,6 +452,11 @@
             background: rgba(107, 114, 128, 0.12);
             color: #6b7280;
         }
+        .verification-invited,
+        .verification-active {
+            background: rgba(37, 99, 235, 0.1);
+            color: #1d4ed8;
+        }
         [data-theme="dark"] .verification-pending {
             background: rgba(251, 191, 36, 0.18);
             color: #fbbf24;
@@ -463,6 +468,11 @@
         [data-theme="dark"] .verification-blocked {
             background: rgba(248, 113, 113, 0.14);
             color: #fca5a5;
+        }
+        [data-theme="dark"] .verification-invited,
+        [data-theme="dark"] .verification-active {
+            background: rgba(96, 165, 250, 0.16);
+            color: #93c5fd;
         }
         
         /* Botón reintentar */
@@ -1288,7 +1298,7 @@
     <div id="invite-sent-modal">
         <div class="modal-content">
             <h3>Listo</h3>
-            <p>Invitación creada en n8n. Sin SMTP configurado, usa <strong>Invitar</strong> en la tabla y copia el enlace.</p>
+            <p id="invite-sent-message">Invitación creada en n8n. Sin SMTP configurado, usa <strong>Invitar</strong> en la tabla y copia el enlace.</p>
             <div class="modal-actions">
                 <button type="button" class="modal-copy" onclick="closeInviteSentModal()">Entendido</button>
             </div>
@@ -1926,6 +1936,42 @@
             document.getElementById('create-user-modal').classList.remove('active');
         }
 
+        function getCreateModalActiveForm() {
+            if (currentTab === 'n8n') return document.getElementById('modal-form-n8n');
+            if (currentTab === 'librechat') return document.getElementById('modal-form-librechat');
+            return null;
+        }
+
+        function setCreateSubmitState(isLoading) {
+            const form = getCreateModalActiveForm();
+            if (!form) return;
+            const btn = form.querySelector('.btn-submit');
+            if (!btn) return;
+            if (isLoading) {
+                if (!btn.dataset.defaultText) btn.dataset.defaultText = btn.textContent;
+                btn.disabled = true;
+                btn.textContent = 'Creando...';
+            } else {
+                btn.disabled = false;
+                btn.textContent = btn.dataset.defaultText || btn.textContent;
+            }
+        }
+
+        function summarizeN8NDeliveriesFromCache() {
+            const data = getCachedUsers();
+            const users = data && Array.isArray(data.n8n) ? data.n8n : [];
+            if (!users.length) return null;
+            let pending = 0;
+            let invited = 0;
+            let active = 0;
+            users.forEach(function(u) {
+                if (u.isPending) pending++;
+                else if (u.inviteAcceptUrl) invited++;
+                else active++;
+            });
+            return { pending: pending, invited: invited, active: active };
+        }
+
         function resetCreateUserModalForms() {
             const n8nRows = document.getElementById('modal-n8n-rows');
             if (n8nRows) {
@@ -2311,12 +2357,43 @@
             if (!evt.detail.target || evt.detail.target.id !== 'main-content') {
                 return;
             }
+            setCreateSubmitState(false);
             closeCreateUserModal();
             if (document.getElementById('gestion-charts-root')) {
                 initGestionChartsPage();
                 return;
             }
             syncGestionUserFormsAfterContentLoad();
+            if (currentTab === 'n8n') {
+                const sum = summarizeN8NDeliveriesFromCache();
+                if (sum) {
+                    showToast('n8n: enviados/activos ' + sum.active + ', invitados ' + sum.invited + ', en cola ' + sum.pending, 'info');
+                }
+            }
+        });
+
+        document.body.addEventListener('htmx:beforeRequest', function(evt) {
+            if (!evt.detail || !evt.detail.elt) return;
+            const id = evt.detail.elt.id || '';
+            if (id === 'modal-form-n8n' || id === 'modal-form-librechat') {
+                setCreateSubmitState(true);
+            }
+        });
+
+        document.body.addEventListener('htmx:responseError', function(evt) {
+            if (!evt.detail || !evt.detail.elt) return;
+            const id = evt.detail.elt.id || '';
+            if (id === 'modal-form-n8n' || id === 'modal-form-librechat') {
+                setCreateSubmitState(false);
+            }
+        });
+
+        document.body.addEventListener('htmx:sendError', function(evt) {
+            if (!evt.detail || !evt.detail.elt) return;
+            const id = evt.detail.elt.id || '';
+            if (id === 'modal-form-n8n' || id === 'modal-form-librechat') {
+                setCreateSubmitState(false);
+            }
         });
 
         function setActiveTab(tab) {
@@ -2396,6 +2473,7 @@
                     <th>Nombre</th>
                     <th>Apellido(s)</th>
                     <th>Rol</th>
+                    <th>Status</th>
                     <th>Empresa</th>
                     <th>Acciones</th>
                 `;
@@ -2416,7 +2494,7 @@
         }
 
         function generateUsersHTML(users, tab) {
-            const colspan = tab === 'n8n' ? 6 : 6;
+            const colspan = tab === 'n8n' ? 7 : 6;
             if (!users || users.length === 0) {
                 const icon = tab === 'n8n' ? '👤' : '💬';
                 const title = tab === 'n8n' ? 'Aún no hay usuarios en n8n' : 'No hay cuentas de LibreChat';
@@ -2442,6 +2520,7 @@
                 const roleClass = getRoleClass(u.role);
                 const userId = u.id || u.email;
                 const co = u.company || gestionMeta().defaultCompany || '';
+                const n8nStatus = u.verificationStatus || (isPending ? 'pending' : (u.inviteAcceptUrl ? 'invited' : 'active'));
 
                 let actions = '';
                 if (tab === 'n8n' && u.inviteAcceptUrl) {
@@ -2496,6 +2575,11 @@
                         <td>
                             <span class="role-badge ${roleClass}">
                                 ${escapeHtml(u.role)}${isPending ? ' (pendiente)' : ''}
+                            </span>
+                        </td>
+                        <td>
+                            <span class="verification-badge verification-${escapeHtml(n8nStatus)}">
+                                ${escapeHtml(n8nStatus)}
                             </span>
                         </td>
                         <td>${escapeHtml(co)}</td>
@@ -2608,7 +2692,22 @@
             document.getElementById('invite-modal').classList.remove('active');
         }
 
-        function openInviteSentModal() {
+        function openInviteSentModal(summary) {
+            const msg = document.getElementById('invite-sent-message');
+            if (msg) {
+                if (summary && typeof summary === 'object') {
+                    const sent = Number(summary.sent || 0);
+                    const queued = Number(summary.queued || 0);
+                    const errors = Number(summary.errors || 0);
+                    msg.innerHTML =
+                        'Invitaciones procesadas. ' +
+                        '<strong>Enviadas:</strong> ' + sent + ' · ' +
+                        '<strong>En cola:</strong> ' + queued + ' · ' +
+                        '<strong>Errores:</strong> ' + errors + '.';
+                } else {
+                    msg.innerHTML = 'Invitación creada en n8n. Sin SMTP configurado, usa <strong>Invitar</strong> en la tabla y copia el enlace.';
+                }
+            }
             document.getElementById('invite-sent-modal').classList.add('active');
         }
 
@@ -2641,11 +2740,13 @@
             if (dataCache.librechat) {
                 const user = dataCache.librechat.find(u => u.email === data.email);
                 if (user) {
+					const attempts = Number(data.attempts ?? 0);
+                    const maxAttempts = Number(data.maxAttempts ?? data.max_attempts ?? 0);
                     user.verificationStatus = data.status;
-                    user.attempts = data.attempts;
-                    user.maxAttempts = data.maxAttempts;
-                    user.canRetry = data.status === 'pending' && data.attempts < data.maxAttempts;
-                    user.remainingAttempts = data.maxAttempts - data.attempts;
+                    user.attempts = attempts;
+                    user.maxAttempts = maxAttempts;
+                    user.canRetry = data.status === 'pending' && attempts < maxAttempts;
+                    user.remainingAttempts = maxAttempts - attempts;
                     setCachedUsers(dataCache);
                 }
             }
@@ -2660,7 +2761,7 @@
                     showToast('Email bloqueado: ' + data.email, 'error');
                     break;
                 case 'pending':
-                    const remaining = data.maxAttempts - data.attempts;
+                    const remaining = Number(data.maxAttempts ?? data.max_attempts ?? 0) - Number(data.attempts ?? 0);
                     showToast('Verificación pendiente: ' + data.email + ' (' + remaining + ' intentos restantes)', 'info');
                     break;
                 default:

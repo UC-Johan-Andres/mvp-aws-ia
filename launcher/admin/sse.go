@@ -128,6 +128,9 @@ func HandleGestionStream(w http.ResponseWriter, r *http.Request) {
 		log.Printf("SSE: failed to get n8n users: %v", err)
 		n8nUsers = []N8NUser{}
 	}
+	for i := range n8nUsers {
+		n8nUsers[i].VerificationStatus = computeN8NVerificationStatus(n8nUsers[i])
+	}
 
 	lcUsers, err := getLibreChatUsers()
 	if err != nil {
@@ -177,13 +180,15 @@ func BroadcastUsersUpdate() {
 		log.Printf("SSE: failed to get n8n users for broadcast: %v", err)
 		n8nUsers = []N8NUser{}
 	}
+	for i := range n8nUsers {
+		n8nUsers[i].VerificationStatus = computeN8NVerificationStatus(n8nUsers[i])
+	}
 
 	lcUsers, err := getLibreChatUsers()
 	if err != nil {
 		log.Printf("SSE: failed to get librechat users for broadcast: %v", err)
 		lcUsers = []LibreChatUser{}
 	}
-
 	data := UsersData{
 		N8N:       n8nUsers,
 		LibreChat: lcUsers,

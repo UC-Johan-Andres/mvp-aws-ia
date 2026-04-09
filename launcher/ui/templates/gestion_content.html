@@ -152,6 +152,7 @@
                     <th>Nombre</th>
                     <th>Apellido(s)</th>
                     <th>Rol</th>
+                    <th>Status</th>
                     <th>Empresa</th>
                     <th>Acciones</th>
                     {{else}}
@@ -170,7 +171,7 @@
                 {{if eq (len $users) 0}}
                 {{if eq $tab "n8n"}}
                 <tr>
-                    <td colspan="6" class="empty-state empty-state-soft">
+                    <td colspan="7" class="empty-state empty-state-soft">
                         <div class="empty-state-icon" aria-hidden="true">👤</div>
                         <p class="empty-state-title">Aún no hay usuarios en n8n</p>
                         <p class="empty-state-sub"><strong>Nuevo usuario</strong> o la consola de n8n.</p>
@@ -200,7 +201,21 @@
                             {{.Role}}{{if .IsPending}} (pendiente){{end}}
                         </span>
                     </td>
-                    {{if eq $tab "librechat"}}
+                    {{if eq $tab "n8n"}}
+                    <td>
+                        {{$st := .VerificationStatus}}
+                        {{if not $st}}
+                            {{if .IsPending}}
+                                {{$st = "pending"}}
+                            {{else if .InviteURL}}
+                                {{$st = "invited"}}
+                            {{else}}
+                                {{$st = "active"}}
+                            {{end}}
+                        {{end}}
+                        <span class="verification-badge verification-{{$st}}">{{$st}}</span>
+                    </td>
+                    {{else if eq $tab "librechat"}}
                     <td>
                         <span class="verification-badge verification-{{.VerificationStatus}}">
                             {{if .VerificationStatus}}{{.VerificationStatus}}{{else}}—{{end}}
@@ -252,7 +267,13 @@
 {{if .ShowInviteSent}}
 <script>
 (function () {
-    if (typeof openInviteSentModal === 'function') openInviteSentModal();
+    if (typeof openInviteSentModal === 'function') {
+        openInviteSentModal({
+            sent: {{.N8NSentCount}},
+            queued: {{.N8NQueuedCount}},
+            errors: {{.N8NErrorCount}}
+        });
+    }
 })();
 </script>
 {{end}}
