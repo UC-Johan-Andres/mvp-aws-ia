@@ -1624,8 +1624,80 @@
             return stored ? JSON.parse(stored) : { n8n: [], librechat: [] };
         }
 
+        function normalizeUserForCache(tab, user) {
+            if (tab === 'n8n') {
+                return {
+                    id: user.id,
+                    email: user.email,
+                    firstName: user.firstName,
+                    lastName: user.lastName,
+                    role: user.role,
+                    company: user.company,
+                    isPending: user.isPending,
+                    inviteAcceptUrl: user.inviteAcceptUrl,
+                    verificationStatus: user.verificationStatus
+                };
+            } else {
+                return {
+                    id: user.id,
+                    email: user.email,
+                    name: user.name,
+                    role: user.role,
+                    company: user.company,
+                    verificationStatus: user.verificationStatus,
+                    canRetry: user.canRetry,
+                    remainingAttempts: user.remainingAttempts
+                };
+            }
+        }
+
         function setCachedUsers(data) {
-            localStorage.setItem('gestionUsers', JSON.stringify(data));
+            const normalized = { n8n: [], librechat: [] };
+            if (data.n8n && Array.isArray(data.n8n)) {
+                normalized.n8n = data.n8n.map(u => normalizeUserForCache('n8n', u));
+            }
+            if (data.librechat && Array.isArray(data.librechat)) {
+                normalized.librechat = data.librechat.map(u => normalizeUserForCache('librechat', u));
+            }
+            localStorage.setItem('gestionUsers', JSON.stringify(normalized));
+        }
+
+        // Refresco robusto post-create para n8n
+        function refreshN8nUsersWithRetry(createdEmails, onFound, onNotFound) {
+            let attempts = 0;
+            const maxAttempts = 3;
+            const delays = [300, 800, 1500];
+            
+            function tryFetch() {
+                attempts++;
+                fetch('/admin/n8n/users', { credentials: 'same-origin' })
+                    .then(function(r) { return r.json(); })
+                    .then(function(j) {
+                        const users = (j.data && j.data.items) || j.data || j;
+                        const found = Array.isArray(users) ? users : [];
+                        
+                        // Verificar si los emails creados ya están en la respuesta
+                        const created = createdEmails || [];
+                        const foundEmails = found.map(function(u) { return (u.email || '').toLowerCase(); });
+                        const allFound = created.length > 0 ? created.every(function(e) { return foundEmails.includes(e.toLowerCase()); }) : found.length > 0;
+                        
+                        if (allFound) {
+                            if (onFound) onFound(found);
+                        } else if (attempts < maxAttempts) {
+                            setTimeout(tryFetch, delays[attempts - 1]);
+                        } else {
+                            if (onNotFound) onNotFound(created);
+                        }
+                    })
+                    .catch(function() {
+                        if (attempts < maxAttempts) {
+                            setTimeout(tryFetch, delays[attempts - 1]);
+                        } else {
+                            if (onNotFound) onNotFound(createdEmails || []);
+                        }
+                    });
+            }
+            tryFetch();
         }
 
         function updateLocalStorageFromResponse(tab, responseData) {
@@ -2364,19 +2436,49 @@
                 return;
             }
             syncGestionUserFormsAfterContentLoad();
-            if (currentTab === 'n8n') {
-                const sum = summarizeN8NDeliveriesFromCache();
-                if (sum) {
-                    showToast('n8n: enviados/activos ' + sum.active + ', invitados ' + sum.invited + ', en cola ' + sum.pending, 'info');
+            
+            // Refresco robusto post-create para n8n - usar emails capturados antes del submit
+            if (currentTab === 'n8n' && _lastCreatedN8nEmails.length > 0) {
+                const errorBanner = document.querySelector('.error-banner');
+                if (!errorBanner) {
+                    showToast('Usuario(s) creado(s), sincronizando...', 'info');
+                    
+                    refreshN8nUsersWithRetry(_lastCreatedN8nEmails, function(foundUsers) {
+                        if (foundUsers && foundUsers.length > 0) {
+                            const data = getCachedUsers();
+                            data.n8n = foundUsers.map(function(u) { return normalizeUserForCache('n8n', u); });
+                            setCachedUsers(data);
+                            renderUsersFromCache('n8n');
+                            showToast('Lista actualizada', 'success');
+                        }
+                        _lastCreatedN8nEmails = [];
+                    }, function(notFoundEmails) {
+                        showToast('Usuario(s) creado(s), la lista se actualizará automáticamente', 'info');
+                        _lastCreatedN8nEmails = [];
+                    });
                 }
             }
         });
+
+        // Variable global para capturar emails antes de submit
+        let _lastCreatedN8nEmails = [];
 
         document.body.addEventListener('htmx:beforeRequest', function(evt) {
             if (!evt.detail || !evt.detail.elt) return;
             const id = evt.detail.elt.id || '';
             if (id === 'modal-form-n8n' || id === 'modal-form-librechat') {
                 setCreateSubmitState(true);
+                // Capturar emails antes de que se envíe el formulario
+                if (id === 'modal-form-n8n') {
+                    const form = evt.detail.elt;
+                    const emailInputs = form.querySelectorAll('input[name="email"]');
+                    _lastCreatedN8nEmails = [];
+                    emailInputs.forEach(function(input) {
+                        if (input.value && input.value.trim()) {
+                            _lastCreatedN8nEmails.push(input.value.trim());
+                        }
+                    });
+                }
             }
         });
 
@@ -2385,6 +2487,7 @@
             const id = evt.detail.elt.id || '';
             if (id === 'modal-form-n8n' || id === 'modal-form-librechat') {
                 setCreateSubmitState(false);
+                _lastCreatedN8nEmails = [];
             }
         });
 
@@ -2393,6 +2496,7 @@
             const id = evt.detail.elt.id || '';
             if (id === 'modal-form-n8n' || id === 'modal-form-librechat') {
                 setCreateSubmitState(false);
+                _lastCreatedN8nEmails = [];
             }
         });
 
@@ -2624,17 +2728,13 @@
         document.body.addEventListener('htmx:sseBeforeMessage', function(evt) {
             const eventName = evt.detail.type;
             
-            console.log('SSE BeforeMessage:', eventName);
-            
             if (eventName === 'init' || eventName === 'users_updated') {
                 try {
                     // 1. Parsear JSON del servidor
                     const data = JSON.parse(evt.detail.data);
                     
-                    // 2. Guardar en localStorage
+                    // 2. Guardar en localStorage (ya normalizado)
                     setCachedUsers(data);
-                    
-                    console.log('localStorage updated:', data);
                     
                     isInitialized = true;
                     
@@ -2661,7 +2761,6 @@
             if (eventName === 'verification_update') {
                 try {
                     const data = JSON.parse(evt.detail.data);
-                    console.log('Verification update:', data);
                     
                     evt.preventDefault();
                     
