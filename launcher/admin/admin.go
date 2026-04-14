@@ -570,6 +570,20 @@ func HandleGestionSubmit(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// HandleGestionUsersAPI returns the minimal UI payload for frontend consumption.
+// Used by SSE refresh and HTMX-based refresh to ensure consistent payload.
+func HandleGestionUsersAPI(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	data := buildGestionUsersData()
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-cache")
+	json.NewEncoder(w).Encode(data)
+}
+
 // createUsersFromCSV creates users from CSV string.
 func createUsersFromCSV(tab string, csvData string) ([]byte, error) {
 	lines := strings.Split(strings.TrimSpace(csvData), "\n")

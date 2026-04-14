@@ -524,6 +524,41 @@
             color: #6c757d;
             cursor: not-allowed;
         }
+        .pagination-controls {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            padding: 12px 0 4px;
+            flex-wrap: wrap;
+        }
+        .pagination-info {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            min-width: 80px;
+            text-align: center;
+        }
+        .pagination-page {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+        }
+        .btn-pagination {
+            background: var(--surface-muted);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            padding: 4px 10px;
+            font-size: 0.82rem;
+            cursor: pointer;
+            transition: background 0.15s;
+        }
+        .btn-pagination:hover:not(:disabled) {
+            background: var(--surface-hover);
+        }
+        .btn-pagination:disabled {
+            background: #e9ecef;
+            color: #6c757d;
+            cursor: not-allowed;
+        }
         .empty-state {
             text-align: center;
             padding: 48px 24px;
@@ -1618,6 +1653,30 @@
             window.dispatchEvent(new CustomEvent('gestion-theme-change'));
         }
 
+        // Paginacion
+        const PAGE_SIZE = 10;
+        var pageState = { n8n: 1, librechat: 1 };
+
+        function getPage(tab) {
+            return pageState[tab] || 1;
+        }
+
+        function setPage(tab, page) {
+            pageState[tab] = page;
+        }
+
+        function getTotalPages(tab, total) {
+            return Math.max(1, Math.ceil(total / PAGE_SIZE));
+        }
+
+        function clampPage(tab, total) {
+            var totalPages = getTotalPages(tab, total);
+            var current = getPage(tab);
+            if (current > totalPages) {
+                setPage(tab, totalPages);
+            }
+        }
+
         // Funciones para localStorage
         function getCachedUsers() {
             const stored = localStorage.getItem('gestionUsers');
@@ -1670,19 +1729,18 @@
             
             function tryFetch() {
                 attempts++;
-                fetch('/admin/n8n/users', { credentials: 'same-origin' })
+                fetch('/gestion/api/users', { credentials: 'same-origin' })
                     .then(function(r) { return r.json(); })
                     .then(function(j) {
-                        const users = (j.data && j.data.items) || j.data || j;
-                        const found = Array.isArray(users) ? users : [];
+                        const users = (j.n8n && Array.isArray(j.n8n)) ? j.n8n : [];
                         
                         // Verificar si los emails creados ya están en la respuesta
                         const created = createdEmails || [];
-                        const foundEmails = found.map(function(u) { return (u.email || '').toLowerCase(); });
-                        const allFound = created.length > 0 ? created.every(function(e) { return foundEmails.includes(e.toLowerCase()); }) : found.length > 0;
+                        const foundEmails = users.map(function(u) { return (u.email || '').toLowerCase(); });
+                        const allFound = created.length > 0 ? created.every(function(e) { return foundEmails.includes(e.toLowerCase()); }) : users.length > 0;
                         
                         if (allFound) {
-                            if (onFound) onFound(found);
+                            if (onFound) onFound(users);
                         } else if (attempts < maxAttempts) {
                             setTimeout(tryFetch, delays[attempts - 1]);
                         } else {
@@ -1698,18 +1756,6 @@
                     });
             }
             tryFetch();
-        }
-
-        function updateLocalStorageFromResponse(tab, responseData) {
-            const data = getCachedUsers();
-            if (responseData && responseData.email) {
-                const exists = data[tab].find(u => u.email === responseData.email);
-                if (!exists) {
-                    data[tab].push(responseData);
-                }
-            }
-            setCachedUsers(data);
-            renderUsersFromCache(tab);
         }
 
         function removeFromLocalStorage(tab, email) {
@@ -2720,8 +2766,58 @@
 
             updateUsersTableHeader();
             const data = getCachedUsers();
-            const users = data[tab] || [];
-            tbody.innerHTML = generateUsersHTML(users, tab);
+            const allUsers = data[tab] || [];
+            
+            clampPage(tab, allUsers.length);
+            
+            var totalPages = getTotalPages(tab, allUsers.length);
+            var currentPage = getPage(tab);
+            var start = (currentPage - 1) * PAGE_SIZE;
+            var pagedUsers = allUsers.slice(start, start + PAGE_SIZE);
+            
+            tbody.innerHTML = generateUsersHTML(pagedUsers, tab);
+            updatePaginationControls(tab, allUsers.length, currentPage, totalPages);
+        }
+
+        function updatePaginationControls(tab, total, currentPage, totalPages) {
+            var container = document.getElementById('pagination-controls');
+            if (!container) return;
+            
+            if (total <= PAGE_SIZE) {
+                container.innerHTML = '';
+                return;
+            }
+            
+            var start = (currentPage - 1) * PAGE_SIZE + 1;
+            var end = Math.min(currentPage * PAGE_SIZE, total);
+            
+            container.innerHTML = `
+                <div class="pagination-controls">
+                    <span class="pagination-info">${start}-${end} de ${total}</span>
+                    <button type="button" class="btn-small btn-pagination" onclick="prevPage('${tab}')" ${currentPage <= 1 ? 'disabled' : ''}>Anterior</button>
+                    <span class="pagination-page">Pagina ${currentPage} de ${totalPages}</span>
+                    <button type="button" class="btn-small btn-pagination" onclick="nextPage('${tab}')" ${currentPage >= totalPages ? 'disabled' : ''}>Siguiente</button>
+                </div>
+            `;
+        }
+
+        function prevPage(tab) {
+            var current = getPage(tab);
+            if (current > 1) {
+                setPage(tab, current - 1);
+                renderUsersFromCache(tab);
+            }
+        }
+
+        function nextPage(tab) {
+            var data = getCachedUsers();
+            var total = (data[tab] || []).length;
+            var totalPages = getTotalPages(tab, total);
+            var current = getPage(tab);
+            if (current < totalPages) {
+                setPage(tab, current + 1);
+                renderUsersFromCache(tab);
+            }
         }
 
         // SSE: interceptar ANTES del swap - usar localStorage

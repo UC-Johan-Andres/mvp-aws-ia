@@ -9,6 +9,30 @@ import (
 	"time"
 )
 
+// buildGestionUsersData returns the minimal UI payload for SSE and API endpoints.
+// It ensures n8n and librechat users have exactly the fields the frontend needs.
+func buildGestionUsersData() UsersData {
+	n8nUsers, err := getN8NUsers()
+	if err != nil {
+		log.Printf("buildGestionUsersData: failed to get n8n users: %v", err)
+		n8nUsers = []N8NUser{}
+	}
+	for i := range n8nUsers {
+		n8nUsers[i].VerificationStatus = computeN8NVerificationStatus(n8nUsers[i])
+	}
+
+	lcUsers, err := getLibreChatUsers()
+	if err != nil {
+		log.Printf("buildGestionUsersData: failed to get librechat users: %v", err)
+		lcUsers = []LibreChatUser{}
+	}
+
+	return UsersData{
+		N8N:       n8nUsers,
+		LibreChat: lcUsers,
+	}
+}
+
 type SSEClient struct {
 	ID   string
 	Send chan []byte
@@ -123,25 +147,7 @@ func HandleGestionStream(w http.ResponseWriter, r *http.Request) {
 		globalBroadcaster.unregister <- clientID
 	}()
 
-	n8nUsers, err := getN8NUsers()
-	if err != nil {
-		log.Printf("SSE: failed to get n8n users: %v", err)
-		n8nUsers = []N8NUser{}
-	}
-	for i := range n8nUsers {
-		n8nUsers[i].VerificationStatus = computeN8NVerificationStatus(n8nUsers[i])
-	}
-
-	lcUsers, err := getLibreChatUsers()
-	if err != nil {
-		log.Printf("SSE: failed to get librechat users: %v", err)
-		lcUsers = []LibreChatUser{}
-	}
-
-	initialData := UsersData{
-		N8N:       n8nUsers,
-		LibreChat: lcUsers,
-	}
+	initialData := buildGestionUsersData()
 
 	initialJSON, err := json.Marshal(initialData)
 	if err != nil {
@@ -175,24 +181,7 @@ func HandleGestionStream(w http.ResponseWriter, r *http.Request) {
 }
 
 func BroadcastUsersUpdate() {
-	n8nUsers, err := getN8NUsers()
-	if err != nil {
-		log.Printf("SSE: failed to get n8n users for broadcast: %v", err)
-		n8nUsers = []N8NUser{}
-	}
-	for i := range n8nUsers {
-		n8nUsers[i].VerificationStatus = computeN8NVerificationStatus(n8nUsers[i])
-	}
-
-	lcUsers, err := getLibreChatUsers()
-	if err != nil {
-		log.Printf("SSE: failed to get librechat users for broadcast: %v", err)
-		lcUsers = []LibreChatUser{}
-	}
-	data := UsersData{
-		N8N:       n8nUsers,
-		LibreChat: lcUsers,
-	}
+	data := buildGestionUsersData()
 
 	globalBroadcaster.Broadcast("users_updated", data)
 	log.Printf("SSE: broadcast users_updated to %d clients", globalBroadcaster.ClientCount())

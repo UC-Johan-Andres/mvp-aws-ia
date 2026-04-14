@@ -58,6 +58,7 @@ func main() {
 	mux.HandleFunc("GET /gestion/users-rows", auth.RequireAuth(admin.HandleGestionUsersRows))
 	mux.HandleFunc("GET /gestion/stream", auth.RequireAuth(admin.HandleGestionStream))
 	mux.HandleFunc("GET /gestion/api/stats", auth.RequireAuth(admin.HandleGestionStatsAPI))
+	mux.HandleFunc("GET /gestion/api/users", auth.RequireAuth(admin.HandleGestionUsersAPI))
 	mux.HandleFunc("GET /gestion/charts-content", auth.RequireAuth(admin.HandleGestionChartsContent))
 	hCompanies := auth.RequireAuth(admin.HandleGestionCompaniesAPI)
 	mux.HandleFunc("GET /gestion/api/companies", hCompanies)
