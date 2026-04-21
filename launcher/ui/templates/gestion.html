@@ -1656,13 +1656,20 @@
         // Paginacion
         const PAGE_SIZE = 10;
         var pageState = { n8n: 1, librechat: 1 };
+        var prevUsersLength = { n8n: -1, librechat: -1 };
 
         function getPage(tab) {
-            return pageState[tab] || 1;
+            var stored = null;
+            try { stored = JSON.parse(localStorage.getItem('gestionPagination') || '{}'); } catch(e) {}
+            return pageState[tab] || stored && stored[tab] || 1;
         }
 
         function setPage(tab, page) {
             pageState[tab] = page;
+            var stored = {};
+            try { stored = JSON.parse(localStorage.getItem('gestionPagination') || '{}'); } catch(e) {}
+            stored[tab] = page;
+            localStorage.setItem('gestionPagination', JSON.stringify(stored));
         }
 
         function getTotalPages(tab, total) {
@@ -2024,6 +2031,9 @@
             if (evt.detail.target.id !== 'main-content') return;
             if (typeof updateHeaderNewButtons === 'function') {
                 updateHeaderNewButtons();
+            }
+            if (currentTab === 'n8n' || currentTab === 'librechat') {
+                renderUsersFromCache(currentTab);
             }
         });
 
@@ -2783,6 +2793,9 @@
             var container = document.getElementById('pagination-controls');
             if (!container) return;
             
+            var template = document.getElementById('pagination-template');
+            if (!template) return;
+            
             if (total <= PAGE_SIZE) {
                 container.innerHTML = '';
                 return;
@@ -2791,14 +2804,26 @@
             var start = (currentPage - 1) * PAGE_SIZE + 1;
             var end = Math.min(currentPage * PAGE_SIZE, total);
             
-            container.innerHTML = `
-                <div class="pagination-controls">
-                    <span class="pagination-info">${start}-${end} de ${total}</span>
-                    <button type="button" class="btn-small btn-pagination" onclick="prevPage('${tab}')" ${currentPage <= 1 ? 'disabled' : ''}>Anterior</button>
-                    <span class="pagination-page">Pagina ${currentPage} de ${totalPages}</span>
-                    <button type="button" class="btn-small btn-pagination" onclick="nextPage('${tab}')" ${currentPage >= totalPages ? 'disabled' : ''}>Siguiente</button>
-                </div>
-            `;
+            var clone = template.content.cloneNode(true);
+            clone.querySelector('.pagination-info').textContent = start + '-' + end + ' de ' + total;
+            clone.querySelector('.pagination-page').textContent = 'Pagina ' + currentPage + ' de ' + totalPages;
+            
+            var prevBtn = clone.querySelector('[data-action="prev"]');
+            var nextBtn = clone.querySelector('[data-action="next"]');
+            if (prevBtn) prevBtn.disabled = currentPage <= 1;
+            if (nextBtn) nextBtn.disabled = currentPage >= totalPages;
+            
+            var controlsEl = clone.querySelector('.pagination-controls');
+            if (controlsEl) {
+                controlsEl.addEventListener('click', function(e) {
+                    var action = e.target.getAttribute('data-action');
+                    if (action === 'prev') prevPage(tab);
+                    if (action === 'next') nextPage(tab);
+                });
+            }
+            
+            container.innerHTML = '';
+            container.appendChild(clone);
         }
 
         function prevPage(tab) {
@@ -2834,15 +2859,23 @@
                     
                     isInitialized = true;
                     
-                    // Prevenir el swap automático de HTMX
+                    // 3. Prevenir el swap automático de HTMX
                     evt.preventDefault();
                     
-                    if (eventName === 'users_updated' && (currentTab === 'n8n' || currentTab === 'librechat')) {
+                    // 4. Solo re-renderizar si cambió la cantidad de usuarios
+                    var newN8nLen = (data.n8n || []).length;
+                    var newLcLen = (data.librechat || []).length;
+                    var lengthChanged = (newN8nLen !== prevUsersLength.n8n) || (newLcLen !== prevUsersLength.librechat);
+                    
+                    if (eventName === 'users_updated' && lengthChanged) {
                         showToast('Lista actualizada', 'success');
                     }
                     
-                    // Renderizar desde localStorage
-                    renderUsersFromCache(currentTab);
+                    if (lengthChanged || eventName === 'init') {
+                        prevUsersLength.n8n = newN8nLen;
+                        prevUsersLength.librechat = newLcLen;
+                        renderUsersFromCache(currentTab);
+                    }
                 } catch (e) {
                     console.error('SSE: failed to parse message', e);
                     evt.preventDefault();
