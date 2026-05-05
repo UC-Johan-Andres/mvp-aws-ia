@@ -366,7 +366,7 @@ func gestionTab(r *http.Request) string {
 	tab := r.URL.Query().Get("tab")
 	if tab != "" {
 		switch tab {
-		case "n8n", "librechat", "empresas":
+		case "n8n", "librechat", "empresas", "skills", "estadisticas":
 			return tab
 		default:
 			return "n8n"
@@ -375,7 +375,7 @@ func gestionTab(r *http.Request) string {
 	_ = r.ParseForm()
 	tab = r.FormValue("tab")
 	switch tab {
-	case "n8n", "librechat":
+	case "n8n", "librechat", "empresas", "skills", "estadisticas":
 		return tab
 	default:
 		return "n8n"
@@ -502,6 +502,11 @@ func HandleGestionContent(w http.ResponseWriter, r *http.Request) {
 			EmpresaRows:    buildEmpresaRowsForUI(),
 			Users:          []GestionUser{},
 		})
+		return
+	}
+	// Tab Skills - usa server-side rendering (patrón BFF)
+	if tab == "skills" {
+		ui.RenderSkillsContent(w, IsMigrationCompleted())
 		return
 	}
 	users, err := gestionUsersForTab(tab)

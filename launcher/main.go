@@ -17,6 +17,10 @@ func main() {
 		log.Printf("gestión empresas (JSON): %v", err)
 	}
 
+	if err := admin.InitSkillStore(); err != nil {
+		log.Printf("gestión skills (JSON): %v", err)
+	}
+
 	if err := email.LoadVerificationStore(); err != nil {
 		log.Printf("verificación email (JSON): %v", err)
 	}
@@ -68,6 +72,15 @@ func main() {
 	mux.HandleFunc("PATCH /gestion/api/companies", hCompanies)
 	mux.HandleFunc("POST /gestion/api/companies/sync", auth.RequireAuth(admin.HandleGestionCompanyIntegrationsSyncAPI))
 	mux.HandleFunc("POST /gestion/api/companies/default", auth.RequireAuth(admin.HandleGestionCompaniesDefaultAPI))
+
+	// Gestion - Skills API
+	hSkills := auth.RequireAuth(admin.HandleGestionSkillsAPI)
+	mux.HandleFunc("GET /gestion/api/skills", hSkills)
+	mux.HandleFunc("POST /gestion/api/skills", hSkills)
+	mux.HandleFunc("DELETE /gestion/api/skills", hSkills)
+	mux.HandleFunc("GET /gestion/api/skills/agents", auth.RequireAuth(admin.HandleGestionSkillsAgentsListAPI))
+	mux.HandleFunc("GET /gestion/api/skills/mcp", auth.RequireAuth(admin.HandleGestionSkillsMCPServersAPI))
+	mux.HandleFunc("POST /gestion/api/skills/sync-all", auth.RequireAuth(admin.HandleGestionSkillsSyncAllAPI))
 
 	// Wake (catch-all — called by nginx @launcher on 502)
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {

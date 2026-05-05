@@ -157,3 +157,11 @@ func GestionCompanyStorePath() string {
 func LibreChatMongoDatabase() string {
 	return LibreChatMongoDB
 }
+
+// GestionSkillStorePath ruta del JSON con registro de skills y asignaciones a empresas.
+func GestionSkillStorePath() string {
+	if v := strings.TrimSpace(os.Getenv("GESTION_SKILL_STORE")); v != "" {
+		return v
+	}
+	return filepath.Join(os.TempDir(), "gestion_skill_store.json")
+}

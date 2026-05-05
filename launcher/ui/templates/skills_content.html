@@ -1,0 +1,563 @@
+{{define "skills_content"}}
+<div class="card-body" id="skills-content">
+    <div class="section-title">Gestión de Skills</div>
+    <p class="panel-muted">
+        Asocia agents de LibreChat y workflows MCP de n8n a empresas. 
+        Los usuarios de cada empresa solo verán los skills asignados.
+    </p>
+
+    {{if .Error}}
+    <div class="error-banner">{{.Error}}</div>
+    {{end}}
+
+    <!-- Loading state -->
+    <div id="skills-loading" class="loading-spinner" style="display:none;">
+        <div class="spinner"></div>
+        <span>Cargando skills...</span>
+    </div>
+
+    <!-- Skills Grid -->
+    <div id="skills-grid" class="skills-grid">
+        <!-- Skills de tipo Agent -->
+        <div class="skills-section">
+            <h4 class="skills-section-title">
+                <span class="skills-icon-agent"></span>
+                Agents de LibreChat
+            </h4>
+            <div id="agents-list" class="skills-list">
+                <div class="empty-state-panel">
+                    <p class="empty-state-sub">Cargando agents...</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Skills de tipo MCP -->
+        <div class="skills-section">
+            <h4 class="skills-section-title">
+                <span class="skills-icon-mcp"></span>
+                Workflows MCP (n8n)
+            </h4>
+            <div id="mcp-list" class="skills-list">
+                <div class="empty-state-panel">
+                    <p class="empty-state-sub">Cargando workflows MCP...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Skills Públicos Section -->
+    <div class="skills-section skills-public-section" style="margin-top: 28px;">
+        <h4 class="skills-section-title">
+            <span class="skills-icon-public"></span>
+            Skills Públicos (Default)
+        </h4>
+        <p class="panel-muted" style="margin-bottom: 16px;">
+            Los skills públicos son visibles para todos los usuarios sin importar su empresa.
+        </p>
+        <div id="public-skills-list" class="skills-list-compact">
+            <div class="empty-state-panel">
+                <p class="empty-state-sub">Ningún skill marcado como público</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Estado de Migración -->
+    {{if not .MigrationsCompleted}}
+    <div class="skills-migration-warning" style="margin-top: 24px;">
+        <div class="warning-banner">
+            <strong>⚠️ Migración pendiente</strong>
+            <p>Los usuarios existentes aún no han sido migrados a grupos. 
+               <button type="button" class="btn-small btn-retry" onclick="runSkillsMigration()">Ejecutar migración</button>
+            </p>
+        </div>
+    </div>
+    {{end}}
+</div>
+
+<style>
+.skills-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: 20px;
+    margin-top: 20px;
+}
+.skills-section {
+    background: linear-gradient(180deg, var(--surface) 0%, var(--surface-muted) 100%);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 18px;
+}
+.skills-section-title {
+    font-size: 0.9rem;
+    font-weight: 700;
+    color: var(--text);
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    letter-spacing: -0.01em;
+}
+.skills-icon-agent,
+.skills-icon-mcp,
+.skills-icon-public {
+    width: 20px;
+    height: 20px;
+    border-radius: 6px;
+    flex-shrink: 0;
+}
+.skills-icon-agent {
+    background: linear-gradient(135deg, #2563eb, #8b5cf6);
+}
+.skills-icon-mcp {
+    background: linear-gradient(135deg, #f43f5e, #fb923c);
+}
+.skills-icon-public {
+    background: linear-gradient(135deg, #059669, #14b8a6);
+}
+.skills-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+.skills-list-compact {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+.skill-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 14px;
+    transition: box-shadow 0.2s, border-color 0.2s;
+}
+.skill-card:hover {
+    box-shadow: 0 4px 12px rgba(15, 23, 42, 0.08);
+    border-color: rgba(37, 99, 235, 0.25);
+}
+[data-theme="dark"] .skill-card:hover {
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+    border-color: rgba(96, 165, 250, 0.3);
+}
+.skill-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 10px;
+}
+.skill-card-title {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--text);
+    line-height: 1.3;
+}
+.skill-card-type {
+    font-size: 0.65rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    padding: 3px 8px;
+    border-radius: 999px;
+    background: var(--surface-muted);
+    color: var(--text-muted);
+}
+.skill-card-type.agent {
+    background: rgba(37, 99, 235, 0.1);
+    color: #1d4ed8;
+}
+[data-theme="dark"] .skill-card-type.agent {
+    background: rgba(96, 165, 250, 0.16);
+    color: #93c5fd;
+}
+.skill-card-type.mcp {
+    background: rgba(244, 63, 94, 0.1);
+    color: #be123c;
+}
+[data-theme="dark"] .skill-card-type.mcp {
+    background: rgba(251, 113, 133, 0.16);
+    color: #fda4af;
+}
+.skill-card-desc {
+    font-size: 0.82rem;
+    color: var(--text-muted);
+    margin-bottom: 12px;
+    line-height: 1.4;
+}
+.skill-card-companies {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 12px;
+    min-height: 28px;
+}
+.skill-company-badge {
+    font-size: 0.7rem;
+    font-weight: 600;
+    padding: 4px 10px;
+    border-radius: 999px;
+    background: var(--primary-soft);
+    color: var(--primary);
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+.skill-company-badge button {
+    background: none;
+    border: none;
+    color: inherit;
+    cursor: pointer;
+    font-size: 0.9rem;
+    line-height: 1;
+    padding: 0;
+    margin-left: 2px;
+    opacity: 0.7;
+}
+.skill-company-badge button:hover {
+    opacity: 1;
+}
+.skill-card-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+.skill-card-actions select {
+    flex: 1;
+    min-width: 120px;
+    padding: 6px 10px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    font-size: 0.8rem;
+    font-family: inherit;
+    background: var(--surface);
+    color: var(--text);
+}
+.btn-skill-action {
+    padding: 6px 12px;
+    border: none;
+    border-radius: 8px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    font-family: inherit;
+    cursor: pointer;
+    transition: transform 0.15s, filter 0.15s;
+    white-space: nowrap;
+}
+.btn-skill-action:active {
+    transform: scale(0.97);
+}
+.btn-skill-associate {
+    background: linear-gradient(135deg, #2563eb, #4f46e5);
+    color: white;
+    box-shadow: 0 2px 8px rgba(37, 99, 235, 0.35);
+}
+.btn-skill-associate:hover {
+    filter: brightness(1.06);
+}
+.btn-skill-public {
+    background: linear-gradient(135deg, #059669, #0d9488);
+    color: white;
+    box-shadow: 0 2px 8px rgba(5, 150, 105, 0.3);
+}
+.btn-skill-public:hover {
+    filter: brightness(1.06);
+}
+.btn-skill-public.active {
+    background: linear-gradient(135deg, #dc2626, #b91c1c);
+    box-shadow: 0 2px 8px rgba(220, 38, 38, 0.35);
+}
+.skill-public-badge {
+    font-size: 0.65rem;
+    font-weight: 600;
+    padding: 3px 8px;
+    border-radius: 999px;
+    background: rgba(5, 150, 105, 0.12);
+    color: #047857;
+    margin-left: 8px;
+}
+[data-theme="dark"] .skill-public-badge {
+    background: rgba(52, 211, 153, 0.14);
+    color: #6ee7b7;
+}
+.warning-banner {
+    background: rgba(245, 158, 11, 0.1);
+    border: 1px dashed rgba(245, 158, 11, 0.4);
+    border-radius: var(--radius-sm);
+    padding: 14px 18px;
+    color: #92400e;
+    font-size: 0.9rem;
+}
+.warning-banner strong {
+    display: block;
+    margin-bottom: 6px;
+    color: #b45309;
+}
+.warning-banner p {
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+[data-theme="dark"] .warning-banner {
+    background: rgba(251, 191, 36, 0.1);
+    border-color: rgba(251, 191, 36, 0.35);
+    color: #fbbf24;
+}
+[data-theme="dark"] .warning-banner strong {
+    color: #fcd34d;
+}
+.skills-company-filter {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 16px;
+    padding: 12px 14px;
+    background: var(--surface-muted);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+}
+.skills-company-filter label {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--text-muted);
+}
+.skills-company-filter select {
+    flex: 1;
+    min-width: 160px;
+    padding: 8px 12px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border);
+    font-family: inherit;
+    background: var(--surface);
+    color: var(--text);
+}
+@media (max-width: 640px) {
+    .skills-grid {
+        grid-template-columns: 1fr;
+    }
+    .skill-card-actions {
+        flex-direction: column;
+    }
+    .skill-card-actions select {
+        width: 100%;
+    }
+}
+</style>
+
+<script>
+(function() {
+    // Cargar datos de skills al inicializar
+    if (document.getElementById('skills-content')) {
+        loadSkillsData();
+    }
+})();
+
+function loadSkillsData() {
+    const loading = document.getElementById('skills-loading');
+    if (loading) loading.style.display = 'flex';
+    
+    fetch('/gestion/api/skills', { credentials: 'same-origin' })
+        .then(r => r.json())
+        .then(data => {
+            if (loading) loading.style.display = 'none';
+            renderSkills(data);
+        })
+        .catch(err => {
+            if (loading) loading.style.display = 'none';
+            showToast('Error cargando skills: ' + err.message, 'error');
+        });
+}
+
+function renderSkills(data) {
+    const companies = data.companies || [];
+    const skills = data.skills || [];
+    const companySkills = data.companySkills || {};
+    const defaultSkills = data.defaultSkills || [];
+    
+    // Renderizar Agents
+    const agents = skills.filter(s => s.type === 'agent');
+    const agentsList = document.getElementById('agents-list');
+    if (agentsList) {
+        if (agents.length === 0) {
+            agentsList.innerHTML = `
+                <div class="empty-state-panel">
+                    <p class="empty-state-title">No hay agents</p>
+                    <p class="empty-state-sub">Crea agents en LibreChat primero</p>
+                </div>`;
+        } else {
+            agentsList.innerHTML = agents.map(agent => renderSkillCard(agent, companies, companySkills, defaultSkills)).join('');
+        }
+    }
+    
+    // Renderizar MCPs
+    const mcps = skills.filter(s => s.type === 'mcp');
+    const mcpList = document.getElementById('mcp-list');
+    if (mcpList) {
+        if (mcps.length === 0) {
+            mcpList.innerHTML = `
+                <div class="empty-state-panel">
+                    <p class="empty-state-title">No hay workflows MCP</p>
+                    <p class="empty-state-sub">Activa workflows en n8n primero</p>
+                </div>`;
+        } else {
+            mcpList.innerHTML = mcps.map(mcp => renderSkillCard(mcp, companies, companySkills, defaultSkills)).join('');
+        }
+    }
+    
+    // Renderizar públicos
+    const publicList = document.getElementById('public-skills-list');
+    if (publicList) {
+        const publicSkills = skills.filter(s => defaultSkills.includes(s.id));
+        if (publicSkills.length === 0) {
+            publicList.innerHTML = `
+                <div class="empty-state-panel" style="width:100%;">
+                    <p class="empty-state-sub">Ningún skill marcado como público</p>
+                </div>`;
+        } else {
+            publicList.innerHTML = publicSkills.map(s => `
+                <div class="skill-company-badge">
+                    ${escapeHtml(s.name)}
+                    <button onclick="removeSkillFromDefault('${s.id}')" title="Quitar de públicos">×</button>
+                </div>
+            `).join('');
+        }
+    }
+}
+
+function renderSkillCard(skill, companies, companySkills, defaultSkills) {
+    const isPublic = defaultSkills.includes(skill.id);
+    const assignedCompanies = Object.entries(companySkills)
+        .filter(([_, skills]) => skills.includes(skill.id))
+        .map(([company, _]) => company);
+    
+    return `
+        <div class="skill-card" data-skill-id="${skill.id}">
+            <div class="skill-card-header">
+                <div class="skill-card-title">
+                    ${escapeHtml(skill.name)}
+                    ${isPublic ? '<span class="skill-public-badge">Público</span>' : ''}
+                </div>
+                <span class="skill-card-type ${skill.type}">${skill.type.toUpperCase()}</span>
+            </div>
+            ${skill.description ? `<div class="skill-card-desc">${escapeHtml(skill.description)}</div>` : ''}
+            <div class="skill-card-companies">
+                ${assignedCompanies.map(c => `
+                    <span class="skill-company-badge">
+                        ${escapeHtml(c)}
+                        <button onclick="dissociateSkill('${skill.id}', '${escapeHtml(c)}')" title="Desasociar">×</button>
+                    </span>
+                `).join('')}
+            </div>
+            <div class="skill-card-actions">
+                <select id="skill-company-select-${skill.id}">
+                    <option value="">Seleccionar empresa...</option>
+                    ${companies.map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('')}
+                </select>
+                <button type="button" class="btn-skill-action btn-skill-associate" 
+                        onclick="associateSkill('${skill.id}')">Asociar</button>
+                <button type="button" class="btn-skill-action btn-skill-public ${isPublic ? 'active' : ''}" 
+                        onclick="togglePublicSkill('${skill.id}', ${isPublic})"
+                        title="${isPublic ? 'Quitar de públicos' : 'Hacer público'}">
+                    ${isPublic ? 'Quitar público' : 'Hacer público'}
+                </button>
+            </div>
+        </div>
+    `;
+}
+
+function escapeHtml(text) {
+    if (!text) return '';
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+function associateSkill(skillId) {
+    const select = document.getElementById(`skill-company-select-${skillId}`);
+    const company = select ? select.value : '';
+    if (!company) {
+        showToast('Selecciona una empresa', 'error');
+        return;
+    }
+    
+    fetch('/gestion/api/skills', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'associate', skillId: skillId, company: company }),
+        credentials: 'same-origin'
+    })
+    .then(r => r.json().then(j => ({ ok: r.ok, j })))
+    .then(({ ok, j }) => {
+        if (ok) {
+            showToast('Skill asociado correctamente', 'success');
+            renderSkills(j);
+        } else {
+            showToast(j.error || 'Error al asociar skill', 'error');
+        }
+    })
+    .catch(err => showToast('Error de red: ' + err.message, 'error'));
+}
+
+function dissociateSkill(skillId, company) {
+    fetch('/gestion/api/skills', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'dissociate', skillId: skillId, company: company }),
+        credentials: 'same-origin'
+    })
+    .then(r => r.json().then(j => ({ ok: r.ok, j })))
+    .then(({ ok, j }) => {
+        if (ok) {
+            showToast('Skill desasociado correctamente', 'success');
+            renderSkills(j);
+        } else {
+            showToast(j.error || 'Error al desasociar skill', 'error');
+        }
+    })
+    .catch(err => showToast('Error de red: ' + err.message, 'error'));
+}
+
+function togglePublicSkill(skillId, isPublic) {
+    const action = isPublic ? 'removeDefault' : 'addDefault';
+    fetch('/gestion/api/skills', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: action, skillId: skillId }),
+        credentials: 'same-origin'
+    })
+    .then(r => r.json().then(j => ({ ok: r.ok, j })))
+    .then(({ ok, j }) => {
+        if (ok) {
+            showToast(isPublic ? 'Skill removido de públicos' : 'Skill marcado como público', 'success');
+            renderSkills(j);
+        } else {
+            showToast(j.error || 'Error al actualizar skill', 'error');
+        }
+    })
+    .catch(err => showToast('Error de red: ' + err.message, 'error'));
+}
+
+function removeSkillFromDefault(skillId) {
+    togglePublicSkill(skillId, true);
+}
+
+function runSkillsMigration() {
+    fetch('/gestion/api/skills/syncall', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ force: true }),
+        credentials: 'same-origin'
+    })
+    .then(r => r.json().then(j => ({ ok: r.ok, j })))
+    .then(({ ok, j }) => {
+        if (ok) {
+            showToast('Migración ejecutada correctamente', 'success');
+            location.reload();
+        } else {
+            showToast(j.error || 'Error en migración', 'error');
+        }
+    })
+    .catch(err => showToast('Error de red: ' + err.message, 'error'));
+}
+</script>
+{{end}}

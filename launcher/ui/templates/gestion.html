@@ -285,6 +285,9 @@
         .tab-icon-stats {
             background: linear-gradient(135deg, #6366f1, #a855f7);
         }
+        .tab-icon-skills {
+            background: linear-gradient(135deg, #7c3aed, #db2777);
+        }
         .tab:hover {
             color: var(--text);
             background: var(--tab-hover-bg);
@@ -1298,6 +1301,10 @@
                     <span class="tab-icon tab-icon-stats" aria-hidden="true"></span>
                     Estadísticas
                 </button>
+                <button type="button" class="tab {{if eq .Tab "skills"}}active{{end}}" data-tab="skills" onclick="switchTab('skills')" role="tab" aria-selected="{{if eq .Tab "skills"}}true{{else}}false{{end}}">
+                    <span class="tab-icon tab-icon-skills" aria-hidden="true"></span>
+                    Skills
+                </button>
             </div>
 
             <div id="main-content"
@@ -1821,6 +1828,7 @@
             if (foot) {
                 if (currentTab === 'estadisticas') foot.textContent = 'Estadísticas';
                 else if (currentTab === 'empresas') foot.textContent = 'Empresas';
+                else if (currentTab === 'skills') foot.textContent = 'Skills';
                 else foot.textContent = currentTab === 'n8n' ? 'Pestaña: n8n' : 'Pestaña: LibreChat';
             }
 
@@ -1861,6 +1869,12 @@
                 updateHeaderNewButtons();
                 return;
             }
+            if (tab === 'skills') {
+                footer.textContent = 'Skills';
+                htmx.ajax('GET', '/gestion/content?tab=skills', { target: '#main-content', swap: 'innerHTML' });
+                updateHeaderNewButtons();
+                return;
+            }
             footer.textContent = tab === 'n8n' ? 'Pestaña: n8n' : 'Pestaña: LibreChat';
             htmx.ajax('GET', '/gestion/content?tab=' + encodeURIComponent(tab), { target: '#main-content', swap: 'innerHTML' });
             updateHeaderNewButtons();
@@ -1878,6 +1892,17 @@
                 const showC = (currentTab === 'empresas');
                 btnCo.classList.toggle('header-action-visible', showC);
                 btnCo.setAttribute('aria-hidden', showC ? 'false' : 'true');
+            }
+            // Skills tab: no hay botones de acción en header
+            if (currentTab === 'skills') {
+                if (btnUser) {
+                    btnUser.style.display = 'none';
+                    btnUser.setAttribute('aria-hidden', 'true');
+                }
+                if (btnCo) {
+                    btnCo.classList.remove('header-action-visible');
+                    btnCo.setAttribute('aria-hidden', 'true');
+                }
             }
         }
 

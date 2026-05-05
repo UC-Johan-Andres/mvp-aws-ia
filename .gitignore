@@ -2,11 +2,15 @@
 .env.chatwoot
 .env.librechat
 .env.n8n
+.env.local
+.env.*.local
 bridge/.env
 *.pem
 *.key
 *.log
 docker-compose.override.yml
+docker-compose.local.yml
+docker-compose.*.local
 bolt.diy/
 deploy-gestion.sh
 docs/
